@@ -1,3 +1,4 @@
+import 'dotenv/config';  // Add this line at the very top
 import http from 'http';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { z } from 'zod';
