@@ -27,7 +27,7 @@ const SMILE_EMOJI_FILENAME = 'smile.png';
 const EMOJI_BASE_URL_PICKER = "/emotes/";
 
 const INPUT_AREA_HEIGHT = 60; // px
-const INPUT_AREA_HEIGHT_MOBILE = 80; // px - increased for better mobile UX
+const INPUT_AREA_HEIGHT_MOBILE = 70; // px
 const LOG_PREFIX = "ChatPageClientContent";
 
 // Favicon Constants
@@ -167,10 +167,10 @@ const Row = React.memo(({
           }}
           className={cn(
             className,
-            "cursor-pointer transition-all duration-200 hover:underline focus:outline-none focus:ring-1 focus:ring-current focus:ring-offset-1",
-            isMobile && "touch-manipulation" // Better touch handling on mobile
+            "cursor-pointer transition-colors duration-200 hover:underline",
+            isMobile && "active:underline" // Touch feedback for mobile
           )}
-          role="button"
+          role="link"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -195,7 +195,7 @@ const Row = React.memo(({
         ></div>
       )}
       <div className={cn(
-        "mb-1 break-words word-wrap-anywhere", 
+        "mb-1 break-words", 
         isMobile && "text-sm leading-relaxed"
       )}>
         {message.sender === 'me' && (
@@ -284,7 +284,7 @@ const ChatPageClientContent: React.FC = () => {
   const interests = useMemo(() => searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], [searchParams]);
   const effectivePageTheme = useMemo(() => (isMounted ? currentTheme : 'theme-98'), [isMounted, currentTheme]);
   
-  // Improved responsive chat window style
+  // Responsive chat window style
   const chatWindowStyle = useMemo(() => {
     if (isMobile) {
       return { 
@@ -298,12 +298,9 @@ const ChatPageClientContent: React.FC = () => {
   }, [isMobile]);
 
   const currentInputAreaHeight = isMobile ? INPUT_AREA_HEIGHT_MOBILE : INPUT_AREA_HEIGHT;
-  const titleBarHeight = isMobile ? 32 : 40; // Estimated title bar height
   const messagesContainerComputedHeight = useMemo(() => 
-    isMobile 
-      ? `calc(100vh - ${currentInputAreaHeight + titleBarHeight}px)` 
-      : `calc(100% - ${currentInputAreaHeight}px)`, 
-    [currentInputAreaHeight, titleBarHeight, isMobile]
+    `calc(100% - ${currentInputAreaHeight}px)`, 
+    [currentInputAreaHeight]
   );
 
   const ownDisplayUsername = useMemo(() => {
@@ -311,17 +308,19 @@ const ChatPageClientContent: React.FC = () => {
   }, [ownProfileUsername]);
 
   // Improved scroll to bottom function
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    if (messagesEndRef.current && messagesContainerRef.current) {
-      // For mobile, use scrollTop for more reliable scrolling
-      if (isMobile) {
-        const container = messagesContainerRef.current;
-        container.scrollTop = container.scrollHeight;
-      } else {
-        messagesEndRef.current.scrollIntoView({ behavior });
+  const scrollToBottom = useCallback((force = false) => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+      
+      if (force || isAtBottom) {
+        // Use requestAnimationFrame to ensure DOM has updated
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
       }
     }
-  }, [isMobile]);
+  }, []);
 
   // Handle mobile detection and viewport changes
   useEffect(() => {
@@ -345,8 +344,8 @@ const ChatPageClientContent: React.FC = () => {
     const handleVisualViewportChange = () => {
       if (isMobile && window.visualViewport) {
         setViewportHeight(window.visualViewport.height);
-        // Scroll to bottom when keyboard opens/closes
-        setTimeout(() => scrollToBottom('auto'), 100);
+        // Maintain scroll position when keyboard opens/closes
+        setTimeout(() => scrollToBottom(true), 150);
       }
     };
 
@@ -601,6 +600,15 @@ const ChatPageClientContent: React.FC = () => {
       setPartnerAuthId(null);
 
       if (currentSocket.connected) {
+        currentSocket.emit('leaveChat', { roomId: currentRoomId });
+      }
+
+      console.log(`${LOG_PREFIX}: Re-emitting 'findPartner' after skip for ${currentSocket.id}. AuthID: ${userIdRef.current}`);
+      setIsFindingPartner(true); 
+      setIsSelfDisconnectedRecently(true); 
+      setIsPartnerLeftRecently(false);
+
+      if (currentSocket.connected) {
         currentSocket.emit('findPartner', { chatType: 'text', interests: currentInterests, authId: userIdRef.current });
       } else {
         toast({ title: "Connection Issue", description: "Cannot find new partner, connection lost.", variant: "destructive" });
@@ -815,7 +823,7 @@ const ChatPageClientContent: React.FC = () => {
     }
   }, [effectivePageTheme, toast]);
 
-  // Improved scroll effect for messages
+  // Auto-scroll effect for new messages
   useEffect(() => { 
     scrollToBottom();
   }, [messages, isPartnerTyping, scrollToBottom]);
@@ -908,15 +916,15 @@ const ChatPageClientContent: React.FC = () => {
     setNewMessage('');
     stopLocalTyping();
     
-    // Ensure scroll to bottom after sending
-    setTimeout(() => scrollToBottom('auto'), 50);
+    // Force scroll to bottom after sending message
+    setTimeout(() => scrollToBottom(true), 50);
   }, [newMessage, isPartnerConnected, addMessageToList, stopLocalTyping, ownProfileUsername, toast, scrollToBottom]);
 
   // Handle input focus on mobile to prevent viewport issues
   const handleInputFocus = useCallback(() => {
     if (isMobile && inputRef.current) {
-      // Slight delay to ensure the viewport has adjusted
-      setTimeout(() => scrollToBottom('auto'), 300);
+      // Scroll to bottom when input is focused on mobile
+      setTimeout(() => scrollToBottom(true), 300);
     }
   }, [isMobile, scrollToBottom]);
 
@@ -955,17 +963,17 @@ const ChatPageClientContent: React.FC = () => {
       
       <div className={cn(
         "flex flex-col items-center justify-center",
-        isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4 overflow-hidden"
+        isMobile ? "h-screen w-screen p-0" : "h-full p-4"
       )}>
         <div className={cn(
           'window flex flex-col relative',
           effectivePageTheme === 'theme-7' ? 'glass' : '',
-          isMobile ? 'h-full w-full max-h-screen' : ''
+          isMobile ? 'h-full w-full' : ''
         )} style={chatWindowStyle}>
           {effectivePageTheme === 'theme-7' && !isMobile && <ConditionalGoldfishImage />}
           
           <div className={cn(
-            "title-bar flex-shrink-0",
+            "title-bar",
             effectivePageTheme === 'theme-7' ? 'text-black' : '',
             isMobile && "text-sm h-8 min-h-8"
           )}>
@@ -987,14 +995,14 @@ const ChatPageClientContent: React.FC = () => {
           </div>
           
           <div className={cn(
-            'window-body window-body-content flex-grow flex flex-col min-h-0',
+            'window-body window-body-content flex-grow flex flex-col',
             effectivePageTheme === 'theme-7' ? 'glass-body-padding' : 'p-0.5',
             isMobile && 'p-1'
           )}>
             <div 
               ref={messagesContainerRef}
               className={cn(
-                "flex-grow overflow-y-auto overscroll-contain min-h-0",
+                "flex-grow overflow-y-auto overscroll-contain",
                 effectivePageTheme === 'theme-7' 
                   ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
                   : 'sunken-panel tree-view p-1',
@@ -1003,39 +1011,36 @@ const ChatPageClientContent: React.FC = () => {
               style={{ 
                 height: messagesContainerComputedHeight, 
                 overflowY: isScrollEnabled ? 'auto' : 'hidden',
-                WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-                scrollBehavior: 'smooth'
+                WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
               }}>
-              <div className="min-h-full flex flex-col">
+              <div>
                 {isAuthLoading && messages.length === 0 && (
                   <div className="text-center text-xs italic p-2 text-gray-500 dark:text-gray-400">
                     Initializing authentication...
                   </div>
                 )}
-                <div className="flex-grow">
-                  {messages.map((msg, index) => (
-                    <Row 
-                      key={msg.id} 
-                      message={msg} 
-                      theme={effectivePageTheme} 
-                      previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
-                      pickerEmojiFilenames={pickerEmojiFilenames} 
-                      ownDisplayName={ownDisplayUsername}
-                      ownAuthId={userIdRef.current}
-                      onUsernameClick={handleUsernameClick}
-                      isMobile={isMobile}
-                    />
-                  ))}
-                </div>
+                {messages.map((msg, index) => (
+                  <Row 
+                    key={msg.id} 
+                    message={msg} 
+                    theme={effectivePageTheme} 
+                    previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
+                    pickerEmojiFilenames={pickerEmojiFilenames} 
+                    ownDisplayName={ownDisplayUsername}
+                    ownAuthId={userIdRef.current}
+                    onUsernameClick={handleUsernameClick}
+                    isMobile={isMobile}
+                  />
+                ))}
                 {isPartnerTyping && (
                   <div className={cn(
-                    "text-xs italic text-left pl-1 py-0.5 flex-shrink-0",
+                    "text-xs italic text-left pl-1 py-0.5",
                     effectivePageTheme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
                   )}>
                     {messages.find(m => m.sender === 'partner')?.senderUsername || 'Stranger'} is typing{typingDots}
                   </div>
                 )}
-                <div ref={messagesEndRef} className="h-0" />
+                <div ref={messagesEndRef} />
               </div>
             </div>
             
@@ -1046,15 +1051,15 @@ const ChatPageClientContent: React.FC = () => {
             )} 
             style={{ 
               height: `${currentInputAreaHeight}px`,
-              paddingBottom: isMobile ? 'max(8px, env(safe-area-inset-bottom))' : undefined
+              paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined
             }}>
-              <div className="flex items-center w-full gap-1 h-full">
+              <div className="flex items-center w-full gap-1">
                 <Button 
                   onClick={handleFindOrDisconnectPartner} 
                   disabled={mainButtonDisabled} 
                   className={cn(
                     effectivePageTheme === 'theme-7' ? 'glass-button-styled' : 'px-1 py-1',
-                    isMobile ? 'text-xs px-2 py-1 min-w-0 flex-shrink-0' : 'mr-1'
+                    isMobile ? 'text-xs px-2 py-1 min-w-0' : 'mr-1'
                   )} 
                   aria-label={findOrDisconnectText}
                 >
@@ -1070,7 +1075,7 @@ const ChatPageClientContent: React.FC = () => {
                   onKeyPress={(e) => e.key === 'Enter' && !inputAndSendDisabled && handleSendMessage()} 
                   placeholder={isMobile ? "Type message..." : "Type a message..."} 
                   className={cn(
-                    "flex-1 w-full min-w-0",
+                    "flex-1 w-full",
                     isMobile ? "text-base px-2 py-1" : "px-1 py-1" // Prevent zoom on iOS
                   )} 
                   disabled={inputAndSendDisabled} 
@@ -1145,7 +1150,7 @@ const ChatPageClientContent: React.FC = () => {
                   disabled={inputAndSendDisabled || !newMessage.trim()} 
                   className={cn(
                     effectivePageTheme === 'theme-7' ? 'glass-button-styled' : 'px-1 py-1',
-                    isMobile ? 'text-xs px-2 py-1 min-w-0 flex-shrink-0' : 'ml-1'
+                    isMobile ? 'text-xs px-2 py-1 min-w-0' : 'ml-1'
                   )} 
                   aria-label="Send message"
                 >
@@ -1171,12 +1176,3 @@ const ChatPageClientContent: React.FC = () => {
 };
 
 export default ChatPageClientContent;
-        currentSocket.emit('leaveChat', { roomId: currentRoomId });
-      }
-
-      console.log(`${LOG_PREFIX}: Re-emitting 'findPartner' after skip for ${currentSocket.id}. AuthID: ${userIdRef.current}`);
-      setIsFindingPartner(true); 
-      setIsSelfDisconnectedRecently(true); 
-      setIsPartnerLeftRecently(false);
-
-      if (currentSocket.connected) {
