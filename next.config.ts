@@ -15,12 +15,12 @@ if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
 
 const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.paypal.com https://*.paypal.com;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com;
     style-src 'self' 'unsafe-inline' https://unpkg.com;
-    img-src 'self' data: https://placehold.co https://github.com https://storage.googleapis.com https://www.paypal.com https://*.paypal.com ${supabaseHostname ? supabaseHostname : ''};
+    img-src 'self' data: https://placehold.co https://github.com https://storage.googleapis.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? supabaseHostname : ''};
     font-src 'self' https://unpkg.com;
-    connect-src 'self' ${NEXT_PUBLIC_SOCKET_SERVER_URL} wss://${socketServerHostname} *.google.com *.googleapis.com https://www.google-analytics.com https://ssl.google-analytics.com https://analytics.google.com https://www.paypal.com https://*.paypal.com ${supabaseHostname ? `https://${supabaseHostname} wss://${supabaseHostname}` : ''};
-    frame-src 'self' https://www.paypal.com https://*.paypal.com ${supabaseHostname ? `https://${supabaseHostname}` : ''};
+    connect-src 'self' ${NEXT_PUBLIC_SOCKET_SERVER_URL} wss://${socketServerHostname} *.google.com *.googleapis.com https://www.google-analytics.com https://ssl.google-analytics.com https://analytics.google.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? `https://${supabaseHostname} wss://${supabaseHostname}` : ''};
+    frame-src 'self' https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? `https://${supabaseHostname}` : ''};
     object-src 'none';
     base-uri 'self';
     form-action 'self' https://studio.firebase.google.com https://www.paypal.com https://*.paypal.com;
