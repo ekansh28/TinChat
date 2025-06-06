@@ -27,7 +27,7 @@ const SMILE_EMOJI_FILENAME = 'smile.png';
 const EMOJI_BASE_URL_PICKER = "/emotes/";
 
 const INPUT_AREA_HEIGHT = 60; // px
-const INPUT_AREA_HEIGHT_MOBILE = 70; // px - slightly taller for mobile
+const INPUT_AREA_HEIGHT_MOBILE = 80; // px - increased for better mobile UX
 const LOG_PREFIX = "ChatPageClientContent";
 
 // Favicon Constants
@@ -160,21 +160,27 @@ const Row = React.memo(({
   const UsernameComponent = ({ children, className }: { children: React.ReactNode, className: string }) => {
     if (isClickable && authIdToUse) {
       return (
-        <button
+        <span
           onClick={(e) => {
             e.preventDefault();
             onUsernameClick(authIdToUse);
           }}
           className={cn(
             className,
-            "hover:underline cursor-pointer transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-current focus:ring-offset-1",
-            "no-underline bg-transparent border-none p-0 text-left",
+            "cursor-pointer transition-all duration-200 hover:underline focus:outline-none focus:ring-1 focus:ring-current focus:ring-offset-1",
             isMobile && "touch-manipulation" // Better touch handling on mobile
           )}
-          type="button"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onUsernameClick(authIdToUse);
+            }
+          }}
         >
           {children}
-        </button>
+        </span>
       );
     }
     return <span className={className}>{children}</span>;
@@ -188,7 +194,10 @@ const Row = React.memo(({
           aria-hidden="true"
         ></div>
       )}
-      <div className={cn("mb-1 break-words", isMobile && "text-sm leading-relaxed")}>
+      <div className={cn(
+        "mb-1 break-words word-wrap-anywhere", 
+        isMobile && "text-sm leading-relaxed"
+      )}>
         {message.sender === 'me' && (
           <>
             <UsernameComponent className="text-blue-600 font-bold mr-1">
@@ -234,6 +243,7 @@ const ChatPageClientContent: React.FC = () => {
   const isProcessingFindOrDisconnect = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -274,28 +284,44 @@ const ChatPageClientContent: React.FC = () => {
   const interests = useMemo(() => searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], [searchParams]);
   const effectivePageTheme = useMemo(() => (isMounted ? currentTheme : 'theme-98'), [isMounted, currentTheme]);
   
-  // Responsive chat window style
+  // Improved responsive chat window style
   const chatWindowStyle = useMemo(() => {
     if (isMobile) {
       return { 
-        width: '100%', 
-        height: `${viewportHeight}px`,
+        width: '100vw', 
+        height: '100vh',
         maxWidth: '100vw',
         maxHeight: '100vh'
       };
     }
     return { width: '600px', height: '600px' };
-  }, [isMobile, viewportHeight]);
+  }, [isMobile]);
 
   const currentInputAreaHeight = isMobile ? INPUT_AREA_HEIGHT_MOBILE : INPUT_AREA_HEIGHT;
+  const titleBarHeight = isMobile ? 32 : 40; // Estimated title bar height
   const messagesContainerComputedHeight = useMemo(() => 
-    `calc(100% - ${currentInputAreaHeight}px)`, 
-    [currentInputAreaHeight]
+    isMobile 
+      ? `calc(100vh - ${currentInputAreaHeight + titleBarHeight}px)` 
+      : `calc(100% - ${currentInputAreaHeight}px)`, 
+    [currentInputAreaHeight, titleBarHeight, isMobile]
   );
 
   const ownDisplayUsername = useMemo(() => {
     return ownProfileUsername || "You";
   }, [ownProfileUsername]);
+
+  // Improved scroll to bottom function
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      // For mobile, use scrollTop for more reliable scrolling
+      if (isMobile) {
+        const container = messagesContainerRef.current;
+        container.scrollTop = container.scrollHeight;
+      } else {
+        messagesEndRef.current.scrollIntoView({ behavior });
+      }
+    }
+  }, [isMobile]);
 
   // Handle mobile detection and viewport changes
   useEffect(() => {
@@ -319,6 +345,8 @@ const ChatPageClientContent: React.FC = () => {
     const handleVisualViewportChange = () => {
       if (isMobile && window.visualViewport) {
         setViewportHeight(window.visualViewport.height);
+        // Scroll to bottom when keyboard opens/closes
+        setTimeout(() => scrollToBottom('auto'), 100);
       }
     };
 
@@ -336,7 +364,7 @@ const ChatPageClientContent: React.FC = () => {
         window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
       }
     };
-  }, [isMobile]);
+  }, [isMobile, scrollToBottom]);
 
   // Handle profile card functionality
   const handleUsernameClick = useCallback((authId: string) => {
@@ -573,15 +601,6 @@ const ChatPageClientContent: React.FC = () => {
       setPartnerAuthId(null);
 
       if (currentSocket.connected) {
-        currentSocket.emit('leaveChat', { roomId: currentRoomId });
-      }
-
-      console.log(`${LOG_PREFIX}: Re-emitting 'findPartner' after skip for ${currentSocket.id}. AuthID: ${userIdRef.current}`);
-      setIsFindingPartner(true); 
-      setIsSelfDisconnectedRecently(true); 
-      setIsPartnerLeftRecently(false);
-
-      if (currentSocket.connected) {
         currentSocket.emit('findPartner', { chatType: 'text', interests: currentInterests, authId: userIdRef.current });
       } else {
         toast({ title: "Connection Issue", description: "Cannot find new partner, connection lost.", variant: "destructive" });
@@ -796,9 +815,10 @@ const ChatPageClientContent: React.FC = () => {
     }
   }, [effectivePageTheme, toast]);
 
+  // Improved scroll effect for messages
   useEffect(() => { 
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-  }, [messages, isPartnerTyping]);
+    scrollToBottom();
+  }, [messages, isPartnerTyping, scrollToBottom]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -888,23 +908,17 @@ const ChatPageClientContent: React.FC = () => {
     setNewMessage('');
     stopLocalTyping();
     
-    // Scroll to bottom after sending on mobile
-    if (isMobile) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-    }
-  }, [newMessage, isPartnerConnected, addMessageToList, stopLocalTyping, ownProfileUsername, toast, isMobile]);
+    // Ensure scroll to bottom after sending
+    setTimeout(() => scrollToBottom('auto'), 50);
+  }, [newMessage, isPartnerConnected, addMessageToList, stopLocalTyping, ownProfileUsername, toast, scrollToBottom]);
 
   // Handle input focus on mobile to prevent viewport issues
   const handleInputFocus = useCallback(() => {
     if (isMobile && inputRef.current) {
       // Slight delay to ensure the viewport has adjusted
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 300);
+      setTimeout(() => scrollToBottom('auto'), 300);
     }
-  }, [isMobile]);
+  }, [isMobile, scrollToBottom]);
 
   const handleEmojiIconHover = useCallback(() => {
     if (hoverIntervalRef.current) clearInterval(hoverIntervalRef.current);
@@ -940,18 +954,18 @@ const ChatPageClientContent: React.FC = () => {
       {!isMobile && <HomeButton />}
       
       <div className={cn(
-        "flex flex-col items-center justify-center overflow-hidden",
-        isMobile ? "h-screen w-screen p-0" : "h-full p-4"
+        "flex flex-col items-center justify-center",
+        isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4 overflow-hidden"
       )}>
         <div className={cn(
           'window flex flex-col relative',
           effectivePageTheme === 'theme-7' ? 'glass' : '',
-          isMobile ? 'h-full w-full' : ''
+          isMobile ? 'h-full w-full max-h-screen' : ''
         )} style={chatWindowStyle}>
           {effectivePageTheme === 'theme-7' && !isMobile && <ConditionalGoldfishImage />}
           
           <div className={cn(
-            "title-bar",
+            "title-bar flex-shrink-0",
             effectivePageTheme === 'theme-7' ? 'text-black' : '',
             isMobile && "text-sm h-8 min-h-8"
           )}>
@@ -973,50 +987,55 @@ const ChatPageClientContent: React.FC = () => {
           </div>
           
           <div className={cn(
-            'window-body window-body-content flex-grow',
+            'window-body window-body-content flex-grow flex flex-col min-h-0',
             effectivePageTheme === 'theme-7' ? 'glass-body-padding' : 'p-0.5',
             isMobile && 'p-1'
           )}>
-            <div className={cn(
-              "flex-grow overflow-y-auto overscroll-contain",
-              effectivePageTheme === 'theme-7' 
-                ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
-                : 'sunken-panel tree-view p-1',
-              isMobile && 'p-2'
-            )} 
-            style={{ 
-              height: messagesContainerComputedHeight, 
-              overflowY: isScrollEnabled ? 'auto' : 'hidden',
-              WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
-            }}>
-              <div>
+            <div 
+              ref={messagesContainerRef}
+              className={cn(
+                "flex-grow overflow-y-auto overscroll-contain min-h-0",
+                effectivePageTheme === 'theme-7' 
+                  ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
+                  : 'sunken-panel tree-view p-1',
+                isMobile && 'p-2'
+              )} 
+              style={{ 
+                height: messagesContainerComputedHeight, 
+                overflowY: isScrollEnabled ? 'auto' : 'hidden',
+                WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
+                scrollBehavior: 'smooth'
+              }}>
+              <div className="min-h-full flex flex-col">
                 {isAuthLoading && messages.length === 0 && (
                   <div className="text-center text-xs italic p-2 text-gray-500 dark:text-gray-400">
                     Initializing authentication...
                   </div>
                 )}
-                {messages.map((msg, index) => (
-                  <Row 
-                    key={msg.id} 
-                    message={msg} 
-                    theme={effectivePageTheme} 
-                    previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
-                    pickerEmojiFilenames={pickerEmojiFilenames} 
-                    ownDisplayName={ownDisplayUsername}
-                    ownAuthId={userIdRef.current}
-                    onUsernameClick={handleUsernameClick}
-                    isMobile={isMobile}
-                  />
-                ))}
+                <div className="flex-grow">
+                  {messages.map((msg, index) => (
+                    <Row 
+                      key={msg.id} 
+                      message={msg} 
+                      theme={effectivePageTheme} 
+                      previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
+                      pickerEmojiFilenames={pickerEmojiFilenames} 
+                      ownDisplayName={ownDisplayUsername}
+                      ownAuthId={userIdRef.current}
+                      onUsernameClick={handleUsernameClick}
+                      isMobile={isMobile}
+                    />
+                  ))}
+                </div>
                 {isPartnerTyping && (
                   <div className={cn(
-                    "text-xs italic text-left pl-1 py-0.5",
+                    "text-xs italic text-left pl-1 py-0.5 flex-shrink-0",
                     effectivePageTheme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
                   )}>
                     {messages.find(m => m.sender === 'partner')?.senderUsername || 'Stranger'} is typing{typingDots}
                   </div>
                 )}
-                <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} className="h-0" />
               </div>
             </div>
             
@@ -1027,15 +1046,15 @@ const ChatPageClientContent: React.FC = () => {
             )} 
             style={{ 
               height: `${currentInputAreaHeight}px`,
-              paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined
+              paddingBottom: isMobile ? 'max(8px, env(safe-area-inset-bottom))' : undefined
             }}>
-              <div className="flex items-center w-full gap-1">
+              <div className="flex items-center w-full gap-1 h-full">
                 <Button 
                   onClick={handleFindOrDisconnectPartner} 
                   disabled={mainButtonDisabled} 
                   className={cn(
                     effectivePageTheme === 'theme-7' ? 'glass-button-styled' : 'px-1 py-1',
-                    isMobile ? 'text-xs px-2 py-1 min-w-0' : 'mr-1'
+                    isMobile ? 'text-xs px-2 py-1 min-w-0 flex-shrink-0' : 'mr-1'
                   )} 
                   aria-label={findOrDisconnectText}
                 >
@@ -1051,7 +1070,7 @@ const ChatPageClientContent: React.FC = () => {
                   onKeyPress={(e) => e.key === 'Enter' && !inputAndSendDisabled && handleSendMessage()} 
                   placeholder={isMobile ? "Type message..." : "Type a message..."} 
                   className={cn(
-                    "flex-1 w-full",
+                    "flex-1 w-full min-w-0",
                     isMobile ? "text-base px-2 py-1" : "px-1 py-1" // Prevent zoom on iOS
                   )} 
                   disabled={inputAndSendDisabled} 
@@ -1126,7 +1145,7 @@ const ChatPageClientContent: React.FC = () => {
                   disabled={inputAndSendDisabled || !newMessage.trim()} 
                   className={cn(
                     effectivePageTheme === 'theme-7' ? 'glass-button-styled' : 'px-1 py-1',
-                    isMobile ? 'text-xs px-2 py-1 min-w-0' : 'ml-1'
+                    isMobile ? 'text-xs px-2 py-1 min-w-0 flex-shrink-0' : 'ml-1'
                   )} 
                   aria-label="Send message"
                 >
@@ -1152,3 +1171,12 @@ const ChatPageClientContent: React.FC = () => {
 };
 
 export default ChatPageClientContent;
+        currentSocket.emit('leaveChat', { roomId: currentRoomId });
+      }
+
+      console.log(`${LOG_PREFIX}: Re-emitting 'findPartner' after skip for ${currentSocket.id}. AuthID: ${userIdRef.current}`);
+      setIsFindingPartner(true); 
+      setIsSelfDisconnectedRecently(true); 
+      setIsPartnerLeftRecently(false);
+
+      if (currentSocket.connected) {
