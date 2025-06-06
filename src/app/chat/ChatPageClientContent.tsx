@@ -278,16 +278,7 @@ const Row = React.memo(({
         isMobile && "text-sm leading-relaxed"
       )}>
         <div className="flex items-start gap-2">
-          {/* Show partner status if available */}
-          {message.sender === 'partner' && partnerInfo?.status && (
-            <Image
-              src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
-              alt={partnerInfo.status}
-              width={12}
-              height={12}
-              className="mt-1 flex-shrink-0"
-            />
-          )}
+          {/* REMOVED: Status icon for partner messages */}
           
           <div className="flex-1">
             <UsernameComponent className="font-bold mr-1">
@@ -1223,33 +1214,7 @@ const ChatPageClientContent: React.FC = () => {
               <div className="title-bar-text">
                 {isMobile ? 'TinChat' : 'Text Chat'}
               </div>
-              {/* Show partner info in title bar if connected */}
-              {isPartnerConnected && partnerInfo && (
-                <div className="ml-2 flex items-center gap-1 text-xs">
-                  <span>•</span>
-                  {partnerInfo.status && (
-                    <Image
-                      src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
-                      alt={partnerInfo.status}
-                      width={12}
-                      height={12}
-                    />
-                  )}
-                  <span 
-                    className={cn(getDisplayNameClass(partnerInfo.displayNameAnimation))}
-                    style={{ 
-                      color: partnerInfo.displayNameAnimation === 'rainbow' || partnerInfo.displayNameAnimation === 'gradient'
-                        ? undefined 
-                        : (partnerInfo.displayNameColor || '#000000')
-                    }}
-                  >
-                    {partnerInfo.displayName || partnerInfo.username}
-                  </span>
-                  {partnerInfo.pronouns && (
-                    <span className="opacity-70">({partnerInfo.pronouns})</span>
-                  )}
-                </div>
-              )}
+              {/* REMOVED: Partner info display in title bar */}
             </div>
             {/* Add online status or connection indicator on mobile */}
             {isMobile && (
@@ -1309,14 +1274,7 @@ const ChatPageClientContent: React.FC = () => {
                     "text-xs italic text-left pl-1 py-0.5 flex items-center gap-2",
                     effectivePageTheme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
                   )}>
-                    {partnerInfo?.status && (
-                      <Image
-                        src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
-                        alt={partnerInfo.status}
-                        width={12}
-                        height={12}
-                      />
-                    )}
+                    {/* REMOVED: Status icon for typing indicator */}
                     <span 
                       className={cn(getDisplayNameClass(partnerInfo?.displayNameAnimation))}
                       style={{ 
