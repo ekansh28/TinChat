@@ -82,7 +82,7 @@ const io = new SocketIOServer(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Updated interfaces to include auth info
+// Updated interfaces to include new profile features
 interface User {
   id: string; // Socket ID
   authId: string | null; // Supabase auth user ID, can be null for anonymous users
@@ -91,6 +91,11 @@ interface User {
   username?: string;
   displayName?: string;
   avatarUrl?: string;
+  bannerUrl?: string;
+  pronouns?: string;
+  status?: 'online' | 'idle' | 'dnd' | 'offline';
+  displayNameColor?: string;
+  displayNameAnimation?: string;
 }
 
 interface Room {
@@ -128,11 +133,15 @@ const RoomIdPayloadSchema = z.object({
 const SendMessagePayloadSchema = RoomIdPayloadSchema.extend({
   message: z.string().min(1).max(2000),
   username: z.string().max(30).nullable().optional(),
-  authId: z.string().uuid().nullable().optional(), // Add authId to message payload
+  authId: z.string().uuid().nullable().optional(),
 });
 
 const WebRTCSignalPayloadSchema = RoomIdPayloadSchema.extend({
   signalData: z.any(),
+});
+
+const UpdateStatusPayloadSchema = z.object({
+  status: z.enum(['online', 'idle', 'dnd', 'offline']),
 });
 
 // Helper function to log queue state
@@ -143,19 +152,29 @@ function logQueueState(chatType: 'text' | 'video', context: string) {
       socketId: u.id,
       authId: u.authId || 'anonymous',
       interests: u.interests,
-      username: u.username || 'no-username'
+      username: u.username || 'no-username',
+      status: u.status || 'offline'
     }))
   );
 }
 
-// Helper function to fetch user profile from Supabase
+// Helper function to fetch enhanced user profile from Supabase
 async function fetchUserProfile(authId: string) {
   if (!supabase || !authId) return null;
   
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('username, display_name, avatar_url')
+      .select(`
+        username, 
+        display_name, 
+        avatar_url, 
+        banner_url, 
+        pronouns, 
+        status, 
+        display_name_color, 
+        display_name_animation
+      `)
       .eq('id', authId)
       .single();
 
@@ -169,6 +188,29 @@ async function fetchUserProfile(authId: string) {
   } catch (err) {
     console.error(`[SUPABASE_EXCEPTION] Exception fetching profile for ${authId}:`, err);
     return null;
+  }
+}
+
+// Helper function to update user status in database
+async function updateUserStatus(authId: string, status: 'online' | 'idle' | 'dnd' | 'offline') {
+  if (!supabase || !authId) return;
+  
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ 
+        status: status,
+        last_seen: new Date().toISOString()
+      })
+      .eq('id', authId);
+
+    if (error) {
+      console.error(`[SUPABASE_ERROR] Error updating status for ${authId}:`, error);
+    } else {
+      console.log(`[STATUS_UPDATE] Updated ${authId} status to ${status}`);
+    }
+  } catch (err) {
+    console.error(`[SUPABASE_EXCEPTION] Exception updating status for ${authId}:`, err);
   }
 }
 
@@ -269,6 +311,40 @@ io.on('connection', (socket: Socket) => {
     socket.emit('onlineUserCount', onlineUserCount);
   });
 
+  // New event handler for status updates
+  socket.on('updateStatus', async (payload: unknown) => {
+    try {
+      const { status } = UpdateStatusPayloadSchema.parse(payload);
+      const authId = socketToAuthId[socket.id];
+      
+      if (authId) {
+        console.log(`[STATUS_UPDATE_REQUEST] User ${socket.id} (${authId}) updating status to: ${status}`);
+        await updateUserStatus(authId, status);
+        
+        // Update status in current room if connected to partner
+        for (const roomId in rooms) {
+          const room = rooms[roomId];
+          if (room.users.includes(socket.id)) {
+            const partnerId = room.users.find(id => id !== socket.id);
+            if (partnerId) {
+              io.to(partnerId).emit('partnerStatusChanged', { status });
+              console.log(`[STATUS_BROADCAST] Broadcasted status change to partner ${partnerId}`);
+            }
+            break;
+          }
+        }
+        
+        socket.emit('statusUpdated', { status });
+      } else {
+        console.warn(`[STATUS_UPDATE_FAIL] No auth ID found for socket ${socket.id}`);
+        socket.emit('error', { message: 'Authentication required to update status.' });
+      }
+    } catch (error: any) {
+      console.warn(`[VALIDATION_FAIL_UPDATE_STATUS] Invalid updateStatus payload from ${socket.id}: ${error.errors ? JSON.stringify(error.errors) : error.message}`);
+      socket.emit('error', { message: 'Invalid payload for updateStatus.' });
+    }
+  });
+
   socket.on('findPartner', async (payload: unknown) => {
     try {
       const validatedPayload = FindPartnerPayloadSchema.parse(payload);
@@ -287,6 +363,8 @@ io.on('connection', (socket: Socket) => {
       if (authId) {
         socketToAuthId[socket.id] = authId;
         authIdToSocketId[authId] = socket.id;
+        // Set user status to online when finding partner
+        await updateUserStatus(authId, 'online');
       }
 
       // Remove user from any existing waiting lists
@@ -299,20 +377,35 @@ io.on('connection', (socket: Socket) => {
         authId: authId || null 
       };
       
-      // Fetch profile if authenticated
+      // Fetch enhanced profile if authenticated
       if (authId && supabase) {
-        console.log(`[PROFILE_FETCH_ATTEMPT] Fetching profile for authId: ${authId}`);
+        console.log(`[PROFILE_FETCH_ATTEMPT] Fetching enhanced profile for authId: ${authId}`);
         const profile = await fetchUserProfile(authId);
         if (profile) {
           currentUser.username = profile.username;
           currentUser.displayName = profile.display_name;
           currentUser.avatarUrl = profile.avatar_url;
-          console.log(`[PROFILE_FETCH_SUCCESS] Fetched profile for ${authId}: Username - ${profile.username || 'null'}, DisplayName - ${profile.display_name || 'null'}`);
+          currentUser.bannerUrl = profile.banner_url;
+          currentUser.pronouns = profile.pronouns;
+          currentUser.status = profile.status || 'online';
+          currentUser.displayNameColor = profile.display_name_color;
+          currentUser.displayNameAnimation = profile.display_name_animation;
+          console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
+            username: profile.username || 'null',
+            displayName: profile.display_name || 'null',
+            pronouns: profile.pronouns || 'null',
+            status: profile.status || 'online',
+            displayNameColor: profile.display_name_color || '#ffffff',
+            displayNameAnimation: profile.display_name_animation || 'none'
+          });
         } else {
           console.log(`[PROFILE_FETCH_NO_PROFILE] No profile found or error for ${authId}.`);
+          // Set default status for new users
+          currentUser.status = 'online';
         }
       } else {
         console.log(`[PROFILE_FETCH_SKIP] Skipping profile fetch for anonymous user ${socket.id}`);
+        currentUser.status = 'online';
       }
 
       // Log current queue state before attempting match
@@ -331,14 +424,13 @@ io.on('connection', (socket: Socket) => {
           partnerSocket.join(roomId);
           console.log(`[MATCH_SUCCESS] ${currentUser.id} and ${matchedPartner.id} joined room ${roomId}. Emitting 'partnerFound'.`);
 
-          // In server/index.ts, replace lines around 335-336 with:
-
           // Use display_name if available, fallback to username, then to "Stranger"
           const currentUserDisplayName = currentUser.displayName || currentUser.username || "Stranger";
           const partnerDisplayName = matchedPartner.displayName || matchedPartner.username || "Stranger";
 
           console.log(`[MATCH_SUCCESS_USERNAMES] Current user display name: "${currentUserDisplayName}", Partner display name: "${partnerDisplayName}"`);
 
+          // Enhanced partner found event with new profile data
           socket.emit('partnerFound', {
             partnerId: matchedPartner.id,
             roomId,
@@ -346,6 +438,11 @@ io.on('connection', (socket: Socket) => {
             partnerUsername: partnerDisplayName,
             partnerDisplayName: matchedPartner.displayName,
             partnerAvatarUrl: matchedPartner.avatarUrl,
+            partnerBannerUrl: matchedPartner.bannerUrl,
+            partnerPronouns: matchedPartner.pronouns,
+            partnerStatus: matchedPartner.status || 'online',
+            partnerDisplayNameColor: matchedPartner.displayNameColor,
+            partnerDisplayNameAnimation: matchedPartner.displayNameAnimation,
             partnerAuthId: matchedPartner.authId,
           });
 
@@ -356,14 +453,18 @@ io.on('connection', (socket: Socket) => {
             partnerUsername: currentUserDisplayName,
             partnerDisplayName: currentUser.displayName,
             partnerAvatarUrl: currentUser.avatarUrl,
+            partnerBannerUrl: currentUser.bannerUrl,
+            partnerPronouns: currentUser.pronouns,
+            partnerStatus: currentUser.status || 'online',
+            partnerDisplayNameColor: currentUser.displayNameColor,
+            partnerDisplayNameAnimation: currentUser.displayNameAnimation,
             partnerAuthId: currentUser.authId,
           });
         } else {
           console.warn(`[MATCH_FAIL_SOCKET_ISSUE] Partner ${matchedPartner.id} socket not found/disconnected. Re-queuing current user ${currentUser.id} and potential partner ${matchedPartner.id}.`);
           if (!waitingUsers[currentUser.chatType].some(user => user.id === currentUser.id)) {
-              waitingUsers[currentUser.chatType].push(currentUser); // Add current user back if not already there
+              waitingUsers[currentUser.chatType].push(currentUser);
           }
-          // Add matchedPartner back to the front of their queue if they existed and are not already there
           if (matchedPartner && !waitingUsers[matchedPartner.chatType].some(user => user.id === matchedPartner.id)) {
              waitingUsers[matchedPartner.chatType].unshift(matchedPartner);
           }
@@ -396,22 +497,31 @@ io.on('connection', (socket: Socket) => {
       }
       
       if (roomDetails.users.includes(socket.id)) {
-        let senderUsernameToSend = 'Stranger'; // Default for anonymous users
+        let senderUsernameToSend = 'Stranger';
+        let senderDisplayNameColor = '#ffffff';
+        let senderDisplayNameAnimation = 'none';
         
-        // If user is authenticated and has a username, use it
         if (authId && username) {
           senderUsernameToSend = username;
           console.log(`[MESSAGE_AUTHENTICATED_USER] Using authenticated username: ${username}`);
+          
+          // Fetch current profile data for display name styling
+          const profile = await fetchUserProfile(authId);
+          if (profile) {
+            senderDisplayNameColor = profile.display_name_color || '#ffffff';
+            senderDisplayNameAnimation = profile.display_name_animation || 'none';
+            console.log(`[MESSAGE_STYLE_INFO] Display name styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}`);
+          }
         } else if (authId && !username) {
-          // User is authenticated but no username provided, try to fetch from database
           console.log(`[MESSAGE_FETCH_USERNAME] Authenticated user without username, fetching from database for authId: ${authId}`);
           const profile = await fetchUserProfile(authId);
           if (profile) {
             senderUsernameToSend = profile.display_name || profile.username || 'Stranger';
-            console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend}`);
+            senderDisplayNameColor = profile.display_name_color || '#ffffff';
+            senderDisplayNameAnimation = profile.display_name_animation || 'none';
+            console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling`);
           }
         } else {
-          // Anonymous user
           console.log(`[MESSAGE_ANONYMOUS_USER] Anonymous user, using 'Stranger'`);
         }
         
@@ -419,7 +529,9 @@ io.on('connection', (socket: Socket) => {
           senderId: socket.id, 
           message, 
           senderUsername: senderUsernameToSend,
-          senderAuthId: authId || null // Include sender's auth ID for clickable usernames
+          senderAuthId: authId || null,
+          senderDisplayNameColor,
+          senderDisplayNameAnimation
         };
         
         const partnerId = roomDetails.users.find(id => id !== socket.id);
@@ -494,6 +606,8 @@ io.on('connection', (socket: Socket) => {
 
     const authId = socketToAuthId[socket.id];
     if (authId) {
+      // Set user status to offline when disconnecting
+      await updateUserStatus(authId, 'offline');
       delete socketToAuthId[socket.id];
       delete authIdToSocketId[authId];
     }
@@ -548,6 +662,22 @@ io.on('connection', (socket: Socket) => {
     await cleanupUser(`socket.io disconnect event: ${reason}`);
   });
 });
+
+// Periodic cleanup function to set inactive users offline
+setInterval(async () => {
+  if (supabase) {
+    try {
+      const { error } = await supabase.rpc('set_inactive_users_offline');
+      if (error) {
+        console.error('[PERIODIC_CLEANUP] Error setting inactive users offline:', error);
+      } else {
+        console.log('[PERIODIC_CLEANUP] Successfully checked for inactive users');
+      }
+    } catch (err) {
+      console.error('[PERIODIC_CLEANUP] Exception during inactive user cleanup:', err);
+    }
+  }
+}, 5 * 60 * 1000); // Run every 5 minutes
 
 server.listen(PORT, () => {
   console.log(`[SERVER_START] Socket.IO server running on port ${PORT}`);

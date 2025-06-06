@@ -45,6 +45,14 @@ const SYS_MSG_YOU_DISCONNECTED = 'You have disconnected.';
 const SYS_MSG_PARTNER_DISCONNECTED = 'Your partner has disconnected.';
 const SYS_MSG_COMMON_INTERESTS_PREFIX = 'You both like ';
 
+// Status Configuration
+const STATUS_CONFIG = {
+  online: { icon: '/icons/online.png', color: '#43b581' },
+  idle: { icon: '/icons/idle.png', color: '#faa61a' },
+  dnd: { icon: '/icons/dnd.png', color: '#f04747' },
+  offline: { icon: '/icons/offline.png', color: '#747f8d' }
+} as const;
+
 // --- Types ---
 interface Message {
   id: string;
@@ -53,12 +61,27 @@ interface Message {
   timestamp: Date;
   senderUsername?: string;
   senderAuthId?: string;
+  senderDisplayNameColor?: string;
+  senderDisplayNameAnimation?: string;
 }
 
 interface EmoteData {
   filename: string;
   width?: number;
   height?: number;
+}
+
+interface PartnerInfo {
+  id: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+  pronouns?: string;
+  status?: 'online' | 'idle' | 'dnd' | 'offline';
+  displayNameColor?: string;
+  displayNameAnimation?: string;
+  authId?: string;
 }
 
 // --- Helper Functions ---
@@ -105,6 +128,21 @@ const renderMessageWithEmojis = (text: string, emojiFilenames: string[], baseUrl
   return parts.length > 0 ? parts : [text];
 };
 
+const getDisplayNameClass = (animation?: string) => {
+  switch (animation) {
+    case 'rainbow':
+      return 'display-name-rainbow';
+    case 'gradient':
+      return 'display-name-gradient';
+    case 'pulse':
+      return 'display-name-pulse';
+    case 'glow':
+      return 'display-name-glow';
+    default:
+      return '';
+  }
+};
+
 // --- Components ---
 interface RowProps {
   message: Message;
@@ -113,6 +151,9 @@ interface RowProps {
   pickerEmojiFilenames: string[];
   ownDisplayName: string;
   ownAuthId: string | null;
+  ownDisplayNameColor: string;
+  ownDisplayNameAnimation: string;
+  partnerInfo: PartnerInfo | null;
   onUsernameClick: (authId: string) => void;
   isMobile: boolean;
 }
@@ -124,6 +165,9 @@ const Row = React.memo(({
   pickerEmojiFilenames, 
   ownDisplayName,
   ownAuthId,
+  ownDisplayNameColor,
+  ownDisplayNameAnimation,
+  partnerInfo,
   onUsernameClick,
   isMobile
 }: RowProps) => {
@@ -153,9 +197,27 @@ const Row = React.memo(({
     : [message.text]
   ), [message.text, theme, pickerEmojiFilenames]);
 
-  const displayName = message.sender === 'me' ? ownDisplayName : (message.senderUsername || "Stranger");
-  const authIdToUse = message.sender === 'me' ? ownAuthId : message.senderAuthId;
+  // Determine display name and styling for current message
+  let displayName: string;
+  let displayNameColor: string;
+  let displayNameAnimation: string;
+  let authIdToUse: string | null;
+
+  if (message.sender === 'me') {
+    displayName = ownDisplayName;
+    displayNameColor = ownDisplayNameColor;
+    displayNameAnimation = ownDisplayNameAnimation;
+    authIdToUse = ownAuthId;
+  } else {
+    // For partner messages, use the styling from the message or fallback to partner info
+    displayName = message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
+    displayNameColor = message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#ff0000';
+    displayNameAnimation = message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none';
+    authIdToUse = message.senderAuthId || partnerInfo?.authId || null;
+  }
+
   const isClickable = authIdToUse && authIdToUse !== 'anonymous' && authIdToUse !== null;
+  const displayNameClass = getDisplayNameClass(displayNameAnimation);
 
   const UsernameComponent = ({ children, className }: { children: React.ReactNode, className: string }) => {
     if (isClickable && authIdToUse) {
@@ -167,9 +229,15 @@ const Row = React.memo(({
           }}
           className={cn(
             className,
-            "cursor-pointer transition-colors duration-200 hover:underline",
+            displayNameClass,
+            "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
             isMobile && "active:underline" // Touch feedback for mobile
           )}
+          style={{ 
+            color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
+              ? undefined 
+              : displayNameColor
+          }}
           role="link"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -183,7 +251,18 @@ const Row = React.memo(({
         </span>
       );
     }
-    return <span className={className}>{children}</span>;
+    return (
+      <span 
+        className={cn(className, displayNameClass)}
+        style={{ 
+          color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
+            ? undefined 
+            : displayNameColor
+        }}
+      >
+        {children}
+      </span>
+    );
   };
 
   return (
@@ -198,22 +277,25 @@ const Row = React.memo(({
         "mb-1 break-words", 
         isMobile && "text-sm leading-relaxed"
       )}>
-        {message.sender === 'me' && (
-          <>
-            <UsernameComponent className="text-blue-600 font-bold mr-1">
+        <div className="flex items-start gap-2">
+          {/* Show partner status if available */}
+          {message.sender === 'partner' && partnerInfo?.status && (
+            <Image
+              src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
+              alt={partnerInfo.status}
+              width={12}
+              height={12}
+              className="mt-1 flex-shrink-0"
+            />
+          )}
+          
+          <div className="flex-1">
+            <UsernameComponent className="font-bold mr-1">
               {displayName}:
             </UsernameComponent>
             <span className={cn(theme === 'theme-7' && 'theme-7-text-shadow')}>{messageContent}</span>
-          </>
-        )}
-        {message.sender === 'partner' && (
-          <>
-            <UsernameComponent className="text-red-600 font-bold mr-1">
-              {displayName}:
-            </UsernameComponent>
-            <span className={cn(theme === 'theme-7' && 'theme-7-text-shadow')}>{messageContent}</span>
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </>
   );
@@ -258,6 +340,7 @@ const ChatPageClientContent: React.FC = () => {
   const [isPartnerConnected, setIsPartnerConnected] = useState(false);
   const [isFindingPartner, setIsFindingPartner] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
+  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null);
   const [socketError, setSocketError] = useState(false);
 
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
@@ -279,7 +362,8 @@ const ChatPageClientContent: React.FC = () => {
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
 
   const [ownProfileUsername, setOwnProfileUsername] = useState<string | null>(null);
-  const [partnerAuthId, setPartnerAuthId] = useState<string | null>(null);
+  const [ownDisplayNameColor, setOwnDisplayNameColor] = useState('#0066cc');
+  const [ownDisplayNameAnimation, setOwnDisplayNameAnimation] = useState('none');
 
   const interests = useMemo(() => searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], [searchParams]);
   const effectivePageTheme = useMemo(() => (isMounted ? currentTheme : 'theme-98'), [isMounted, currentTheme]);
@@ -306,6 +390,57 @@ const ChatPageClientContent: React.FC = () => {
   const ownDisplayUsername = useMemo(() => {
     return ownProfileUsername || "You";
   }, [ownProfileUsername]);
+
+  // CSS for display name animations
+  const displayNameAnimationCSS = `
+    .display-name-rainbow {
+      background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
+      background-size: 400% 400%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: rainbow 3s ease-in-out infinite;
+    }
+
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .display-name-gradient {
+      background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
+      background-size: 300% 300%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gradientShift 4s ease-in-out infinite;
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .display-name-pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+
+    .display-name-glow {
+      text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+      animation: glow 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes glow {
+      from { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
+      to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
+    }
+  `;
 
   // Improved scroll to bottom function
   const scrollToBottom = useCallback((force = false) => {
@@ -378,8 +513,16 @@ const ChatPageClientContent: React.FC = () => {
     setProfileCardUserId(null);
   }, []);
 
-  // Modified addMessageToList to include senderAuthId
-  const addMessageToList = useCallback((text: string, sender: Message['sender'], senderUsername?: string, senderAuthId?: string, idSuffix?: string) => {
+  // Modified addMessageToList to include display name styling
+  const addMessageToList = useCallback((
+    text: string, 
+    sender: Message['sender'], 
+    senderUsername?: string, 
+    senderAuthId?: string, 
+    senderDisplayNameColor?: string,
+    senderDisplayNameAnimation?: string,
+    idSuffix?: string
+  ) => {
     setMessages((prevMessages) => {
       const newMessageItem: Message = {
         id: `${Date.now()}-${idSuffix || Math.random().toString(36).substring(2, 7)}`,
@@ -388,6 +531,8 @@ const ChatPageClientContent: React.FC = () => {
         timestamp: new Date(),
         senderUsername: sender === 'partner' ? senderUsername : undefined,
         senderAuthId: sender === 'partner' ? senderAuthId : undefined,
+        senderDisplayNameColor: sender === 'partner' ? senderDisplayNameColor : undefined,
+        senderDisplayNameAnimation: sender === 'partner' ? senderDisplayNameAnimation : undefined,
       };
       return [...prevMessages, newMessageItem];
     });
@@ -462,30 +607,40 @@ const ChatPageClientContent: React.FC = () => {
           console.log(`${LOG_PREFIX}: Fetching profile for authenticated user: ${user.id}`);
           const { data: profile, error } = await supabase
             .from('user_profiles')
-            .select('username, display_name')
+            .select('username, display_name, display_name_color, display_name_animation')
             .eq('id', user.id)
             .single();
             
           if (error && error.code !== 'PGRST116') {
             console.error(`${LOG_PREFIX}: Error fetching own profile:`, error);
             setOwnProfileUsername(null);
+            setOwnDisplayNameColor('#0066cc');
+            setOwnDisplayNameAnimation('none');
           } else if (profile) {
             console.log(`${LOG_PREFIX}: Fetched own profile:`, profile);
             const displayUsername = profile.display_name || profile.username;
             setOwnProfileUsername(displayUsername);
-            console.log(`${LOG_PREFIX}: Set own display username to: ${displayUsername}`);
+            setOwnDisplayNameColor(profile.display_name_color || '#0066cc');
+            setOwnDisplayNameAnimation(profile.display_name_animation || 'none');
+            console.log(`${LOG_PREFIX}: Set own display username to: ${displayUsername} with color: ${profile.display_name_color} and animation: ${profile.display_name_animation}`);
           } else {
             console.log(`${LOG_PREFIX}: No profile found for user ${user.id} or username is null.`);
             setOwnProfileUsername(null);
+            setOwnDisplayNameColor('#0066cc');
+            setOwnDisplayNameAnimation('none');
           }
         } else {
           console.log(`${LOG_PREFIX}: No authenticated user found - proceeding as anonymous.`);
           setOwnProfileUsername(null);
+          setOwnDisplayNameColor('#0066cc');
+          setOwnDisplayNameAnimation('none');
         }
       } catch (e) {
         console.error(`${LOG_PREFIX}: Exception fetching own profile:`, e);
         userIdRef.current = null;
         setOwnProfileUsername(null);
+        setOwnDisplayNameColor('#0066cc');
+        setOwnDisplayNameAnimation('none');
       }
       
       console.log(`${LOG_PREFIX}: Auth loading complete. Setting isAuthLoading to false.`);
@@ -591,13 +746,13 @@ const ChatPageClientContent: React.FC = () => {
 
     if (isPartnerConnected && currentRoomId) { 
       console.log(`${LOG_PREFIX}: User ${currentSocket.id} is skipping partner in room ${currentRoomId}.`);
-      addMessageToList(SYS_MSG_YOU_DISCONNECTED, 'system', undefined, undefined, 'self-disconnect-skip');
+      addMessageToList(SYS_MSG_YOU_DISCONNECTED, 'system', undefined, undefined, undefined, undefined, 'self-disconnect-skip');
       
       setIsPartnerConnected(false);
       setRoomId(null); 
       setIsPartnerTyping(false);
       setPartnerInterests([]);
-      setPartnerAuthId(null);
+      setPartnerInfo(null);
 
       if (currentSocket.connected) {
         currentSocket.emit('leaveChat', { roomId: currentRoomId });
@@ -691,13 +846,57 @@ const ChatPageClientContent: React.FC = () => {
       }, 100);
     };
 
-    const onPartnerFound = ({ partnerId: pId, roomId: rId, interests: pInterests, partnerUsername, partnerDisplayName, partnerAvatarUrl, partnerAuthId }: { partnerId: string, roomId: string, interests: string[], partnerUsername?: string, partnerDisplayName?: string, partnerAvatarUrl?: string, partnerAuthId?: string }) => {
-      console.log(`${LOG_PREFIX}: %cSOCKET EVENT: partnerFound`, 'color: green; font-weight: bold;', { partnerIdFromServer: pId, rId, partnerUsername, pInterests, partnerDisplayName, partnerAvatarUrl, partnerAuthId });
+    const onPartnerFound = ({ 
+      partnerId, 
+      roomId: rId, 
+      interests: pInterests, 
+      partnerUsername, 
+      partnerDisplayName, 
+      partnerAvatarUrl, 
+      partnerBannerUrl,
+      partnerPronouns,
+      partnerStatus,
+      partnerDisplayNameColor,
+      partnerDisplayNameAnimation,
+      partnerAuthId 
+    }: { 
+      partnerId: string, 
+      roomId: string, 
+      interests: string[], 
+      partnerUsername?: string, 
+      partnerDisplayName?: string, 
+      partnerAvatarUrl?: string,
+      partnerBannerUrl?: string,
+      partnerPronouns?: string,
+      partnerStatus?: 'online' | 'idle' | 'dnd' | 'offline',
+      partnerDisplayNameColor?: string,
+      partnerDisplayNameAnimation?: string,
+      partnerAuthId?: string 
+    }) => {
+      console.log(`${LOG_PREFIX}: %cSOCKET EVENT: partnerFound`, 'color: green; font-weight: bold;', { 
+        partnerId, rId, partnerUsername, pInterests, partnerDisplayName, partnerAvatarUrl, 
+        partnerBannerUrl, partnerPronouns, partnerStatus, partnerDisplayNameColor, 
+        partnerDisplayNameAnimation, partnerAuthId 
+      });
       playSound("Match.wav");
       setMessages([]);
       setRoomId(rId); 
       setPartnerInterests(pInterests || []);
-      setPartnerAuthId(partnerAuthId || null);
+      
+      // Set enhanced partner info
+      setPartnerInfo({
+        id: partnerId,
+        username: partnerUsername || 'Stranger',
+        displayName: partnerDisplayName,
+        avatarUrl: partnerAvatarUrl,
+        bannerUrl: partnerBannerUrl,
+        pronouns: partnerPronouns,
+        status: partnerStatus || 'online',
+        displayNameColor: partnerDisplayNameColor || '#ff0000',
+        displayNameAnimation: partnerDisplayNameAnimation || 'none',
+        authId: partnerAuthId
+      });
+      
       setIsFindingPartner(false);
       setIsPartnerConnected(true); 
       setIsSelfDisconnectedRecently(false); 
@@ -716,17 +915,51 @@ const ChatPageClientContent: React.FC = () => {
       }
     };
 
-    const onReceiveMessage = ({ senderId, message: receivedMessage, senderUsername, senderAuthId }: { senderId: string, message: string, senderUsername?: string, senderAuthId?: string }) => {
+    const onReceiveMessage = ({ 
+      senderId, 
+      message: receivedMessage, 
+      senderUsername, 
+      senderAuthId,
+      senderDisplayNameColor,
+      senderDisplayNameAnimation 
+    }: { 
+      senderId: string, 
+      message: string, 
+      senderUsername?: string, 
+      senderAuthId?: string,
+      senderDisplayNameColor?: string,
+      senderDisplayNameAnimation?: string 
+    }) => {
       console.log(`${LOG_PREFIX}: %c[[CLIENT RECEIVE MESSAGE]]`, 'color: purple; font-size: 1.2em; font-weight: bold;',
-        `RAW_PAYLOAD:`, { senderId, message: receivedMessage, senderUsername, senderAuthId },
+        `RAW_PAYLOAD:`, { 
+          senderId, 
+          message: receivedMessage, 
+          senderUsername, 
+          senderAuthId,
+          senderDisplayNameColor,
+          senderDisplayNameAnimation 
+        },
         `CURRENT_ROOM_ID_REF: ${roomIdRef.current}`
       );
       
-      if (senderAuthId) {
-        setPartnerAuthId(senderAuthId);
+      // Update partner info if we have new styling information
+      if (senderAuthId && (senderDisplayNameColor || senderDisplayNameAnimation)) {
+        setPartnerInfo(prev => prev ? {
+          ...prev,
+          displayNameColor: senderDisplayNameColor || prev.displayNameColor,
+          displayNameAnimation: senderDisplayNameAnimation || prev.displayNameAnimation
+        } : null);
       }
       
-      addMessageToList(receivedMessage, 'partner', senderUsername, senderAuthId, `partner-${Math.random().toString(36).substring(2,7)}`);
+      addMessageToList(
+        receivedMessage, 
+        'partner', 
+        senderUsername, 
+        senderAuthId, 
+        senderDisplayNameColor,
+        senderDisplayNameAnimation,
+        `partner-${Math.random().toString(36).substring(2,7)}`
+      );
       setIsPartnerTyping(false);
     };
 
@@ -738,10 +971,15 @@ const ChatPageClientContent: React.FC = () => {
         setIsPartnerTyping(false);
         setRoomId(null); 
         setPartnerInterests([]);
-        setPartnerAuthId(null);
+        setPartnerInfo(null);
         setIsPartnerLeftRecently(true);
         setIsSelfDisconnectedRecently(false);
       }
+    };
+
+    const onPartnerStatusChanged = ({ status }: { status: 'online' | 'idle' | 'dnd' | 'offline' }) => {
+      console.log(`${LOG_PREFIX}: Partner status changed to: ${status}`);
+      setPartnerInfo(prev => prev ? { ...prev, status } : null);
     };
 
     const onDisconnectHandler = (reason: string) => {
@@ -754,7 +992,7 @@ const ChatPageClientContent: React.FC = () => {
       setIsFindingPartner(false); 
       setIsPartnerTyping(false); 
       setRoomId(null);
-      setPartnerAuthId(null);
+      setPartnerInfo(null);
       autoSearchDoneRef.current = false;
     };
 
@@ -777,6 +1015,7 @@ const ChatPageClientContent: React.FC = () => {
     socketToClean.on('findPartnerCooldown', onFindPartnerCooldown);
     socketToClean.on('receiveMessage', onReceiveMessage);
     socketToClean.on('partnerLeft', onPartnerLeft);
+    socketToClean.on('partnerStatusChanged', onPartnerStatusChanged);
     socketToClean.on('disconnect', onDisconnectHandler);
     socketToClean.on('connect_error', onConnectError);
     socketToClean.on('partner_typing_start', onPartnerTypingStart);
@@ -958,6 +1197,9 @@ const ChatPageClientContent: React.FC = () => {
 
   return (
     <>
+      {/* Inject display name animation CSS */}
+      <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
+      
       {/* Hide HomeButton on mobile to save space */}
       {!isMobile && <HomeButton />}
       
@@ -981,6 +1223,33 @@ const ChatPageClientContent: React.FC = () => {
               <div className="title-bar-text">
                 {isMobile ? 'TinChat' : 'Text Chat'}
               </div>
+              {/* Show partner info in title bar if connected */}
+              {isPartnerConnected && partnerInfo && (
+                <div className="ml-2 flex items-center gap-1 text-xs">
+                  <span>•</span>
+                  {partnerInfo.status && (
+                    <Image
+                      src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
+                      alt={partnerInfo.status}
+                      width={12}
+                      height={12}
+                    />
+                  )}
+                  <span 
+                    className={cn(getDisplayNameClass(partnerInfo.displayNameAnimation))}
+                    style={{ 
+                      color: partnerInfo.displayNameAnimation === 'rainbow' || partnerInfo.displayNameAnimation === 'gradient'
+                        ? undefined 
+                        : (partnerInfo.displayNameColor || '#000000')
+                    }}
+                  >
+                    {partnerInfo.displayName || partnerInfo.username}
+                  </span>
+                  {partnerInfo.pronouns && (
+                    <span className="opacity-70">({partnerInfo.pronouns})</span>
+                  )}
+                </div>
+              )}
             </div>
             {/* Add online status or connection indicator on mobile */}
             {isMobile && (
@@ -1028,16 +1297,37 @@ const ChatPageClientContent: React.FC = () => {
                     pickerEmojiFilenames={pickerEmojiFilenames} 
                     ownDisplayName={ownDisplayUsername}
                     ownAuthId={userIdRef.current}
+                    ownDisplayNameColor={ownDisplayNameColor}
+                    ownDisplayNameAnimation={ownDisplayNameAnimation}
+                    partnerInfo={partnerInfo}
                     onUsernameClick={handleUsernameClick}
                     isMobile={isMobile}
                   />
                 ))}
                 {isPartnerTyping && (
                   <div className={cn(
-                    "text-xs italic text-left pl-1 py-0.5",
+                    "text-xs italic text-left pl-1 py-0.5 flex items-center gap-2",
                     effectivePageTheme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
                   )}>
-                    {messages.find(m => m.sender === 'partner')?.senderUsername || 'Stranger'} is typing{typingDots}
+                    {partnerInfo?.status && (
+                      <Image
+                        src={STATUS_CONFIG[partnerInfo.status]?.icon || STATUS_CONFIG.offline.icon}
+                        alt={partnerInfo.status}
+                        width={12}
+                        height={12}
+                      />
+                    )}
+                    <span 
+                      className={cn(getDisplayNameClass(partnerInfo?.displayNameAnimation))}
+                      style={{ 
+                        color: partnerInfo?.displayNameAnimation === 'rainbow' || partnerInfo?.displayNameAnimation === 'gradient'
+                          ? undefined 
+                          : (partnerInfo?.displayNameColor || '#999999')
+                      }}
+                    >
+                      {partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
+                    </span>
+                    is typing{typingDots}
                   </div>
                 )}
                 <div ref={messagesEndRef} />
