@@ -18,8 +18,61 @@ import pkg from '../../package.json';
 const version = pkg.version;
 import AuthButtons from '@/components/AuthButtons';
 
-// Simple PayPal Donation Component
+// PayPal Donation Component using Official SDK
 const PayPalDonationButton = () => {
+  const paypalContainerRef = useRef<HTMLDivElement>(null);
+  const [isPayPalLoaded, setIsPayPalLoaded] = useState(false);
+  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+
+  useEffect(() => {
+    // Check if PayPal SDK is already loaded
+    if (window.paypal) {
+      setIsPayPalLoaded(true);
+      setIsScriptLoaded(true);
+      return;
+    }
+
+    // Load PayPal SDK (Part 1)
+    const script = document.createElement('script');
+    script.src = 'https://www.paypal.com/sdk/js?client-id=BAAicsFbL_0O6JAIVsfAtTXAvf7-gID334UkkXvckpDEKX1C-pRI7jqEvqqYTwOTDtpu6E8tKG7D8px-eI&components=hosted-buttons&disable-funding=venmo&currency=USD';
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    
+    script.onload = () => {
+      setIsScriptLoaded(true);
+      setIsPayPalLoaded(true);
+    };
+
+    script.onerror = () => {
+      console.error('Failed to load PayPal SDK');
+    };
+
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup: remove script if component unmounts
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Part 2: Initialize PayPal button when SDK is loaded
+    if (isScriptLoaded && window.paypal && paypalContainerRef.current) {
+      // Clear any existing content
+      paypalContainerRef.current.innerHTML = '';
+      
+      try {
+        window.paypal.HostedButtons({
+          hostedButtonId: "J4HEACJWLWEZQ"
+        }).render(paypalContainerRef.current);
+      } catch (error) {
+        console.error('Error rendering PayPal button:', error);
+      }
+    }
+  }, [isScriptLoaded]);
+
   return (
     <div className="w-full max-w-md mx-auto mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600">
       <h3 className="text-sm font-semibold mb-2 text-center text-gray-700 dark:text-gray-300">
@@ -28,26 +81,22 @@ const PayPalDonationButton = () => {
       <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 text-center">
         Help keep our servers running and the community growing!
       </p>
+      
+      {/* Part 3: PayPal button container */}
       <div className="flex justify-center">
-        <form action="https://www.paypal.com/donate" method="post" target="_top">
-          <input type="hidden" name="hosted_button_id" value="J4HEACJWLWEZQ" />
-          <input 
-            type="image" 
-            src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" 
-            name="submit" 
-            title="PayPal - The safer, easier way to pay online!" 
-            alt="Donate with PayPal button" 
-            style={{ border: 'none' }}
-          />
-          <img 
-            alt="" 
-            src="https://www.paypal.com/en_US/i/scr/pixel.gif" 
-            width="1" 
-            height="1" 
-            style={{ border: 'none', display: 'none' }}
-          />
-        </form>
+        <div 
+          ref={paypalContainerRef} 
+          id="paypal-container-J4HEACJWLWEZQ"
+          className="min-h-[45px] flex items-center justify-center"
+        >
+          {!isPayPalLoaded && (
+            <div className="text-xs text-gray-500 text-center py-2">
+              Loading PayPal button...
+            </div>
+          )}
+        </div>
       </div>
+      
       <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2">
         Every donation helps us maintain and improve TinChat
       </p>
@@ -55,9 +104,14 @@ const PayPalDonationButton = () => {
   );
 };
 
-// Declare global types for TypeScript
+// Declare PayPal types for TypeScript
 declare global {
   interface Window {
+    paypal?: {
+      HostedButtons: (config: { hostedButtonId: string }) => {
+        render: (container: HTMLElement) => void;
+      };
+    };
     stopOriginalOneko?: () => void;
     startOriginalOneko?: () => void;
     stopAnimatedGifCursor?: () => void;
