@@ -17,90 +17,47 @@ import { listCursors } from '@/ai/flows/list-cursors-flow';
 import pkg from '../../package.json';
 const version = pkg.version;
 import AuthButtons from '@/components/AuthButtons';
-import Head from 'next/head';
 
-// PayPal Donation Component
+// Simple PayPal Donation Component
 const PayPalDonationButton = () => {
-  const paypalContainerRef = useRef<HTMLDivElement>(null);
-  const [isPayPalLoaded, setIsPayPalLoaded] = useState(false);
-
-  useEffect(() => {
-    // Check if PayPal SDK is already loaded
-    if (window.paypal) {
-      setIsPayPalLoaded(true);
-      return;
-    }
-
-    // Load PayPal SDK
-    const script = document.createElement('script');
-    script.src = 'https://www.paypal.com/sdk/js?client-id=BAAicsFbL_0O6JAIVsfAtTXAvf7-gID334UkkXvckpDEKX1C-pRI7jqEvqqYTwOTDtpu6E8tKG7D8px-eI&components=hosted-buttons&disable-funding=venmo&currency=USD';
-    script.crossOrigin = 'anonymous';
-    script.async = true;
-    
-    script.onload = () => {
-      setIsPayPalLoaded(true);
-    };
-
-    script.onerror = () => {
-      console.error('Failed to load PayPal SDK');
-    };
-
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup: remove script if component unmounts
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isPayPalLoaded && window.paypal && paypalContainerRef.current) {
-      // Clear any existing content
-      paypalContainerRef.current.innerHTML = '';
-      
-      try {
-        window.paypal.HostedButtons({
-          hostedButtonId: "J4HEACJWLWEZQ"
-        }).render(paypalContainerRef.current);
-      } catch (error) {
-        console.error('Error rendering PayPal button:', error);
-      }
-    }
-  }, [isPayPalLoaded]);
-
   return (
-    <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600">
+    <div className="w-full max-w-md mx-auto mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600">
       <h3 className="text-sm font-semibold mb-2 text-center text-gray-700 dark:text-gray-300">
-        Support TinChat
+        💝 Support TinChat
       </h3>
       <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 text-center">
-        Help keep our servers running!
+        Help keep our servers running and the community growing!
       </p>
-      <div 
-        ref={paypalContainerRef} 
-        id="paypal-container-J4HEACJWLWEZQ"
-        className="flex justify-center"
-      >
-        {!isPayPalLoaded && (
-          <div className="text-xs text-gray-500 text-center py-2">
-            Loading donation button...
-          </div>
-        )}
+      <div className="flex justify-center">
+        <form action="https://www.paypal.com/donate" method="post" target="_top">
+          <input type="hidden" name="hosted_button_id" value="J4HEACJWLWEZQ" />
+          <input 
+            type="image" 
+            src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" 
+            name="submit" 
+            title="PayPal - The safer, easier way to pay online!" 
+            alt="Donate with PayPal button" 
+            style={{ border: 'none' }}
+          />
+          <img 
+            alt="" 
+            src="https://www.paypal.com/en_US/i/scr/pixel.gif" 
+            width="1" 
+            height="1" 
+            style={{ border: 'none', display: 'none' }}
+          />
+        </form>
       </div>
+      <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2">
+        Every donation helps us maintain and improve TinChat
+      </p>
     </div>
   );
 };
 
-// Declare PayPal types for TypeScript
+// Declare global types for TypeScript
 declare global {
   interface Window {
-    paypal?: {
-      HostedButtons: (config: { hostedButtonId: string }) => {
-        render: (container: HTMLElement) => void;
-      };
-    };
     stopOriginalOneko?: () => void;
     startOriginalOneko?: () => void;
     stopAnimatedGifCursor?: () => void;
@@ -133,15 +90,6 @@ export default function SelectionLobby() {
     // This assumes that a pathname change signifies the end of navigation.
     setIsNavigating(false);
   }, [pathname]);
-
-  // Removed prefetch calls as a debugging step
-  // useEffect(() => {
-  //   if (router) {
-  //     router.prefetch('/chat');
-  //     router.prefetch('/video-chat');
-  //   }
-  // }, [router]);
-
 
   useEffect(() => {
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
@@ -272,7 +220,6 @@ export default function SelectionLobby() {
     }
   }, [router, selectedInterests, toast]);
 
-
   const focusInput = useCallback(() => {
     inputRef.current?.focus();
   }, []);
@@ -323,7 +270,6 @@ export default function SelectionLobby() {
     return () => window.removeEventListener('resize', updatePosition);
   }, [isSettingsOpen]);
 
-
   const handleCursorSelect = useCallback((cursorUrl: string) => {
     if (typeof window === 'undefined') return;
 
@@ -359,7 +305,6 @@ export default function SelectionLobby() {
     document.body.style.cursor = 'auto';
   }, []);
 
-
   return (
     <div className="flex flex-1 flex-col px-4 pt-4 relative">
       <div className="absolute top-3 right-3 flex items-center space-x-2 z-10">
@@ -368,7 +313,7 @@ export default function SelectionLobby() {
       </div>
 
       <div className="flex-grow min-h-screen flex items-center justify-center">
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col items-center">
           {/* Main Card */}
           <div ref={cardWrapperRef} className="max-w-md">
             <Card className="relative">
@@ -459,10 +404,8 @@ export default function SelectionLobby() {
             </Card>
           </div>
 
-          {/* PayPal Donation Button */}
-          <div className="w-64">
-            <PayPalDonationButton />
-          </div>
+          {/* PayPal Donation Button - Now Below the Card */}
+          <PayPalDonationButton />
         </div>
       </div>
 
