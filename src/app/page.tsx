@@ -17,6 +17,96 @@ import { listCursors } from '@/ai/flows/list-cursors-flow';
 import pkg from '../../package.json';
 const version = pkg.version;
 import AuthButtons from '@/components/AuthButtons';
+import Head from 'next/head';
+
+// PayPal Donation Component
+const PayPalDonationButton = () => {
+  const paypalContainerRef = useRef<HTMLDivElement>(null);
+  const [isPayPalLoaded, setIsPayPalLoaded] = useState(false);
+
+  useEffect(() => {
+    // Check if PayPal SDK is already loaded
+    if (window.paypal) {
+      setIsPayPalLoaded(true);
+      return;
+    }
+
+    // Load PayPal SDK
+    const script = document.createElement('script');
+    script.src = 'https://www.paypal.com/sdk/js?client-id=BAAicsFbL_0O6JAIVsfAtTXAvf7-gID334UkkXvckpDEKX1C-pRI7jqEvqqYTwOTDtpu6E8tKG7D8px-eI&components=hosted-buttons&disable-funding=venmo&currency=USD';
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    
+    script.onload = () => {
+      setIsPayPalLoaded(true);
+    };
+
+    script.onerror = () => {
+      console.error('Failed to load PayPal SDK');
+    };
+
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup: remove script if component unmounts
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isPayPalLoaded && window.paypal && paypalContainerRef.current) {
+      // Clear any existing content
+      paypalContainerRef.current.innerHTML = '';
+      
+      try {
+        window.paypal.HostedButtons({
+          hostedButtonId: "J4HEACJWLWEZQ"
+        }).render(paypalContainerRef.current);
+      } catch (error) {
+        console.error('Error rendering PayPal button:', error);
+      }
+    }
+  }, [isPayPalLoaded]);
+
+  return (
+    <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600">
+      <h3 className="text-sm font-semibold mb-2 text-center text-gray-700 dark:text-gray-300">
+        Support TinChat
+      </h3>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 text-center">
+        Help keep our servers running!
+      </p>
+      <div 
+        ref={paypalContainerRef} 
+        id="paypal-container-J4HEACJWLWEZQ"
+        className="flex justify-center"
+      >
+        {!isPayPalLoaded && (
+          <div className="text-xs text-gray-500 text-center py-2">
+            Loading donation button...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Declare PayPal types for TypeScript
+declare global {
+  interface Window {
+    paypal?: {
+      HostedButtons: (config: { hostedButtonId: string }) => {
+        render: (container: HTMLElement) => void;
+      };
+    };
+    stopOriginalOneko?: () => void;
+    startOriginalOneko?: () => void;
+    stopAnimatedGifCursor?: () => void;
+    startAnimatedGifCursor?: (url: string) => void;
+  }
+}
 
 export default function SelectionLobby() {
   const [currentInterest, setCurrentInterest] = useState('');
@@ -278,93 +368,101 @@ export default function SelectionLobby() {
       </div>
 
       <div className="flex-grow min-h-screen flex items-center justify-center">
-        <div ref={cardWrapperRef} className="max-w-md">
-          <Card className="relative">
-            <CardHeader className="relative">
-              <CardTitle>Welcome to TinChat!</CardTitle>
-              <CardDescription>
-                Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
-              </CardDescription>
-              <div className="absolute top-3 right-3 flex items-center text-xs">
-                <img
-                  src="/icons/greenlight.gif"
-                  alt="Green light"
-                  className="w-3 h-3 mr-1"
-                  data-ai-hint="green light indicator"
-                />
-                {usersOnline !== null ? (
-                  <span className="font-bold mr-1">{usersOnline}</span>
-                ) : (
-                  <span className="font-bold mr-1">--</span>
-                )}
-                <span>Users Online!</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center mb-2">
-                  <Label htmlFor="interests-input-field">Your Interests</Label>
-                  <Button
-                    className="p-0 w-[20px] h-[20px] min-w-0 flex items-center justify-center"
-                    aria-label="Settings"
-                    onClick={handleToggleSettings}
-                    disabled={isNavigating}
-                  >
-                    <img
-                      src="/icons/gears-0.png"
-                      alt="Settings"
-                      className="max-w-full max-h-full object-contain"
-                      data-ai-hint="settings icon"
-                    />
-                  </Button>
-                </div>
-                <div
-                  className={cn(
-                    "flex flex-wrap items-center gap-1 p-1.5 cursor-text themed-input rounded-md"
-                  )}
-                  onClick={focusInput}
-                  style={{ minHeight: 'calc(1.5rem + 12px + 2px)'}}
-                >
-                  {selectedInterests.map((interest) => (
-                    <div
-                      key={interest}
-                      className="bg-black text-white pl-2 pr-1 py-0.5 rounded-sm flex items-center text-xs h-fit"
-                    >
-                      <span>{interest}</span>
-                      <X
-                        size={14}
-                        className="ml-1 text-white hover:text-gray-300 cursor-pointer"
-                        onClick={(e) => handleRemoveInterest(interest, e)}
-                        aria-label={`Remove ${interest}`}
-                      />
-                    </div>
-                  ))}
-                  <Input
-                    id="interests-input-field"
-                    ref={inputRef}
-                    value={currentInterest}
-                    onChange={handleInterestInputChange}
-                    onKeyDown={handleInterestInputKeyDown}
-                    placeholder={selectedInterests.length < 5 ? "Add interest..." : "Max interests reached"}
-                    className="flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner"
-                    style={{ minWidth: '80px' }}
-                    disabled={(selectedInterests.length >= 5 && !currentInterest) || isNavigating}
+        <div className="flex items-start gap-6">
+          {/* Main Card */}
+          <div ref={cardWrapperRef} className="max-w-md">
+            <Card className="relative">
+              <CardHeader className="relative">
+                <CardTitle>Welcome to TinChat!</CardTitle>
+                <CardDescription>
+                  Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
+                </CardDescription>
+                <div className="absolute top-3 right-3 flex items-center text-xs">
+                  <img
+                    src="/icons/greenlight.gif"
+                    alt="Green light"
+                    className="w-3 h-3 mr-1"
+                    data-ai-hint="green light indicator"
                   />
+                  {usersOnline !== null ? (
+                    <span className="font-bold mr-1">{usersOnline}</span>
+                  ) : (
+                    <span className="font-bold mr-1">--</span>
+                  )}
+                  <span>Users Online!</span>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Type an interest and press Comma, Space, or Enter. Backspace on empty input to remove last. Leave blank for random match.
-                </p>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between space-x-4">
-              <Button className="flex-1 accent" onClick={() => handleStartChat('text')} disabled={isNavigating}>
-                {isNavigating ? 'Starting...' : <span className="animate-rainbow-text">Start Text Chat</span>}
-              </Button>
-              <Button className="flex-1 accent" onClick={() => handleStartChat('video')} disabled={isNavigating}>
-                {isNavigating ? 'Starting...' : <span className="animate-rainbow-text-alt">Start Video Chat</span>}
-              </Button>
-            </CardFooter>
-          </Card>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center mb-2">
+                    <Label htmlFor="interests-input-field">Your Interests</Label>
+                    <Button
+                      className="p-0 w-[20px] h-[20px] min-w-0 flex items-center justify-center"
+                      aria-label="Settings"
+                      onClick={handleToggleSettings}
+                      disabled={isNavigating}
+                    >
+                      <img
+                        src="/icons/gears-0.png"
+                        alt="Settings"
+                        className="max-w-full max-h-full object-contain"
+                        data-ai-hint="settings icon"
+                      />
+                    </Button>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex flex-wrap items-center gap-1 p-1.5 cursor-text themed-input rounded-md"
+                    )}
+                    onClick={focusInput}
+                    style={{ minHeight: 'calc(1.5rem + 12px + 2px)'}}
+                  >
+                    {selectedInterests.map((interest) => (
+                      <div
+                        key={interest}
+                        className="bg-black text-white pl-2 pr-1 py-0.5 rounded-sm flex items-center text-xs h-fit"
+                      >
+                        <span>{interest}</span>
+                        <X
+                          size={14}
+                          className="ml-1 text-white hover:text-gray-300 cursor-pointer"
+                          onClick={(e) => handleRemoveInterest(interest, e)}
+                          aria-label={`Remove ${interest}`}
+                        />
+                      </div>
+                    ))}
+                    <Input
+                      id="interests-input-field"
+                      ref={inputRef}
+                      value={currentInterest}
+                      onChange={handleInterestInputChange}
+                      onKeyDown={handleInterestInputKeyDown}
+                      placeholder={selectedInterests.length < 5 ? "Add interest..." : "Max interests reached"}
+                      className="flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner"
+                      style={{ minWidth: '80px' }}
+                      disabled={(selectedInterests.length >= 5 && !currentInterest) || isNavigating}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Type an interest and press Comma, Space, or Enter. Backspace on empty input to remove last. Leave blank for random match.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-between space-x-4">
+                <Button className="flex-1 accent" onClick={() => handleStartChat('text')} disabled={isNavigating}>
+                  {isNavigating ? 'Starting...' : <span className="animate-rainbow-text">Start Text Chat</span>}
+                </Button>
+                <Button className="flex-1 accent" onClick={() => handleStartChat('video')} disabled={isNavigating}>
+                  {isNavigating ? 'Starting...' : <span className="animate-rainbow-text-alt">Start Video Chat</span>}
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+
+          {/* PayPal Donation Button */}
+          <div className="w-64">
+            <PayPalDonationButton />
+          </div>
         </div>
       </div>
 
