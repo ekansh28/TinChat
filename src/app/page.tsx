@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -32,7 +33,7 @@ const PayPalDonationButton = () => {
       return;
     }
 
-    // Load PayPal SDK (Part 1)
+    // Load PayPal SDK
     const script = document.createElement('script');
     script.src = 'https://www.paypal.com/sdk/js?client-id=BAAicsFbL_0O6JAIVsfAtTXAvf7-gID334UkkXvckpDEKX1C-pRI7jqEvqqYTwOTDtpu6E8tKG7D8px-eI&components=hosted-buttons&disable-funding=venmo&currency=USD';
     script.crossOrigin = 'anonymous';
@@ -58,7 +59,7 @@ const PayPalDonationButton = () => {
   }, []);
 
   useEffect(() => {
-    // Part 2: Initialize PayPal button when SDK is loaded
+    // Initialize PayPal button when SDK is loaded
     if (isScriptLoaded && window.paypal && paypalContainerRef.current) {
       // Clear any existing content
       paypalContainerRef.current.innerHTML = '';
@@ -74,7 +75,7 @@ const PayPalDonationButton = () => {
   }, [isScriptLoaded]);
 
   return (
-    <div className="w-full max-w-md mx-auto mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600">
+    <div className="w-full max-w-md mx-auto mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600 z-10 relative">
       <h3 className="text-sm font-semibold mb-2 text-center text-gray-700 dark:text-gray-300">
         💝 Support TinChat
       </h3>
@@ -82,12 +83,12 @@ const PayPalDonationButton = () => {
         Help keep our servers running and the community growing!
       </p>
       
-      {/* Part 3: PayPal button container */}
-      <div className="flex justify-center">
+      {/* PayPal button container with proper z-index */}
+      <div className="flex justify-center relative z-10">
         <div 
           ref={paypalContainerRef} 
           id="paypal-container-J4HEACJWLWEZQ"
-          className="min-h-[45px] flex items-center justify-center"
+          className="min-h-[45px] flex items-center justify-center relative z-10"
         >
           {!isPayPalLoaded && (
             <div className="text-xs text-gray-500 text-center py-2">
@@ -138,10 +139,22 @@ export default function SelectionLobby() {
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
 
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     // Reset isNavigating to false when the pathname changes (navigation completes)
-    // This assumes that a pathname change signifies the end of navigation.
     setIsNavigating(false);
   }, [pathname]);
 
@@ -284,10 +297,19 @@ export default function SelectionLobby() {
 
     if (opening && cardWrapperRef.current) {
       const cardRect = cardWrapperRef.current.getBoundingClientRect();
-      setPanelPosition({
-        top: cardRect.top + window.scrollY,
-        left: cardRect.right + window.scrollX + 16
-      });
+      
+      // Adjust positioning for mobile
+      if (isMobile) {
+        setPanelPosition({
+          top: cardRect.bottom + window.scrollY + 8,
+          left: Math.max(8, (window.innerWidth - 250) / 2)
+        });
+      } else {
+        setPanelPosition({
+          top: cardRect.top + window.scrollY,
+          left: cardRect.right + window.scrollX + 16
+        });
+      }
 
       if (cursorImages.length === 0 && !cursorsLoading) {
         setSettingsError(null);
@@ -304,16 +326,24 @@ export default function SelectionLobby() {
         }
       }
     }
-  }, [isSettingsOpen, cardWrapperRef, cursorImages.length, cursorsLoading]);
+  }, [isSettingsOpen, cardWrapperRef, cursorImages.length, cursorsLoading, isMobile]);
 
   useEffect(() => {
     const updatePosition = () => {
       if (isSettingsOpen && cardWrapperRef.current) {
         const cardRect = cardWrapperRef.current.getBoundingClientRect();
-        setPanelPosition({
-          top: cardRect.top + window.scrollY,
-          left: cardRect.right + window.scrollX + 16
-        });
+        
+        if (isMobile) {
+          setPanelPosition({
+            top: cardRect.bottom + window.scrollY + 8,
+            left: Math.max(8, (window.innerWidth - 250) / 2)
+          });
+        } else {
+          setPanelPosition({
+            top: cardRect.top + window.scrollY,
+            left: cardRect.right + window.scrollX + 16
+          });
+        }
       }
     };
 
@@ -322,7 +352,7 @@ export default function SelectionLobby() {
       updatePosition();
     }
     return () => window.removeEventListener('resize', updatePosition);
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, isMobile]);
 
   const handleCursorSelect = useCallback((cursorUrl: string) => {
     if (typeof window === 'undefined') return;
@@ -360,27 +390,70 @@ export default function SelectionLobby() {
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col px-4 pt-4 relative">
-      <div className="absolute top-3 right-3 flex items-center space-x-2 z-10">
-        <p className="text-gray-500 text-xs">v{version}</p>
-        <AuthButtons />
+    <div className={cn(
+      "flex flex-1 flex-col relative min-h-screen",
+      isMobile ? "px-3 pt-3 pb-safe" : "px-4 pt-4"
+    )}>
+      {/* Header - Mobile Optimized */}
+      <div className={cn(
+        "absolute top-3 right-3 flex items-center space-x-2 z-20",
+        isMobile && "top-2 right-2 space-x-1"
+      )}>
+        <p className={cn(
+          "text-gray-500",
+          isMobile ? "text-xs" : "text-xs"
+        )}>
+          v{version}
+        </p>
+        <div className={cn(isMobile && "scale-90")}>
+          <AuthButtons />
+        </div>
       </div>
 
-      <div className="flex-grow min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center">
-          {/* Main Card */}
-          <div ref={cardWrapperRef} className="max-w-md">
+      {/* Main Content - Mobile Responsive */}
+      <div className={cn(
+        "flex-grow flex items-center justify-center",
+        isMobile ? "min-h-[calc(100vh-2rem)] py-4" : "min-h-screen"
+      )}>
+        <div className={cn(
+          "flex flex-col items-center w-full",
+          isMobile ? "space-y-4" : "space-y-6"
+        )}>
+          {/* Main Card - Mobile Responsive */}
+          <div ref={cardWrapperRef} className={cn(
+            "relative z-10 w-full",
+            isMobile ? "max-w-sm px-1" : "max-w-md"
+          )}>
             <Card className="relative">
-              <CardHeader className="relative">
-                <CardTitle>Welcome to TinChat!</CardTitle>
-                <CardDescription>
+              <CardHeader className={cn(
+                "relative",
+                isMobile && "pb-4"
+              )}>
+                <CardTitle className={cn(
+                  isMobile ? "text-lg text-center" : "text-xl"
+                )}>
+                  Welcome to TinChat!
+                </CardTitle>
+                <CardDescription className={cn(
+                  isMobile ? "text-sm text-center" : "text-base"
+                )}>
                   Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
                 </CardDescription>
-                <div className="absolute top-3 right-3 flex items-center text-xs">
+                
+                {/* Online Users Indicator - Mobile Positioned */}
+                <div className={cn(
+                  "flex items-center text-xs",
+                  isMobile 
+                    ? "justify-center mt-2" 
+                    : "absolute top-3 right-3"
+                )}>
                   <img
                     src="/icons/greenlight.gif"
                     alt="Green light"
-                    className="w-3 h-3 mr-1"
+                    className={cn(
+                      "mr-1",
+                      isMobile ? "w-2.5 h-2.5" : "w-3 h-3"
+                    )}
                     data-ai-hint="green light indicator"
                   />
                   {usersOnline !== null ? (
@@ -391,39 +464,71 @@ export default function SelectionLobby() {
                   <span>Users Online!</span>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              
+              <CardContent className={cn(
+                "space-y-4",
+                isMobile && "px-4"
+              )}>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center mb-2">
-                    <Label htmlFor="interests-input-field">Your Interests</Label>
+                  <div className={cn(
+                    "flex justify-between items-center mb-2",
+                    isMobile && "flex-col space-y-2"
+                  )}>
+                    <Label 
+                      htmlFor="interests-input-field" 
+                      className={cn(
+                        isMobile ? "text-sm font-medium" : ""
+                      )}
+                    >
+                      Your Interests
+                    </Label>
+                    
+                    {/* Settings Button - Mobile Positioned */}
                     <Button
-                      className="p-0 w-[20px] h-[20px] min-w-0 flex items-center justify-center"
+                      className={cn(
+                        "flex items-center justify-center relative z-30",
+                        isMobile 
+                          ? "w-8 h-8 p-0 min-w-0" 
+                          : "p-0 w-[20px] h-[20px] min-w-0"
+                      )}
                       aria-label="Settings"
                       onClick={handleToggleSettings}
                       disabled={isNavigating}
+                      variant={isMobile ? "outline" : "default"}
+                      size="sm"
                     >
                       <img
                         src="/icons/gears-0.png"
                         alt="Settings"
-                        className="max-w-full max-h-full object-contain"
+                        className={cn(
+                          "object-contain",
+                          isMobile ? "w-4 h-4" : "max-w-full max-h-full"
+                        )}
                         data-ai-hint="settings icon"
                       />
                     </Button>
                   </div>
+                  
+                  {/* Interests Input - Mobile Optimized */}
                   <div
                     className={cn(
-                      "flex flex-wrap items-center gap-1 p-1.5 cursor-text themed-input rounded-md"
+                      "flex flex-wrap items-center gap-1 cursor-text themed-input rounded-md",
+                      isMobile ? "p-2 min-h-[44px]" : "p-1.5"
                     )}
                     onClick={focusInput}
-                    style={{ minHeight: 'calc(1.5rem + 12px + 2px)'}}
+                    style={{ minHeight: isMobile ? '44px' : 'calc(1.5rem + 12px + 2px)' }}
                   >
                     {selectedInterests.map((interest) => (
                       <div
                         key={interest}
-                        className="bg-black text-white pl-2 pr-1 py-0.5 rounded-sm flex items-center text-xs h-fit"
+                        className={cn(
+                          "bg-black text-white pl-2 pr-1 py-0.5 rounded-sm flex items-center h-fit",
+                          isMobile ? "text-xs" : "text-xs"
+                        )}
                       >
                         <span>{interest}</span>
                         <X
-                          size={14}
+                          size={isMobile ? 12 : 14}
                           className="ml-1 text-white hover:text-gray-300 cursor-pointer"
                           onClick={(e) => handleRemoveInterest(interest, e)}
                           aria-label={`Remove ${interest}`}
@@ -437,42 +542,91 @@ export default function SelectionLobby() {
                       onChange={handleInterestInputChange}
                       onKeyDown={handleInterestInputKeyDown}
                       placeholder={selectedInterests.length < 5 ? "Add interest..." : "Max interests reached"}
-                      className="flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner"
-                      style={{ minWidth: '80px' }}
+                      className={cn(
+                        "flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner",
+                        isMobile ? "text-base min-w-[120px]" : "min-w-[80px]"
+                      )}
                       disabled={(selectedInterests.length >= 5 && !currentInterest) || isNavigating}
+                      autoComplete="off"
+                      autoCapitalize="none"
                     />
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  
+                  <p className={cn(
+                    "text-gray-500 dark:text-gray-400",
+                    isMobile ? "text-xs leading-relaxed" : "text-xs"
+                  )}>
                     Type an interest and press Comma, Space, or Enter. Backspace on empty input to remove last. Leave blank for random match.
                   </p>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between space-x-4">
-                <Button className="flex-1 accent" onClick={() => handleStartChat('text')} disabled={isNavigating}>
-                  {isNavigating ? 'Starting...' : <span className="animate-rainbow-text">Start Text Chat</span>}
+              
+              {/* Action Buttons - Mobile Optimized */}
+              <CardFooter className={cn(
+                "flex space-x-4",
+                isMobile ? "flex-col space-x-0 space-y-3 px-4 pb-6" : "justify-between"
+              )}>
+                <Button 
+                  className={cn(
+                    "accent transition-all duration-200",
+                    isMobile ? "w-full h-12 text-base" : "flex-1"
+                  )} 
+                  onClick={() => handleStartChat('text')} 
+                  disabled={isNavigating}
+                >
+                  {isNavigating ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Starting...
+                    </div>
+                  ) : (
+                    <span className="animate-rainbow-text">Start Text Chat</span>
+                  )}
                 </Button>
-                <Button className="flex-1 accent" onClick={() => handleStartChat('video')} disabled={isNavigating}>
-                  {isNavigating ? 'Starting...' : <span className="animate-rainbow-text-alt">Start Video Chat</span>}
+                
+                <Button 
+                  className={cn(
+                    "accent transition-all duration-200",
+                    isMobile ? "w-full h-12 text-base" : "flex-1"
+                  )} 
+                  onClick={() => handleStartChat('video')} 
+                  disabled={isNavigating}
+                >
+                  {isNavigating ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Starting...
+                    </div>
+                  ) : (
+                    <span className="animate-rainbow-text-alt">Start Video Chat</span>
+                  )}
                 </Button>
               </CardFooter>
             </Card>
           </div>
 
-          {/* PayPal Donation Button - Now Below the Card */}
-          <PayPalDonationButton />
+          {/* PayPal Donation Button - Mobile Responsive */}
+          <div className={cn(
+            isMobile && "w-full max-w-sm px-1"
+          )}>
+            <PayPalDonationButton />
+          </div>
         </div>
       </div>
 
+      {/* Settings Panel - Mobile Responsive */}
       {isSettingsOpen && (
         <div
           className={cn(
-            'fixed p-2 shadow-lg z-20',
+            'fixed p-2 shadow-lg z-[9999]',
             currentTheme === 'theme-7'
               ? 'bg-neutral-100 bg-opacity-70 backdrop-filter backdrop-blur-md border border-neutral-300 rounded-lg'
-              : 'bg-silver border border-gray-400 rounded'
+              : 'bg-silver border border-gray-400 rounded',
+            isMobile && 'mx-2'
           )}
           style={{
-            width: '250px',
+            width: isMobile ? 'calc(100vw - 16px)' : '250px',
+            maxWidth: isMobile ? '300px' : '250px',
             top: `${panelPosition.top}px`,
             left: `${panelPosition.left}px`,
             maxHeight: `calc(100vh - ${panelPosition.top}px - 16px)`,
@@ -480,6 +634,21 @@ export default function SelectionLobby() {
           }}
         >
           <div className={cn(currentTheme === 'theme-98' ? 'p-1' : 'p-1')}>
+            {/* Close button for mobile */}
+            {isMobile && (
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="font-medium text-sm">Settings</h4>
+                <Button
+                  onClick={() => setIsSettingsOpen(false)}
+                  variant="outline"
+                  size="sm"
+                  className="w-6 h-6 p-0"
+                >
+                  <X size={12} />
+                </Button>
+              </div>
+            )}
+            
             <menu role="tablist" className={cn(currentTheme === 'theme-98' ? 'mb-0.5' : 'mb-2 border-b border-gray-300 dark:border-gray-600')}>
               <li role="tab" aria-selected="true"
                   className={cn(
@@ -491,6 +660,7 @@ export default function SelectionLobby() {
                 <a>Cursors</a>
               </li>
             </menu>
+            
             <div
               className={cn(
                 currentTheme === 'theme-98' ? 'sunken-panel' : '',
@@ -500,21 +670,37 @@ export default function SelectionLobby() {
               style={{ marginTop: currentTheme === 'theme-98' ? '1px' : '' }}
             >
               <div className={cn(currentTheme === 'theme-7' ? 'p-2' : 'p-1')}>
-                <Button onClick={handleDefaultCursor} className="w-full mb-2 text-xs" disabled={isNavigating}>
+                <Button 
+                  onClick={handleDefaultCursor} 
+                  className={cn(
+                    "w-full mb-2",
+                    isMobile ? "text-xs h-8" : "text-xs"
+                  )} 
+                  disabled={isNavigating}
+                >
                   Default Cursor
                 </Button>
+                
                 {cursorsLoading ? (
-                  <p className="text-center">Loading cursors...</p>
+                  <p className="text-center text-xs">Loading cursors...</p>
                 ) : settingsError ? (
-                  <p className="text-red-600 text-center">Error: {settingsError}</p>
+                  <p className="text-red-600 text-center text-xs">Error: {settingsError}</p>
                 ) : cursorImages.length > 0 ? (
-                  <div className="h-48 overflow-y-auto grid grid-cols-4 gap-2 p-1">
+                  <div className={cn(
+                    "overflow-y-auto grid gap-2 p-1",
+                    isMobile 
+                      ? "h-32 grid-cols-3" 
+                      : "h-48 grid-cols-4"
+                  )}>
                     {cursorImages.map((url) => (
                       <div key={url} className="flex items-center justify-center p-1 border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
                         <img
                           src={url}
                           alt="cursor preview"
-                          className="w-[30px] h-[30px] object-contain cursor-pointer"
+                          className={cn(
+                            "object-contain cursor-pointer",
+                            isMobile ? "w-6 h-6" : "w-[30px] h-[30px]"
+                          )}
                           data-ai-hint="custom cursor preview"
                           onClick={() => handleCursorSelect(url)}
                         />
@@ -522,7 +708,7 @@ export default function SelectionLobby() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center">No cursors found</p>
+                  <p className="text-center text-xs">No cursors found</p>
                 )}
               </div>
             </div>
@@ -530,18 +716,40 @@ export default function SelectionLobby() {
         </div>
       )}
 
-      <footer className="mt-auto py-4 text-center">
+      {/* Footer - Mobile Responsive */}
+      <footer className={cn(
+        "mt-auto py-4 text-center relative z-10",
+        isMobile && "py-3"
+      )}>
         <div className="max-w-5xl mx-auto">
           <div className="border-t-2 border-gray-300 dark:border-gray-600 my-4 w-full"></div>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 space-x-2">
-          <span>tinchat.online</span>
-          <span>•</span>
-          <Link href="/rules" className="text-red-600 hover:underline">Rules</Link>
-          <span>•</span>
-          <Link href="/terms" className="text-red-600 hover:underline">Terms Of Service</Link>
-          <span>•</span>
-          <Link href="/privacy" className="text-red-600 hover:underline">Privacy</Link>
+        <p className={cn(
+          "text-gray-500 dark:text-gray-400",
+          isMobile ? "text-xs space-y-1 flex flex-col" : "text-sm space-x-2"
+        )}>
+          {isMobile ? (
+            <>
+              <span>tinchat.online</span>
+              <span className="space-x-2">
+                <Link href="/rules" className="text-red-600 hover:underline">Rules</Link>
+                <span>•</span>
+                <Link href="/terms" className="text-red-600 hover:underline">Terms</Link>
+                <span>•</span>
+                <Link href="/privacy" className="text-red-600 hover:underline">Privacy</Link>
+              </span>
+            </>
+          ) : (
+            <>
+              <span>tinchat.online</span>
+              <span>•</span>
+              <Link href="/rules" className="text-red-600 hover:underline">Rules</Link>
+              <span>•</span>
+              <Link href="/terms" className="text-red-600 hover:underline">Terms Of Service</Link>
+              <span>•</span>
+              <Link href="/privacy" className="text-red-600 hover:underline">Privacy</Link>
+            </>
+          )}
         </p>
       </footer>
     </div>
