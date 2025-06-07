@@ -154,7 +154,7 @@ interface RowProps {
   ownDisplayNameColor: string;
   ownDisplayNameAnimation: string;
   partnerInfo: PartnerInfo | null;
-  onUsernameClick: (authId: string) => void;
+  onUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
   isMobile: boolean;
 }
 
@@ -225,25 +225,36 @@ const Row = React.memo(({
         <span
           onClick={(e) => {
             e.preventDefault();
-            onUsernameClick(authIdToUse);
+            const rect = e.currentTarget.getBoundingClientRect();
+            const clickPosition = {
+              x: rect.left + rect.width / 2,
+              y: rect.bottom + 5
+            };
+            onUsernameClick(authIdToUse, clickPosition);
           }}
           className={cn(
             className,
             displayNameClass,
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
-            isMobile && "active:underline" // Touch feedback for mobile
+            isMobile && "active:underline"
           )}
           style={{ 
             color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
               ? undefined 
-              : displayNameColor
+              : displayNameColor,
+            animationDuration: displayNameAnimation === 'rainbow' ? '3s' : undefined
           }}
           role="link"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onUsernameClick(authIdToUse);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickPosition = {
+                x: rect.left + rect.width / 2,
+                y: rect.bottom + 5
+              };
+              onUsernameClick(authIdToUse, clickPosition);
             }
           }}
         >
@@ -257,7 +268,8 @@ const Row = React.memo(({
         style={{ 
           color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
             ? undefined 
-            : displayNameColor
+            : displayNameColor,
+          animationDuration: displayNameAnimation === 'rainbow' ? '3s' : undefined
         }}
       >
         {children}
@@ -278,8 +290,6 @@ const Row = React.memo(({
         isMobile && "text-sm leading-relaxed"
       )}>
         <div className="flex items-start gap-2">
-          {/* REMOVED: Status icon for partner messages */}
-          
           <div className="flex-1">
             <UsernameComponent className="font-bold mr-1">
               {displayName}:
@@ -350,6 +360,7 @@ const ChatPageClientContent: React.FC = () => {
 
   const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
   const [profileCardUserId, setProfileCardUserId] = useState<string | null>(null);
+  const [profileCardPosition, setProfileCardPosition] = useState<{ x: number; y: number } | null>(null);
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
 
   const [ownProfileUsername, setOwnProfileUsername] = useState<string | null>(null);
@@ -433,6 +444,22 @@ const ChatPageClientContent: React.FC = () => {
     }
   `;
 
+  // Navigation cleanup effect
+  useEffect(() => {
+    if (pathname === '/chat') {
+      console.log(`${LOG_PREFIX}: Navigation to chat page detected, resetting states`);
+      setIsFindingPartner(false);
+      setIsPartnerConnected(false);
+      setMessages([]);
+      setRoomId(null);
+      setPartnerInfo(null);
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
+      autoSearchDoneRef.current = false;
+      roomIdRef.current = null;
+    }
+  }, [pathname]);
+
   // Improved scroll to bottom function
   const scrollToBottom = useCallback((force = false) => {
     if (messagesContainerRef.current) {
@@ -492,9 +519,10 @@ const ChatPageClientContent: React.FC = () => {
   }, [isMobile, scrollToBottom]);
 
   // Handle profile card functionality
-  const handleUsernameClick = useCallback((authId: string) => {
+  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
     if (authId && authId !== 'anonymous') {
       setProfileCardUserId(authId);
+      setProfileCardPosition(clickPosition);
       setIsProfileCardOpen(true);
     }
   }, []);
@@ -502,6 +530,7 @@ const ChatPageClientContent: React.FC = () => {
   const handleProfileCardClose = useCallback(() => {
     setIsProfileCardOpen(false);
     setProfileCardUserId(null);
+    setProfileCardPosition(null);
   }, []);
 
   // Modified addMessageToList to include display name styling
@@ -562,7 +591,7 @@ const ChatPageClientContent: React.FC = () => {
     const currentInterests = searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [];
     console.log(`${LOG_PREFIX}: attemptAutoSearch called. Socket connected: ${!!currentSocket?.connected}, Auth loading: ${isAuthLoading}, Auto search done: ${autoSearchDoneRef.current}, Partner connected: ${isPartnerConnected}, Finding partner: ${isFindingPartner}, Room ID: ${roomIdRef.current}`);
     
-    if (currentSocket?.connected && !autoSearchDoneRef.current && !isPartnerConnected && !isFindingPartner && !roomIdRef.current) {
+    if (currentSocket?.connected && !autoSearchDoneRef.current && !isPartnerConnected && !isFindingPartner && !roomIdRef.current && !isAuthLoading) {
       console.log(`${LOG_PREFIX}: Conditions met for auto search. Emitting 'findPartner'. Payload:`, { 
         chatType: 'text', 
         interests: currentInterests, 
@@ -580,9 +609,10 @@ const ChatPageClientContent: React.FC = () => {
       if (isPartnerConnected) reason += "Already partner connected. ";
       if (isFindingPartner) reason += "Already finding partner. ";
       if (roomIdRef.current) reason += "Already in a room. ";
+      if (isAuthLoading) reason += "Auth still loading. ";
       if (reason) console.log(`${LOG_PREFIX}: Auto-search conditions not met: ${reason}`);
     }
-  }, [isPartnerConnected, isFindingPartner, searchParams]);
+  }, [isPartnerConnected, isFindingPartner, isAuthLoading, searchParams]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -640,6 +670,13 @@ const ChatPageClientContent: React.FC = () => {
     
     fetchOwnProfile();
   }, [isMounted]);
+
+  // Auto-search trigger effect
+  useEffect(() => {
+    if (!isAuthLoading && !autoSearchDoneRef.current) {
+      attemptAutoSearch();
+    }
+  }, [isAuthLoading, attemptAutoSearch]);
 
   // Favicon and system message effects (keeping same logic)
   useEffect(() => {
@@ -817,22 +854,9 @@ const ChatPageClientContent: React.FC = () => {
       setIsSocketConnected(true);
       autoSearchDoneRef.current = false;
       setTimeout(() => {
-        if (socketToClean.connected && !autoSearchDoneRef.current) {
+        if (socketToClean.connected && !autoSearchDoneRef.current && !isAuthLoading) {
           console.log(`${LOG_PREFIX}: Socket connected and stable. Attempting auto search.`);
-          const currentSocket = socketRef.current;
-          const currentInterests = searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [];
-          if (currentSocket?.connected && !autoSearchDoneRef.current && !isPartnerConnected && !isFindingPartner && !roomIdRef.current) {
-            console.log(`${LOG_PREFIX}: Conditions met for auto search. Emitting 'findPartner'. Payload:`, { 
-              chatType: 'text', 
-              interests: currentInterests, 
-              authId: userIdRef.current 
-            });
-            setIsFindingPartner(true);
-            setIsSelfDisconnectedRecently(false);
-            setIsPartnerLeftRecently(false);
-            currentSocket.emit('findPartner', { chatType: 'text', interests: currentInterests, authId: userIdRef.current });
-            autoSearchDoneRef.current = true;
-          }
+          attemptAutoSearch();
         }
       }, 100);
     };
@@ -1214,7 +1238,6 @@ const ChatPageClientContent: React.FC = () => {
               <div className="title-bar-text">
                 {isMobile ? 'TinChat' : 'Text Chat'}
               </div>
-              {/* REMOVED: Partner info display in title bar */}
             </div>
             {/* Add online status or connection indicator on mobile */}
             {isMobile && (
@@ -1274,7 +1297,6 @@ const ChatPageClientContent: React.FC = () => {
                     "text-xs italic text-left pl-1 py-0.5 flex items-center gap-2",
                     effectivePageTheme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
                   )}>
-                    {/* REMOVED: Status icon for typing indicator */}
                     <span 
                       className={cn(getDisplayNameClass(partnerInfo?.displayNameAnimation))}
                       style={{ 
@@ -1417,6 +1439,7 @@ const ChatPageClientContent: React.FC = () => {
           isOpen={isProfileCardOpen}
           onClose={handleProfileCardClose}
           onScrollToggle={setIsScrollEnabled}
+          clickPosition={profileCardPosition}
         />
       )}
     </>

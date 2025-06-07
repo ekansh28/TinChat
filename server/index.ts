@@ -97,6 +97,7 @@ interface User {
   status?: 'online' | 'idle' | 'dnd' | 'offline';
   displayNameColor?: string;
   displayNameAnimation?: string;
+  rainbowSpeed?: number;
 }
 
 interface Room {
@@ -154,7 +155,9 @@ function logQueueState(chatType: 'text' | 'video', context: string) {
       authId: u.authId || 'anonymous',
       interests: u.interests,
       username: u.username || 'no-username',
-      status: u.status || 'offline'
+      status: u.status || 'offline',
+      displayNameColor: u.displayNameColor || '#ffffff',
+      displayNameAnimation: u.displayNameAnimation || 'none'
     }))
   );
 }
@@ -174,7 +177,8 @@ async function fetchUserProfile(authId: string) {
         pronouns, 
         status, 
         display_name_color, 
-        display_name_animation
+        display_name_animation,
+        rainbow_speed
       `)
       .eq('id', authId)
       .single();
@@ -391,13 +395,15 @@ io.on('connection', (socket: Socket) => {
           currentUser.status = profile.status || 'online';
           currentUser.displayNameColor = profile.display_name_color;
           currentUser.displayNameAnimation = profile.display_name_animation;
+          currentUser.rainbowSpeed = profile.rainbow_speed;
           console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
             username: profile.username || 'null',
             displayName: profile.display_name || 'null',
             pronouns: profile.pronouns || 'null',
             status: profile.status || 'online',
             displayNameColor: profile.display_name_color || '#ffffff',
-            displayNameAnimation: profile.display_name_animation || 'none'
+            displayNameAnimation: profile.display_name_animation || 'none',
+            rainbowSpeed: profile.rainbow_speed || 3
           });
         } else {
           console.log(`[PROFILE_FETCH_NO_PROFILE] No profile found or error for ${authId}.`);
@@ -444,6 +450,7 @@ io.on('connection', (socket: Socket) => {
             partnerStatus: matchedPartner.status || 'online',
             partnerDisplayNameColor: matchedPartner.displayNameColor,
             partnerDisplayNameAnimation: matchedPartner.displayNameAnimation,
+            partnerRainbowSpeed: matchedPartner.rainbowSpeed,
             partnerAuthId: matchedPartner.authId,
           });
 
@@ -459,6 +466,7 @@ io.on('connection', (socket: Socket) => {
             partnerStatus: currentUser.status || 'online',
             partnerDisplayNameColor: currentUser.displayNameColor,
             partnerDisplayNameAnimation: currentUser.displayNameAnimation,
+            partnerRainbowSpeed: currentUser.rainbowSpeed,
             partnerAuthId: currentUser.authId,
           });
         } else {
@@ -501,6 +509,7 @@ io.on('connection', (socket: Socket) => {
         let senderUsernameToSend = 'Stranger';
         let senderDisplayNameColor = '#ffffff';
         let senderDisplayNameAnimation = 'none';
+        let senderRainbowSpeed = 3;
         
         if (authId && username) {
           senderUsernameToSend = username;
@@ -511,7 +520,8 @@ io.on('connection', (socket: Socket) => {
           if (profile) {
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
             senderDisplayNameAnimation = profile.display_name_animation || 'none';
-            console.log(`[MESSAGE_STYLE_INFO] Display name styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}`);
+            senderRainbowSpeed = profile.rainbow_speed || 3;
+            console.log(`[MESSAGE_STYLE_INFO] Display name styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}, Rainbow Speed: ${senderRainbowSpeed}`);
           }
         } else if (authId && !username) {
           console.log(`[MESSAGE_FETCH_USERNAME] Authenticated user without username, fetching from database for authId: ${authId}`);
@@ -520,6 +530,7 @@ io.on('connection', (socket: Socket) => {
             senderUsernameToSend = profile.display_name || profile.username || 'Stranger';
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
             senderDisplayNameAnimation = profile.display_name_animation || 'none';
+            senderRainbowSpeed = profile.rainbow_speed || 3;
             console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling`);
           }
         } else {
@@ -532,7 +543,8 @@ io.on('connection', (socket: Socket) => {
           senderUsername: senderUsernameToSend,
           senderAuthId: authId || null,
           senderDisplayNameColor,
-          senderDisplayNameAnimation
+          senderDisplayNameAnimation,
+          senderRainbowSpeed
         };
         
         const partnerId = roomDetails.users.find(id => id !== socket.id);

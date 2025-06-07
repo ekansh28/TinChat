@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
@@ -19,100 +20,9 @@ import pkg from '../../package.json';
 const version = pkg.version;
 import AuthButtons from '@/components/AuthButtons';
 
-// PayPal Donation Component using Official SDK
-const PayPalDonationButton = () => {
-  const paypalContainerRef = useRef<HTMLDivElement>(null);
-  const [isPayPalLoaded, setIsPayPalLoaded] = useState(false);
-  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
-
-  useEffect(() => {
-    // Check if PayPal SDK is already loaded
-    if (window.paypal) {
-      setIsPayPalLoaded(true);
-      setIsScriptLoaded(true);
-      return;
-    }
-
-    // Load PayPal SDK
-    const script = document.createElement('script');
-    script.src = 'https://www.paypal.com/sdk/js?client-id=BAAicsFbL_0O6JAIVsfAtTXAvf7-gID334UkkXvckpDEKX1C-pRI7jqEvqqYTwOTDtpu6E8tKG7D8px-eI&components=hosted-buttons&disable-funding=venmo&currency=USD';
-    script.crossOrigin = 'anonymous';
-    script.async = true;
-    
-    script.onload = () => {
-      setIsScriptLoaded(true);
-      setIsPayPalLoaded(true);
-    };
-
-    script.onerror = () => {
-      console.error('Failed to load PayPal SDK');
-    };
-
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup: remove script if component unmounts
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    // Initialize PayPal button when SDK is loaded
-    if (isScriptLoaded && window.paypal && paypalContainerRef.current) {
-      // Clear any existing content
-      paypalContainerRef.current.innerHTML = '';
-      
-      try {
-        window.paypal.HostedButtons({
-          hostedButtonId: "J4HEACJWLWEZQ"
-        }).render(paypalContainerRef.current);
-      } catch (error) {
-        console.error('Error rendering PayPal button:', error);
-      }
-    }
-  }, [isScriptLoaded]);
-
-  return (
-    <div className="w-full max-w-md mx-auto mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600 z-10 relative">
-      <h3 className="text-sm font-semibold mb-2 text-center text-gray-700 dark:text-gray-300">
-        💝 Support TinChat
-      </h3>
-      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 text-center">
-        Help keep our servers running and the community growing!
-      </p>
-      
-      {/* PayPal button container with proper z-index */}
-      <div className="flex justify-center relative z-10">
-        <div 
-          ref={paypalContainerRef} 
-          id="paypal-container-J4HEACJWLWEZQ"
-          className="min-h-[45px] flex items-center justify-center relative z-10"
-        >
-          {!isPayPalLoaded && (
-            <div className="text-xs text-gray-500 text-center py-2">
-              Loading PayPal button...
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2">
-        Every donation helps us maintain and improve TinChat
-      </p>
-    </div>
-  );
-};
-
-// Declare PayPal types for TypeScript
+// Declare global types for TypeScript
 declare global {
   interface Window {
-    paypal?: {
-      HostedButtons: (config: { hostedButtonId: string }) => {
-        render: (container: HTMLElement) => void;
-      };
-    };
     stopOriginalOneko?: () => void;
     startOriginalOneko?: () => void;
     stopAnimatedGifCursor?: () => void;
@@ -416,9 +326,30 @@ export default function SelectionLobby() {
         isMobile ? "min-h-[calc(100vh-2rem)] py-4" : "min-h-screen"
       )}>
         <div className={cn(
-          "flex flex-col items-center w-full",
+          "flex flex-col items-center w-full relative",
           isMobile ? "space-y-4" : "space-y-6"
         )}>
+          {/* Discord Link - Left side of card */}
+          <Link 
+            href="https://discord.gg/gayporn" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className={cn(
+              "absolute z-10 transition-transform hover:scale-110",
+              isMobile 
+                ? "left-2 top-1/2 transform -translate-y-1/2" 
+                : "left-0 top-1/2 transform -translate-y-1/2 -translate-x-16"
+            )}
+          >
+            <Image
+              src="/icons/discord.png"
+              alt="discord"
+              width={isMobile ? 32 : 40}
+              height={isMobile ? 32 : 40}
+              className="transition-opacity hover:opacity-80"
+            />
+          </Link>
+
           {/* Main Card - Mobile Responsive */}
           <div ref={cardWrapperRef} className={cn(
             "relative z-10 w-full",
@@ -605,12 +536,26 @@ export default function SelectionLobby() {
             </Card>
           </div>
 
-          {/* PayPal Donation Button - Mobile Responsive */}
-          <div className={cn(
-            isMobile && "w-full max-w-sm px-1"
-          )}>
-            <PayPalDonationButton />
-          </div>
+          {/* Donate Link - Right side of card */}
+          <Link 
+            href="https://paypal.me/ekansh32" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className={cn(
+              "absolute z-10 transition-transform hover:scale-110",
+              isMobile 
+                ? "right-2 top-1/2 transform -translate-y-1/2" 
+                : "right-0 top-1/2 transform -translate-y-1/2 translate-x-16"
+            )}
+          >
+            <Image
+              src="/icons/donate.png"
+              alt="donate"
+              width={isMobile ? 32 : 40}
+              height={isMobile ? 32 : 40}
+              className="transition-opacity hover:opacity-80"
+            />
+          </Link>
         </div>
       </div>
 
