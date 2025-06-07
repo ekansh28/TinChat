@@ -1,160 +1,4 @@
-{/* Avatar & Banner Section */}
-                <div className={cn(
-                  "p-4 rounded-lg border space-y-4",
-                  isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
-                )}>
-                  <h3 className="text-lg font-semibold mb-4">Profile Images</h3>
-                  
-                  {/* Avatar Section */}
-                  <div>
-                    <label className="block text-sm font-medium mb-3">Profile Picture</label>
-                    <div className="flex items-start space-x-4">
-                      {/* Avatar Preview */}
-                      <div className="relative group">
-                        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 dark:border-gray-600 flex-shrink-0">
-                          {avatarPreview ? (
-                            <Image 
-                              src={avatarPreview} 
-                              alt="Avatar preview" 
-                              width={80} 
-                              height={80} 
-                              className="object-cover w-full h-full transition-transform group-hover:scale-105" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400">
-                              <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                        {avatarPreview && (
-                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Controls */}
-                      <div className="flex-1 space-y-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Button 
-                            type="button" 
-                            onClick={() => avatarFileInputRef.current?.click()}
-                            disabled={saving}
-                            variant="outline"
-                            size="sm"
-                            className="text-sm"
-                          >
-                            {avatarPreview ? 'Change Avatar' : 'Upload Avatar'}
-                          </Button>
-                          {avatarPreview && (
-                            <Button 
-                              type="button" 
-                              onClick={() => removeFile('avatar')}
-                              disabled={saving}
-                              variant="outline"
-                              size="sm"
-                              className="text-sm text-red-600 hover:text-red-700"
-                            >
-                              Remove
-                            </Button>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <p>• Square images work best (1:1 ratio)</p>
-                          <p>• Maximum file size: 2MB</p>
-                          <p>• Supported: JPG, PNG, GIF, WebP</p>
-                        </div>
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      ref={avatarFileInputRef}
-                      onChange={handleAvatarChange}
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      className="hidden"
-                    />
-                  </div>
-
-                  {/* Banner Section */}
-                  <div>
-                    <label className="block text-sm font-medium mb-3">Cover Banner</label>
-                    <div className="space-y-3">
-                      {/* Banner Preview */}
-                      <div className="relative group">
-                        <div className="aspect-[3/1] w-full max-w-md mx-auto overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100">
-                          {bannerPreview ? (
-                            <Image 
-                              src={bannerPreview} 
-                              alt="Banner preview" 
-                              fill
-                              className="object-cover transition-transform group-hover:scale-105" 
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full text-gray-400">
-                              <div className="text-center">
-                                <svg className="w-16 h-16 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                                </svg>
-                                <p className="text-sm">No banner uploaded</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {bannerPreview && (
-                          <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center shadow-sm">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Controls */}
-                      <div className="flex justify-center space-x-2">
-                        <Button 
-                          type="button" 
-                          onClick={() => bannerFileInputRef.current?.click()}
-                          disabled={saving}
-                          variant="outline"
-                          size="sm"
-                          className="text-sm"
-                        >
-                          {bannerPreview ? 'Change Banner' : 'Upload Banner'}
-                        </Button>
-                        {bannerPreview && (
-                          <Button 
-                            type="button" 
-                            onClick={() => removeFile('banner')}
-                            disabled={saving}
-                            variant="outline"
-                            size="sm"
-                            className="text-sm text-red-600 hover:text-red-700"
-                          >
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                      
-                      {/* Guidelines */}
-                      <div className="text-xs text-gray-500 text-center space-y-1">
-                        <p>• Recommended ratio: 3:1 (e.g., 900×300px)</p>
-                        <p>• Maximum file size: 5MB</p>
-                        <p>• Supported: JPG, PNG, GIF, WebP</p>
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      ref={bannerFileInputRef}
-                      onChange={handleBannerChange}
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      className="hidden"
-                    />
-                  </div>
-                </div>// src/components/ProfileCustomizer.tsx
+// src/components/ProfileCustomizer.tsx
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -1211,41 +1055,55 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
 
                 {/* Avatar & Banner Section */}
                 <div className={cn(
-                  "p-3 rounded-lg border space-y-3",
+                  "p-4 rounded-lg border space-y-4",
                   isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
                 )}>
-                  <h3 className="text-lg font-semibold">Images</h3>
+                  <h3 className="text-lg font-semibold mb-4">Profile Images</h3>
                   
-                  {/* Avatar */}
+                  {/* Avatar Section */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Profile Picture</label>
-                    <div className="flex items-center space-x-3">
-                      <span className="inline-block h-16 w-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
-                        {avatarPreview ? (
-                          <Image 
-                            src={avatarPreview} 
-                            alt="Avatar preview" 
-                            width={64} 
-                            height={64} 
-                            className="object-cover h-full w-full" 
-                          />
-                        ) : (
-                          <svg className="h-full w-full text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
+                    <label className="block text-sm font-medium mb-3">Profile Picture</label>
+                    <div className="flex items-start space-x-4">
+                      {/* Avatar Preview */}
+                      <div className="relative group">
+                        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 dark:border-gray-600 flex-shrink-0">
+                          {avatarPreview ? (
+                            <Image 
+                              src={avatarPreview} 
+                              alt="Avatar preview" 
+                              width={80} 
+                              height={80} 
+                              className="object-cover w-full h-full transition-transform group-hover:scale-105" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        {avatarPreview && (
+                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
                         )}
-                      </span>
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex space-x-1">
+                      </div>
+                      
+                      {/* Controls */}
+                      <div className="flex-1 space-y-3">
+                        <div className="flex flex-wrap gap-2">
                           <Button 
                             type="button" 
                             onClick={() => avatarFileInputRef.current?.click()}
                             disabled={saving}
                             variant="outline"
                             size="sm"
-                            className="text-xs"
+                            className="text-sm"
                           >
-                            Change
+                            {avatarPreview ? 'Change Avatar' : 'Upload Avatar'}
                           </Button>
                           {avatarPreview && (
                             <Button 
@@ -1254,74 +1112,100 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                               disabled={saving}
                               variant="outline"
                               size="sm"
-                              className="text-xs"
+                              className="text-sm text-red-600 hover:text-red-700"
                             >
                               Remove
                             </Button>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">
-                          Square, max 2MB
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p>• Square images work best (1:1 ratio)</p>
+                          <p>• Maximum file size: 2MB</p>
+                          <p>• Supported: JPG, PNG, GIF, WebP</p>
                         </div>
                       </div>
-                      <input
-                        type="file"
-                        ref={avatarFileInputRef}
-                        onChange={handleAvatarChange}
-                        accept="image/*"
-                        className="hidden"
-                      />
                     </div>
+                    <input
+                      type="file"
+                      ref={avatarFileInputRef}
+                      onChange={handleAvatarChange}
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      className="hidden"
+                    />
                   </div>
 
-                  {/* Banner */}
+                  {/* Banner Section */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Banner</label>
-                    <div className="aspect-[3/1] w-full max-w-sm mx-auto relative overflow-hidden rounded border bg-gray-100 mb-2">
-                      {bannerPreview ? (
-                        <Image 
-                          src={bannerPreview} 
-                          alt="Banner preview" 
-                          fill
-                          className="object-cover" 
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400">
-                          <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                          </svg>
+                    <label className="block text-sm font-medium mb-3">Cover Banner</label>
+                    <div className="space-y-3">
+                      {/* Banner Preview */}
+                      <div className="relative group">
+                        <div className="aspect-[3/1] w-full max-w-md mx-auto overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100">
+                          {bannerPreview ? (
+                            <Image 
+                              src={bannerPreview} 
+                              alt="Banner preview" 
+                              fill
+                              className="object-cover transition-transform group-hover:scale-105" 
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-gray-400">
+                              <div className="text-center">
+                                <svg className="w-16 h-16 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                </svg>
+                                <p className="text-sm">No banner uploaded</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex justify-center space-x-2">
-                      <Button 
-                        type="button" 
-                        onClick={() => bannerFileInputRef.current?.click()}
-                        disabled={saving}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        Upload Banner
-                      </Button>
-                      {bannerPreview && (
+                        {bannerPreview && (
+                          <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center shadow-sm">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Controls */}
+                      <div className="flex justify-center space-x-2">
                         <Button 
                           type="button" 
-                          onClick={() => removeFile('banner')}
+                          onClick={() => bannerFileInputRef.current?.click()}
                           disabled={saving}
                           variant="outline"
                           size="sm"
-                          className="text-xs"
+                          className="text-sm"
                         >
-                          Remove
+                          {bannerPreview ? 'Change Banner' : 'Upload Banner'}
                         </Button>
-                      )}
+                        {bannerPreview && (
+                          <Button 
+                            type="button" 
+                            onClick={() => removeFile('banner')}
+                            disabled={saving}
+                            variant="outline"
+                            size="sm"
+                            className="text-sm text-red-600 hover:text-red-700"
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {/* Guidelines */}
+                      <div className="text-xs text-gray-500 text-center space-y-1">
+                        <p>• Recommended ratio: 3:1 (e.g., 900×300px)</p>
+                        <p>• Maximum file size: 5MB</p>
+                        <p>• Supported: JPG, PNG, GIF, WebP</p>
+                      </div>
                     </div>
                     <input
                       type="file"
                       ref={bannerFileInputRef}
                       onChange={handleBannerChange}
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
                       className="hidden"
                     />
                   </div>
@@ -1696,104 +1580,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       </div>
                     </div>
 
-                    {/* Interactive Elements */}
-                    <div className="space-y-4">
-                      <label className="text-sm font-medium flex items-center">
-                        <span className="mr-2">🎯</span>
-                        Interactive Elements
-                      </label>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[
-                          { key: 'hoverEffects', label: 'Hover Effects', desc: 'Card responds to mouse hover', icon: '👆' },
-                          { key: 'animations', label: 'Entrance Animation', desc: 'Card animates when loaded', icon: '🎬' },
-                          { key: 'clickEffects', label: 'Click Effects', desc: 'Elements respond to clicks', icon: '👈' },
-                          { key: 'parallax', label: 'Parallax Scroll', desc: 'Layers move at different speeds', icon: '📜' }
-                        ].map((feature) => (
-                          <label key={feature.key} className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors">
-                            <span className="text-lg">{feature.icon}</span>
-                            <input
-                              type="checkbox"
-                              checked={easyCustomization[feature.key as keyof typeof easyCustomization] as boolean}
-                              onChange={(e) => setEasyCustomization(prev => ({ ...prev, [feature.key]: e.target.checked }))}
-                              className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                            />
-                            <div>
-                              <div className="text-sm font-medium">{feature.label}</div>
-                              <div className="text-xs text-gray-500">{feature.desc}</div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Advanced Features */}
-                    <div className="border-t pt-4 space-y-4">
-                      <label className="text-sm font-medium flex items-center">
-                        <span className="mr-2">⚡</span>
-                        Advanced Features
-                        <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Pro</span>
-                      </label>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Theme Presets */}
-                        <div className="space-y-2">
-                          <label className="block text-xs font-medium">Quick Themes</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {[
-                              { name: 'Sunset', colors: ['#ff7e5f', '#feb47b'] },
-                              { name: 'Ocean', colors: ['#667eea', '#764ba2'] },
-                              { name: 'Forest', colors: ['#11998e', '#38ef7d'] },
-                              { name: 'Galaxy', colors: ['#8360c3', '#2ebf91'] }
-                            ].map((theme) => (
-                              <button
-                                key={theme.name}
-                                onClick={() => setEasyCustomization(prev => ({
-                                  ...prev,
-                                  backgroundGradient: {
-                                    enabled: true,
-                                    color1: theme.colors[0],
-                                    color2: theme.colors[1],
-                                    direction: '135deg'
-                                  }
-                                }))}
-                                className="p-2 rounded text-xs font-medium text-white"
-                                style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})` }}
-                              >
-                                {theme.name}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Export Options */}
-                        <div className="space-y-2">
-                          <label className="block text-xs font-medium">Export & Share</label>
-                          <div className="space-y-1">
-                            <Button variant="outline" size="sm" className="w-full text-xs">
-                              📄 Export CSS
-                            </Button>
-                            <Button variant="outline" size="sm" className="w-full text-xs">
-                              🔗 Share Theme
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Import Options */}
-                        <div className="space-y-2">
-                          <label className="block text-xs font-medium">Import & Load</label>
-                          <div className="space-y-1">
-                            <Button variant="outline" size="sm" className="w-full text-xs">
-                              📁 Load Preset
-                            </Button>
-                            <Button variant="outline" size="sm" className="w-full text-xs">
-                              🎨 From Image
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Help Section */}
                     <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-start space-x-3">
@@ -1815,148 +1601,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                             <li>• <strong>Responsive:</strong> Your design will look great on all devices</li>
                             <li>• <strong>CSS Generated:</strong> All your changes are converted to CSS automatically</li>
                           </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (-medium text-gray-600 dark:text-gray-300">Solid Color</label>
-                            <Input
-                              type="color"
-                              value={easyCustomization.backgroundColor}
-                              onChange={(e) => setEasyCustomization(prev => ({
-                                ...prev,
-                                backgroundColor: e.target.value
-                              }))}
-                              disabled={saving}
-                              className="w-full h-10 cursor-pointer max-w-32"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Style Controls */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Corner Roundness */}
-                      <div>
-                        <label className="block text-sm font-medium mb-3">Corner Roundness</label>
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-gray-500 w-8">0px</span>
-                            <input
-                              type="range"
-                              min="0"
-                              max="50"
-                              value={easyCustomization.borderRadius}
-                              onChange={(e) => setEasyCustomization(prev => ({
-                                ...prev,
-                                borderRadius: parseInt(e.target.value)
-                              }))}
-                              disabled={saving}
-                              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <span className="text-xs text-gray-500 w-8">50px</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                              {easyCustomization.borderRadius}px
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Banner Height */}
-                      <div>
-                        <label className="block text-sm font-medium mb-3">Banner Height</label>
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-gray-500 w-12">80px</span>
-                            <input
-                              type="range"
-                              min="80"
-                              max="200"
-                              value={easyCustomization.bannerHeight}
-                              onChange={(e) => setEasyCustomization(prev => ({
-                                ...prev,
-                                bannerHeight: parseInt(e.target.value)
-                              }))}
-                              disabled={saving}
-                              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <span className="text-xs text-gray-500 w-12">200px</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                              {easyCustomization.bannerHeight}px
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Avatar Size */}
-                      <div>
-                        <label className="block text-sm font-medium mb-3">Avatar Size</label>
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-gray-500 w-12">60px</span>
-                            <input
-                              type="range"
-                              min="60"
-                              max="120"
-                              value={easyCustomization.avatarSize}
-                              onChange={(e) => setEasyCustomization(prev => ({
-                                ...prev,
-                                avatarSize: parseInt(e.target.value)
-                              }))}
-                              disabled={saving}
-                              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <span className="text-xs text-gray-500 w-12">120px</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                              {easyCustomization.avatarSize}px
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Text Shadow Toggle */}
-                      <div>
-                        <label className="block text-sm font-medium mb-3">Text Effects</label>
-                        <div className="flex items-center space-x-3">
-                          <input
-                            type="checkbox"
-                            id="text-shadow-toggle"
-                            checked={easyCustomization.textShadow}
-                            onChange={(e) => setEasyCustomization(prev => ({
-                              ...prev,
-                              textShadow: e.target.checked
-                            }))}
-                            disabled={saving}
-                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                          />
-                          <label htmlFor="text-shadow-toggle" className="text-sm">
-                            Add Text Shadow
-                          </label>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Adds depth and readability to text elements
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Help Text */}
-                    <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start space-x-2">
-                        <svg className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                        </svg>
-                        <div className="text-xs text-blue-700 dark:text-blue-300">
-                          <p className="font-medium mb-1">Easy Mode Tips:</p>
-                          <p>• In the preview, click and drag elements to reposition them</p>
-                          <p>• Right-click elements for color and styling options</p>
-                          <p>• All changes automatically generate CSS code</p>
                         </div>
                       </div>
                     </div>
@@ -2562,7 +2206,6 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
             </>
           )}
         </div>
-        
       </div>
     </div>
   );
