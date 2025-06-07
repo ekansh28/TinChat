@@ -63,6 +63,7 @@ interface Message {
   senderAuthId?: string;
   senderDisplayNameColor?: string;
   senderDisplayNameAnimation?: string;
+  senderRainbowSpeed?: number;
 }
 
 interface EmoteData {
@@ -81,6 +82,7 @@ interface PartnerInfo {
   status?: 'online' | 'idle' | 'dnd' | 'offline';
   displayNameColor?: string;
   displayNameAnimation?: string;
+  rainbowSpeed?: number;
   authId?: string;
 }
 
@@ -201,18 +203,21 @@ const Row = React.memo(({
   let displayName: string;
   let displayNameColor: string;
   let displayNameAnimation: string;
+  let rainbowSpeed: number;
   let authIdToUse: string | null;
 
   if (message.sender === 'me') {
     displayName = ownDisplayName;
     displayNameColor = ownDisplayNameColor;
     displayNameAnimation = ownDisplayNameAnimation;
+    rainbowSpeed = 3; // Default for own messages
     authIdToUse = ownAuthId;
   } else {
-    // For partner messages, use the styling from the message or fallback to partner info
+    // FIXED: For partner messages, prioritize message styling data over partner info
     displayName = message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
     displayNameColor = message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#ff0000';
     displayNameAnimation = message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none';
+    rainbowSpeed = message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3;
     authIdToUse = message.senderAuthId || partnerInfo?.authId || null;
   }
 
@@ -242,7 +247,7 @@ const Row = React.memo(({
             color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
               ? undefined 
               : displayNameColor,
-            animationDuration: displayNameAnimation === 'rainbow' ? '3s' : undefined
+            animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
           }}
           role="link"
           tabIndex={0}
@@ -269,7 +274,7 @@ const Row = React.memo(({
           color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
             ? undefined 
             : displayNameColor,
-          animationDuration: displayNameAnimation === 'rainbow' ? '3s' : undefined
+          animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
         }}
       >
         {children}
@@ -524,6 +529,7 @@ const ChatPageClientContent: React.FC = () => {
       setProfileCardUserId(authId);
       setProfileCardPosition(clickPosition);
       setIsProfileCardOpen(true);
+      setIsScrollEnabled(false); // Disable scroll when profile card opens
     }
   }, []);
 
@@ -531,6 +537,7 @@ const ChatPageClientContent: React.FC = () => {
     setIsProfileCardOpen(false);
     setProfileCardUserId(null);
     setProfileCardPosition(null);
+    setIsScrollEnabled(true); // Re-enable scroll when profile card closes
   }, []);
 
   // Modified addMessageToList to include display name styling
@@ -541,6 +548,7 @@ const ChatPageClientContent: React.FC = () => {
     senderAuthId?: string, 
     senderDisplayNameColor?: string,
     senderDisplayNameAnimation?: string,
+    senderRainbowSpeed?: number,
     idSuffix?: string
   ) => {
     setMessages((prevMessages) => {
@@ -553,6 +561,7 @@ const ChatPageClientContent: React.FC = () => {
         senderAuthId: sender === 'partner' ? senderAuthId : undefined,
         senderDisplayNameColor: sender === 'partner' ? senderDisplayNameColor : undefined,
         senderDisplayNameAnimation: sender === 'partner' ? senderDisplayNameAnimation : undefined,
+        senderRainbowSpeed: sender === 'partner' ? senderRainbowSpeed : undefined,
       };
       return [...prevMessages, newMessageItem];
     });
@@ -774,7 +783,7 @@ const ChatPageClientContent: React.FC = () => {
 
     if (isPartnerConnected && currentRoomId) { 
       console.log(`${LOG_PREFIX}: User ${currentSocket.id} is skipping partner in room ${currentRoomId}.`);
-      addMessageToList(SYS_MSG_YOU_DISCONNECTED, 'system', undefined, undefined, undefined, undefined, 'self-disconnect-skip');
+      addMessageToList(SYS_MSG_YOU_DISCONNECTED, 'system', undefined, undefined, undefined, undefined, undefined, 'self-disconnect-skip');
       
       setIsPartnerConnected(false);
       setRoomId(null); 
@@ -873,6 +882,7 @@ const ChatPageClientContent: React.FC = () => {
       partnerStatus,
       partnerDisplayNameColor,
       partnerDisplayNameAnimation,
+      partnerRainbowSpeed,
       partnerAuthId 
     }: { 
       partnerId: string, 
@@ -886,12 +896,13 @@ const ChatPageClientContent: React.FC = () => {
       partnerStatus?: 'online' | 'idle' | 'dnd' | 'offline',
       partnerDisplayNameColor?: string,
       partnerDisplayNameAnimation?: string,
+      partnerRainbowSpeed?: number,
       partnerAuthId?: string 
     }) => {
       console.log(`${LOG_PREFIX}: %cSOCKET EVENT: partnerFound`, 'color: green; font-weight: bold;', { 
         partnerId, rId, partnerUsername, pInterests, partnerDisplayName, partnerAvatarUrl, 
         partnerBannerUrl, partnerPronouns, partnerStatus, partnerDisplayNameColor, 
-        partnerDisplayNameAnimation, partnerAuthId 
+        partnerDisplayNameAnimation, partnerRainbowSpeed, partnerAuthId 
       });
       playSound("Match.wav");
       setMessages([]);
@@ -909,6 +920,7 @@ const ChatPageClientContent: React.FC = () => {
         status: partnerStatus || 'online',
         displayNameColor: partnerDisplayNameColor || '#ff0000',
         displayNameAnimation: partnerDisplayNameAnimation || 'none',
+        rainbowSpeed: partnerRainbowSpeed || 3,
         authId: partnerAuthId
       });
       
@@ -936,14 +948,16 @@ const ChatPageClientContent: React.FC = () => {
       senderUsername, 
       senderAuthId,
       senderDisplayNameColor,
-      senderDisplayNameAnimation 
+      senderDisplayNameAnimation,
+      senderRainbowSpeed
     }: { 
       senderId: string, 
       message: string, 
       senderUsername?: string, 
       senderAuthId?: string,
       senderDisplayNameColor?: string,
-      senderDisplayNameAnimation?: string 
+      senderDisplayNameAnimation?: string,
+      senderRainbowSpeed?: number 
     }) => {
       console.log(`${LOG_PREFIX}: %c[[CLIENT RECEIVE MESSAGE]]`, 'color: purple; font-size: 1.2em; font-weight: bold;',
         `RAW_PAYLOAD:`, { 
@@ -952,7 +966,8 @@ const ChatPageClientContent: React.FC = () => {
           senderUsername, 
           senderAuthId,
           senderDisplayNameColor,
-          senderDisplayNameAnimation 
+          senderDisplayNameAnimation,
+          senderRainbowSpeed 
         },
         `CURRENT_ROOM_ID_REF: ${roomIdRef.current}`
       );
@@ -962,7 +977,8 @@ const ChatPageClientContent: React.FC = () => {
         setPartnerInfo(prev => prev ? {
           ...prev,
           displayNameColor: senderDisplayNameColor || prev.displayNameColor,
-          displayNameAnimation: senderDisplayNameAnimation || prev.displayNameAnimation
+          displayNameAnimation: senderDisplayNameAnimation || prev.displayNameAnimation,
+          rainbowSpeed: senderRainbowSpeed || prev.rainbowSpeed
         } : null);
       }
       
@@ -973,6 +989,7 @@ const ChatPageClientContent: React.FC = () => {
         senderAuthId, 
         senderDisplayNameColor,
         senderDisplayNameAnimation,
+        senderRainbowSpeed,
         `partner-${Math.random().toString(36).substring(2,7)}`
       );
       setIsPartnerTyping(false);
@@ -1302,7 +1319,8 @@ const ChatPageClientContent: React.FC = () => {
                       style={{ 
                         color: partnerInfo?.displayNameAnimation === 'rainbow' || partnerInfo?.displayNameAnimation === 'gradient'
                           ? undefined 
-                          : (partnerInfo?.displayNameColor || '#999999')
+                          : (partnerInfo?.displayNameColor || '#999999'),
+                        animationDuration: partnerInfo?.displayNameAnimation === 'rainbow' ? `${partnerInfo?.rainbowSpeed || 3}s` : undefined
                       }}
                     >
                       {partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}

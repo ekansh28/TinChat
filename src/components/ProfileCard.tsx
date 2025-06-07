@@ -29,6 +29,7 @@ interface ProfileCardProps {
   isOpen: boolean;
   onClose: () => void;
   onScrollToggle: (enabled: boolean) => void;
+  clickPosition?: { x: number; y: number } | null;
 }
 
 const STATUS_CONFIG = {
@@ -253,13 +254,42 @@ const DEFAULT_PROFILE_CSS = `
   border: 1px inset #c0c0c0;
   color: black;
 }
+
+/* Popup specific styles */
+.profile-popup-container {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: auto;
+  transform-origin: center;
+  animation: popupFadeIn 0.2s ease-out forwards;
+}
+
+@keyframes popupFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.profile-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 9998;
+  pointer-events: auto;
+}
 `;
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ 
   userId, 
   isOpen, 
   onClose, 
-  onScrollToggle 
+  onScrollToggle,
+  clickPosition
 }) => {
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -304,6 +334,51 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
       document.removeEventListener('keydown', handleEscapeKey);
     };
   }, [isOpen, onClose]);
+
+  // Calculate popup position based on click position
+  const getPopupStyle = () => {
+    if (!clickPosition) {
+      // Default center position if no click position provided
+      return {
+        position: 'fixed' as const,
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 9999
+      };
+    }
+    
+    const maxWidth = 350;
+    const maxHeight = 500;
+    const padding = 20;
+    
+    let left = clickPosition.x - maxWidth / 2;
+    let top = clickPosition.y + 10;
+    
+    // Adjust if popup would go off screen horizontally
+    if (left < padding) {
+      left = padding;
+    } else if (left + maxWidth > window.innerWidth - padding) {
+      left = window.innerWidth - maxWidth - padding;
+    }
+    
+    // Adjust if popup would go off screen vertically
+    if (top + maxHeight > window.innerHeight - padding) {
+      top = clickPosition.y - maxHeight - 10; // Show above click point
+    }
+    
+    // Final check - ensure it's not off the top of the screen
+    if (top < padding) {
+      top = padding;
+    }
+    
+    return {
+      position: 'fixed' as const,
+      left: `${left}px`,
+      top: `${top}px`,
+      zIndex: 9999
+    };
+  };
 
   const fetchProfile = async () => {
     if (!userId) return;
@@ -631,15 +706,21 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 backdrop-blur-sm">
+    <>
+      {/* Invisible backdrop for click-to-close */}
+      <div 
+        className="profile-popup-backdrop"
+        onClick={onClose}
+      />
+      
+      {/* Profile card popup */}
       <div 
         ref={modalRef}
-        className={cn(
-          "relative max-w-md w-full mx-4 transform transition-all duration-300 ease-out",
-          isTheme98 ? "" : "bg-transparent",
-          isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        )}
+        className="profile-popup-container"
+        style={getPopupStyle()}
+        onClick={(e) => e.stopPropagation()}
       >
+        {/* Close button for non-theme98 */}
         {!isTheme98 && (
           <Button
             onClick={onClose}
@@ -650,10 +731,11 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
           </Button>
         )}
         
+        {/* Profile content */}
         <div className="transform transition-all duration-300 hover:scale-[1.02]">
           {renderProfileContent()}
         </div>
       </div>
-    </div>
+    </>
   );
 };
