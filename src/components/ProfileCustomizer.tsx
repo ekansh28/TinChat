@@ -33,12 +33,6 @@ const DISPLAY_NAME_ANIMATIONS = [
   { value: 'glow', label: 'Glow' }
 ] as const;
 
-const PRESET_COLORS = [
-  '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', 
-  '#ff00ff', '#00ffff', '#ffa500', '#800080', '#ffc0cb',
-  '#90ee90', '#87ceeb', '#dda0dd', '#f0e68c', '#ff6347'
-];
-
 const CSS_MODES = [
   { value: 'custom', label: 'Custom CSS' },
   { value: 'easy', label: 'Easy Customization' }
@@ -55,13 +49,23 @@ interface EasyCustomization {
   borderRadius: number;
   bannerHeight: number;
   avatarSize: number;
+  avatarFrame: 'circle' | 'square';
   textShadow: boolean;
+  textGlow: boolean;
+  textBold: boolean;
+  fontFamily: string;
+  fontSize: number;
+  contentPadding: number;
+  shadow: boolean;
+  glow: boolean;
+  border: boolean;
   elements: {
     [key: string]: {
       x: number;
       y: number;
       scale: number;
       color?: string;
+      visible: boolean;
     };
   };
 }
@@ -83,8 +87,26 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     borderRadius: 16,
     bannerHeight: 120,
     avatarSize: 80,
+    avatarFrame: 'circle',
     textShadow: true,
-    elements: {}
+    textGlow: false,
+    textBold: false,
+    fontFamily: 'default',
+    fontSize: 16,
+    contentPadding: 20,
+    shadow: true,
+    glow: false,
+    border: false,
+    elements: {
+      'profile-avatar': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-display-name': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-username': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-pronouns': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-bio': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-status': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-banner': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-divider': { x: 0, y: 0, scale: 1, visible: true }
+    }
   });
 
   const [bio, setBio] = useState('');
@@ -113,10 +135,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   // Easy mode states
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0, elementX: 0, elementY: 0 });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: string } | null>(null);
-  const [colorPicker, setColorPicker] = useState<{ element: string; type: 'color' | 'gradient' } | null>(null);
 
   const { toast } = useToast();
   const { currentTheme } = useTheme();
@@ -144,14 +164,13 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   useEffect(() => {
     const handleClickOutside = () => {
       setContextMenu(null);
-      setColorPicker(null);
     };
 
-    if (contextMenu || colorPicker) {
+    if (contextMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [contextMenu, colorPicker]);
+  }, [contextMenu]);
 
   // Username availability check
   useEffect(() => {
@@ -193,6 +212,14 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
 
     checkUsername();
   }, [debouncedUsername, currentUser, originalUsername]);
+
+  // Update custom CSS when easy customization changes
+  useEffect(() => {
+    if (cssMode === 'easy') {
+      const generatedCSS = generateEasyCSS();
+      setCustomCSS(generatedCSS);
+    }
+  }, [easyCustomization, cssMode, displayNameAnimation, rainbowSpeed]);
 
   const loadCurrentProfile = async () => {
     if (!mountedRef.current) return;
@@ -325,8 +352,11 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     
     // Background
     if (easyCustomization.backgroundGradient?.enabled) {
+      const direction = easyCustomization.backgroundGradient.direction === 'radial' 
+        ? 'radial-gradient(circle' 
+        : `linear-gradient(${easyCustomization.backgroundGradient.direction}`;
       css += `.profile-card-container {
-        background: linear-gradient(${easyCustomization.backgroundGradient.direction}, ${easyCustomization.backgroundGradient.color1}, ${easyCustomization.backgroundGradient.color2});
+        background: ${direction}, ${easyCustomization.backgroundGradient.color1}, ${easyCustomization.backgroundGradient.color2});
       }\n`;
     } else {
       css += `.profile-card-container {
@@ -339,21 +369,70 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       border-radius: ${easyCustomization.borderRadius}px;
     }\n`;
     
+    // Shadow and effects
+    let boxShadow = '';
+    if (easyCustomization.shadow) {
+      boxShadow += '0 15px 35px rgba(0, 0, 0, 0.3)';
+    }
+    if (easyCustomization.glow) {
+      if (boxShadow) boxShadow += ', ';
+      boxShadow += '0 0 20px rgba(102, 126, 234, 0.5)';
+    }
+    if (boxShadow) {
+      css += `.profile-card-container {
+        box-shadow: ${boxShadow};
+      }\n`;
+    }
+    
+    // Border
+    if (easyCustomization.border) {
+      css += `.profile-card-container {
+        border: 2px solid rgba(255, 255, 255, 0.3);
+      }\n`;
+    }
+    
     // Banner height
     css += `.profile-banner {
       height: ${easyCustomization.bannerHeight}px;
     }\n`;
     
-    // Avatar size
+    // Avatar size and frame
     css += `.profile-avatar {
       width: ${easyCustomization.avatarSize}px;
       height: ${easyCustomization.avatarSize}px;
+      border-radius: ${easyCustomization.avatarFrame === 'circle' ? '50%' : '8px'};
     }\n`;
     
-    // Text shadow
+    // Content padding
+    css += `.profile-content {
+      padding: ${easyCustomization.contentPadding}px;
+    }\n`;
+    
+    // Typography
+    const fontFamily = easyCustomization.fontFamily === 'default' ? 'inherit' : easyCustomization.fontFamily;
+    css += `.profile-card-container {
+      font-family: ${fontFamily};
+      font-size: ${easyCustomization.fontSize}px;
+    }\n`;
+    
+    // Text effects
+    let textShadow = '';
     if (easyCustomization.textShadow) {
-      css += `.profile-display-name, .profile-username {
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      textShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
+    }
+    if (easyCustomization.textGlow) {
+      if (textShadow) textShadow += ', ';
+      textShadow += '0 0 10px currentColor';
+    }
+    if (textShadow) {
+      css += `.profile-display-name, .profile-username, .profile-bio {
+        text-shadow: ${textShadow};
+      }\n`;
+    }
+    
+    if (easyCustomization.textBold) {
+      css += `.profile-display-name, .profile-username, .profile-bio {
+        font-weight: bold;
       }\n`;
     }
     
@@ -371,14 +450,21 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     
     // Element positions and scales
     Object.entries(easyCustomization.elements).forEach(([element, props]) => {
-      css += `.${element} {
-        transform: translate(${props.x}px, ${props.y}px) scale(${props.scale});
-      }\n`;
-      
-      if (props.color) {
+      if (!props.visible) {
         css += `.${element} {
-          color: ${props.color};
+          display: none;
         }\n`;
+      } else {
+        css += `.${element} {
+          transform: translate(${props.x}px, ${props.y}px) scale(${props.scale});
+          position: relative;
+        }\n`;
+        
+        if (props.color) {
+          css += `.${element} {
+            color: ${props.color} !important;
+          }\n`;
+        }
       }
     });
     
@@ -390,16 +476,30 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     if (cssMode !== 'easy') return;
     
     e.preventDefault();
+    e.stopPropagation();
+    
     setSelectedElement(element);
     setIsDragging(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
+    
+    const currentElement = easyCustomization.elements[element] || { x: 0, y: 0, scale: 1, visible: true };
+    setDragStart({ 
+      x: e.clientX, 
+      y: e.clientY,
+      elementX: currentElement.x,
+      elementY: currentElement.y
+    });
   };
 
   const handlePreviewMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !selectedElement || cssMode !== 'easy') return;
     
+    e.preventDefault();
+    
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
+    
+    const newX = dragStart.elementX + deltaX;
+    const newY = dragStart.elementY + deltaY;
     
     setEasyCustomization(prev => ({
       ...prev,
@@ -407,13 +507,11 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         ...prev.elements,
         [selectedElement]: {
           ...prev.elements[selectedElement],
-          x: (prev.elements[selectedElement]?.x || 0) + deltaX,
-          y: (prev.elements[selectedElement]?.y || 0) + deltaY,
+          x: newX,
+          y: newY,
         }
       }
     }));
-    
-    setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const handlePreviewMouseUp = () => {
@@ -425,6 +523,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     if (cssMode !== 'easy') return;
     
     e.preventDefault();
+    e.stopPropagation();
+    
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -553,11 +653,10 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         finalBannerUrl = await uploadFile(bannerFile, 'banners', currentUser.id);
       }
 
-      const finalCSS = cssMode === 'easy' ? generateEasyCSS() : customCSS;
-      const sanitizedCSS = sanitizeCSS(finalCSS);
+      const finalCSS = sanitizeCSS(customCSS);
 
       const profileData = {
-        profile_card_css: sanitizedCSS,
+        profile_card_css: finalCSS,
         bio: bio.trim(),
         display_name: displayName.trim() || null,
         username: username.trim(),
@@ -645,8 +744,26 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         borderRadius: 16,
         bannerHeight: 120,
         avatarSize: 80,
+        avatarFrame: 'circle',
         textShadow: true,
-        elements: {}
+        textGlow: false,
+        textBold: false,
+        fontFamily: 'default',
+        fontSize: 16,
+        contentPadding: 20,
+        shadow: true,
+        glow: false,
+        border: false,
+        elements: {
+          'profile-avatar': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-display-name': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-username': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-pronouns': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-bio': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-status': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-banner': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-divider': { x: 0, y: 0, scale: 1, visible: true }
+        }
       });
     }
   };
@@ -711,27 +828,162 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                 "space-y-4 overflow-y-auto pr-2",
                 isMobile && "max-h-[50vh]"
               )}>
-                {/* CSS Mode Selection */}
+                {/* Profile Images Section - Moved to top */}
                 <div className={cn(
-                  "p-3 rounded-lg border",
+                  "p-4 rounded-lg border space-y-4",
                   isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
                 )}>
-                  <h3 className="text-lg font-semibold mb-3">Customization Mode</h3>
-                  <select
-                    value={cssMode}
-                    onChange={(e) => setCSSMode(e.target.value as 'custom' | 'easy')}
-                    disabled={saving}
-                    className={cn(
-                      "w-full p-2 border rounded",
-                      isTheme98 ? "sunken-panel" : "bg-white dark:bg-gray-700"
-                    )}
-                  >
-                    {CSS_MODES.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
+                  <h3 className="text-lg font-semibold mb-4">Profile Images</h3>
+                  
+                  {/* Avatar Section */}
+                  <div>
+                    <label className="block text-sm font-medium mb-3">Profile Picture</label>
+                    <div className="flex items-start space-x-4">
+                      {/* Avatar Preview */}
+                      <div className="relative group">
+                        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 dark:border-gray-600 flex-shrink-0">
+                          {avatarPreview ? (
+                            <Image 
+                              src={avatarPreview} 
+                              alt="Avatar preview" 
+                              width={80} 
+                              height={80} 
+                              className="object-cover w-full h-full transition-transform group-hover:scale-105" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        {avatarPreview && (
+                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Controls */}
+                      <div className="flex-1 space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Button 
+                            type="button" 
+                            onClick={() => avatarFileInputRef.current?.click()}
+                            disabled={saving}
+                            variant="outline"
+                            size="sm"
+                            className="text-sm"
+                          >
+                            {avatarPreview ? 'Change Avatar' : 'Upload Avatar'}
+                          </Button>
+                          {avatarPreview && (
+                            <Button 
+                              type="button" 
+                              onClick={() => removeFile('avatar')}
+                              disabled={saving}
+                              variant="outline"
+                              size="sm"
+                              className="text-sm text-red-600 hover:text-red-700"
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p>• Square images work best (1:1 ratio)</p>
+                          <p>• Maximum file size: 2MB</p>
+                          <p>• Supported: JPG, PNG, GIF, WebP</p>
+                        </div>
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      ref={avatarFileInputRef}
+                      onChange={handleAvatarChange}
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      className="hidden"
+                    />
+                  </div>
+
+                  {/* Banner Section */}
+                  <div>
+                    <label className="block text-sm font-medium mb-3">Cover Banner</label>
+                    <div className="space-y-3">
+                      {/* Banner Preview */}
+                      <div className="relative group">
+                        <div className="aspect-[3/1] w-full max-w-md mx-auto overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100">
+                          {bannerPreview ? (
+                            <Image 
+                              src={bannerPreview} 
+                              alt="Banner preview" 
+                              fill
+                              className="object-cover transition-transform group-hover:scale-105" 
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-gray-400">
+                              <div className="text-center">
+                                <svg className="w-16 h-16 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                </svg>
+                                <p className="text-sm">No banner uploaded</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {bannerPreview && (
+                          <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center shadow-sm">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Controls */}
+                      <div className="flex justify-center space-x-2">
+                        <Button 
+                          type="button" 
+                          onClick={() => bannerFileInputRef.current?.click()}
+                          disabled={saving}
+                          variant="outline"
+                          size="sm"
+                          className="text-sm"
+                        >
+                          {bannerPreview ? 'Change Banner' : 'Upload Banner'}
+                        </Button>
+                        {bannerPreview && (
+                          <Button 
+                            type="button" 
+                            onClick={() => removeFile('banner')}
+                            disabled={saving}
+                            variant="outline"
+                            size="sm"
+                            className="text-sm text-red-600 hover:text-red-700"
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {/* Guidelines */}
+                      <div className="text-xs text-gray-500 text-center space-y-1">
+                        <p>• Recommended ratio: 3:1 (e.g., 900×300px)</p>
+                        <p>• Maximum file size: 5MB</p>
+                        <p>• Supported: JPG, PNG, GIF, WebP</p>
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      ref={bannerFileInputRef}
+                      onChange={handleBannerChange}
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      className="hidden"
+                    />
+                  </div>
                 </div>
 
                 {/* Basic Info Section */}
@@ -904,30 +1156,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                           className="flex-1 text-sm font-mono"
                         />
                       </div>
-                      
-                      {/* Preset Colors Grid */}
-                      <div>
-                        <p className="text-xs text-gray-500 mb-2">Quick colors:</p>
-                        <div className="grid grid-cols-8 gap-2">
-                          {PRESET_COLORS.map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => setDisplayNameColor(color)}
-                              disabled={saving}
-                              className={cn(
-                                "w-8 h-8 rounded border-2 transition-all duration-200 hover:scale-110 focus:scale-110 focus:outline-none",
-                                displayNameColor === color 
-                                  ? "border-gray-800 dark:border-gray-200 shadow-lg" 
-                                  : "border-gray-300 hover:border-gray-500"
-                              )}
-                              style={{ backgroundColor: color }}
-                              title={color}
-                              aria-label={`Select color ${color}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   </div>
 
@@ -957,258 +1185,57 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       </div>
                     </div>
 
-                    {/* Conditional Controls */}
+                    {/* Rainbow Speed Control */}
                     {displayNameAnimation === 'rainbow' && (
                       <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                         <label className="block text-sm font-medium mb-2 text-blue-700 dark:text-blue-300">
                           Rainbow Speed
                         </label>
                         <div className="field-row flex items-center space-x-3">
-                          <label className="text-xs text-blue-600 dark:text-blue-400 font-medium">Slow</label>
+                          <label className="text-xs text-blue-600 dark:text-blue-400 font-medium">Fast</label>
                           <input
                             type="range"
                             min="1"
                             max="10"
-                            value={rainbowSpeed}
-                            onChange={(e) => setRainbowSpeed(parseInt(e.target.value))}
+                            value={11 - rainbowSpeed} // Inverted for correct behavior
+                            onChange={(e) => setRainbowSpeed(11 - parseInt(e.target.value))}
                             disabled={saving}
                             className="flex-1 h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer slider"
                             style={{
-                              background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(rainbowSpeed - 1) * 11.11}%, #e5e7eb ${(rainbowSpeed - 1) * 11.11}%, #e5e7eb 100%)`
+                              background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(11 - rainbowSpeed - 1) * 11.11}%, #e5e7eb ${(11 - rainbowSpeed - 1) * 11.11}%, #e5e7eb 100%)`
                             }}
                           />
-                          <label className="text-xs text-blue-600 dark:text-blue-400 font-medium">Fast</label>
-                          <span className="text-xs font-mono bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded text-blue-700 dark:text-blue-300">
-                            {rainbowSpeed}s
-                          </span>
+                          <label className="text-xs text-blue-600 dark:text-blue-400 font-medium">Slow</label>
                         </div>
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
                           Controls how fast the rainbow colors cycle through your name
                         </p>
                       </div>
                     )}
-
-                    {displayNameAnimation === 'gradient' && (
-                      <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                        <label className="block text-sm font-medium mb-2 text-purple-700 dark:text-purple-300">
-                          Gradient Colors
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs mb-1 text-purple-600 dark:text-purple-400">Start Color</label>
-                            <Input
-                              type="color"
-                              value="#667eea"
-                              className="w-full h-10"
-                              disabled={saving}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs mb-1 text-purple-600 dark:text-purple-400">End Color</label>
-                            <Input
-                              type="color"
-                              value="#764ba2"
-                              className="w-full h-10"
-                              disabled={saving}
-                            />
-                          </div>
-                        </div>
-                        <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
-                          Creates a smooth color transition effect across your name
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Live Preview */}
-                  <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Live Preview:</p>
-                      <div className="text-xs text-gray-500">
-                        {displayNameAnimation !== 'none' ? `${displayNameAnimation} effect` : 'No animation'}
-                      </div>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-3 rounded border">
-                      <span 
-                        className={cn(
-                          "text-lg font-bold transition-all duration-300",
-                          displayNameAnimation === 'rainbow' && "bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 bg-[length:400%] animate-pulse bg-clip-text text-transparent",
-                          displayNameAnimation === 'gradient' && "bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent",
-                          displayNameAnimation === 'pulse' && "animate-pulse",
-                          displayNameAnimation === 'glow' && "drop-shadow-lg"
-                        )}
-                        style={{ 
-                          color: displayNameAnimation === 'gradient' || displayNameAnimation === 'rainbow' 
-                            ? undefined 
-                            : displayNameColor,
-                          animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined,
-                          textShadow: displayNameAnimation === 'glow' 
-                            ? `0 0 10px ${displayNameColor}, 0 0 20px ${displayNameColor}, 0 0 30px ${displayNameColor}` 
-                            : undefined
-                        }}
-                      >
-                        {displayName || username || 'Display Name'}
-                      </span>
-                    </div>
                   </div>
                 </div>
 
-                {/* Avatar & Banner Section */}
+                {/* Customization Mode Section - Moved here */}
                 <div className={cn(
-                  "p-4 rounded-lg border space-y-4",
+                  "p-3 rounded-lg border",
                   isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
                 )}>
-                  <h3 className="text-lg font-semibold mb-4">Profile Images</h3>
-                  
-                  {/* Avatar Section */}
-                  <div>
-                    <label className="block text-sm font-medium mb-3">Profile Picture</label>
-                    <div className="flex items-start space-x-4">
-                      {/* Avatar Preview */}
-                      <div className="relative group">
-                        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 dark:border-gray-600 flex-shrink-0">
-                          {avatarPreview ? (
-                            <Image 
-                              src={avatarPreview} 
-                              alt="Avatar preview" 
-                              width={80} 
-                              height={80} 
-                              className="object-cover w-full h-full transition-transform group-hover:scale-105" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400">
-                              <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                        {avatarPreview && (
-                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Controls */}
-                      <div className="flex-1 space-y-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Button 
-                            type="button" 
-                            onClick={() => avatarFileInputRef.current?.click()}
-                            disabled={saving}
-                            variant="outline"
-                            size="sm"
-                            className="text-sm"
-                          >
-                            {avatarPreview ? 'Change Avatar' : 'Upload Avatar'}
-                          </Button>
-                          {avatarPreview && (
-                            <Button 
-                              type="button" 
-                              onClick={() => removeFile('avatar')}
-                              disabled={saving}
-                              variant="outline"
-                              size="sm"
-                              className="text-sm text-red-600 hover:text-red-700"
-                            >
-                              Remove
-                            </Button>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <p>• Square images work best (1:1 ratio)</p>
-                          <p>• Maximum file size: 2MB</p>
-                          <p>• Supported: JPG, PNG, GIF, WebP</p>
-                        </div>
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      ref={avatarFileInputRef}
-                      onChange={handleAvatarChange}
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      className="hidden"
-                    />
-                  </div>
-
-                  {/* Banner Section */}
-                  <div>
-                    <label className="block text-sm font-medium mb-3">Cover Banner</label>
-                    <div className="space-y-3">
-                      {/* Banner Preview */}
-                      <div className="relative group">
-                        <div className="aspect-[3/1] w-full max-w-md mx-auto overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100">
-                          {bannerPreview ? (
-                            <Image 
-                              src={bannerPreview} 
-                              alt="Banner preview" 
-                              fill
-                              className="object-cover transition-transform group-hover:scale-105" 
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full text-gray-400">
-                              <div className="text-center">
-                                <svg className="w-16 h-16 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                                </svg>
-                                <p className="text-sm">No banner uploaded</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {bannerPreview && (
-                          <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center shadow-sm">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Controls */}
-                      <div className="flex justify-center space-x-2">
-                        <Button 
-                          type="button" 
-                          onClick={() => bannerFileInputRef.current?.click()}
-                          disabled={saving}
-                          variant="outline"
-                          size="sm"
-                          className="text-sm"
-                        >
-                          {bannerPreview ? 'Change Banner' : 'Upload Banner'}
-                        </Button>
-                        {bannerPreview && (
-                          <Button 
-                            type="button" 
-                            onClick={() => removeFile('banner')}
-                            disabled={saving}
-                            variant="outline"
-                            size="sm"
-                            className="text-sm text-red-600 hover:text-red-700"
-                          >
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                      
-                      {/* Guidelines */}
-                      <div className="text-xs text-gray-500 text-center space-y-1">
-                        <p>• Recommended ratio: 3:1 (e.g., 900×300px)</p>
-                        <p>• Maximum file size: 5MB</p>
-                        <p>• Supported: JPG, PNG, GIF, WebP</p>
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      ref={bannerFileInputRef}
-                      onChange={handleBannerChange}
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      className="hidden"
-                    />
-                  </div>
+                  <h3 className="text-lg font-semibold mb-3">Customization Mode</h3>
+                  <select
+                    value={cssMode}
+                    onChange={(e) => setCSSMode(e.target.value as 'custom' | 'easy')}
+                    disabled={saving}
+                    className={cn(
+                      "w-full p-2 border rounded",
+                      isTheme98 ? "sunken-panel" : "bg-white dark:bg-gray-700"
+                    )}
+                  >
+                    {CSS_MODES.map((mode) => (
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Customization Section */}
@@ -1221,11 +1248,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       <h3 className="text-lg font-semibold">Easy Customization</h3>
                       <div className="flex items-center space-x-2">
                         <Button
-                          onClick={() => setEasyCustomization({
-                            backgroundColor: '#667eea',
-                            backgroundGradient: { enabled: true, color1: '#667eea', color2: '#764ba2', direction: '135deg' },
-                            borderRadius: 16, bannerHeight: 120, avatarSize: 80, textShadow: true, elements: {}
-                          })}
+                          onClick={handleReset}
                           variant="outline"
                           size="sm"
                           className="text-xs"
@@ -1251,14 +1274,12 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                           <div className="flex space-x-2">
                             {[
                               { key: 'solid', label: 'Solid Color', icon: '🎨' },
-                              { key: 'gradient', label: 'Gradient', icon: '🌈' },
-                              { key: 'pattern', label: 'Pattern', icon: '🔲' }
+                              { key: 'gradient', label: 'Gradient', icon: '🌈' }
                             ].map((type) => (
                               <button
                                 key={type.key}
                                 onClick={() => setEasyCustomization(prev => ({
                                   ...prev,
-                                  backgroundType: type.key as any,
                                   backgroundGradient: { 
                                     ...prev.backgroundGradient!, 
                                     enabled: type.key === 'gradient' 
@@ -1284,35 +1305,29 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                           <>
                             <div className="space-y-2">
                               <label className="block text-xs font-medium text-blue-700 dark:text-blue-300">Start Color</label>
-                              <div className="relative">
-                                <Input
-                                  type="color"
-                                  value={easyCustomization.backgroundGradient.color1}
-                                  onChange={(e) => setEasyCustomization(prev => ({
-                                    ...prev,
-                                    backgroundGradient: { ...prev.backgroundGradient!, color1: e.target.value }
-                                  }))}
-                                  disabled={saving}
-                                  className="w-full h-12 cursor-pointer border-2 border-blue-300"
-                                />
-                                <div className="absolute inset-0 rounded-md border-2 border-blue-300 pointer-events-none"></div>
-                              </div>
+                              <Input
+                                type="color"
+                                value={easyCustomization.backgroundGradient.color1}
+                                onChange={(e) => setEasyCustomization(prev => ({
+                                  ...prev,
+                                  backgroundGradient: { ...prev.backgroundGradient!, color1: e.target.value }
+                                }))}
+                                disabled={saving}
+                                className="w-full h-12 cursor-pointer"
+                              />
                             </div>
                             <div className="space-y-2">
                               <label className="block text-xs font-medium text-blue-700 dark:text-blue-300">End Color</label>
-                              <div className="relative">
-                                <Input
-                                  type="color"
-                                  value={easyCustomization.backgroundGradient.color2}
-                                  onChange={(e) => setEasyCustomization(prev => ({
-                                    ...prev,
-                                    backgroundGradient: { ...prev.backgroundGradient!, color2: e.target.value }
-                                  }))}
-                                  disabled={saving}
-                                  className="w-full h-12 cursor-pointer border-2 border-blue-300"
-                                />
-                                <div className="absolute inset-0 rounded-md border-2 border-blue-300 pointer-events-none"></div>
-                              </div>
+                              <Input
+                                type="color"
+                                value={easyCustomization.backgroundGradient.color2}
+                                onChange={(e) => setEasyCustomization(prev => ({
+                                  ...prev,
+                                  backgroundGradient: { ...prev.backgroundGradient!, color2: e.target.value }
+                                }))}
+                                disabled={saving}
+                                className="w-full h-12 cursor-pointer"
+                              />
                             </div>
                             <div className="space-y-2">
                               <label className="block text-xs font-medium text-blue-700 dark:text-blue-300">Direction</label>
@@ -1343,17 +1358,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                                 disabled={saving}
                                 className="w-20 h-12 cursor-pointer"
                               />
-                              <div className="flex-1 grid grid-cols-8 gap-2">
-                                {['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7', '#ffecd2', '#fcb69f', '#a8edea', '#fed6e3', '#ff9a9e', '#fecfef', '#ffeef6', '#d299c2'].map((color) => (
-                                  <button
-                                    key={color}
-                                    onClick={() => setEasyCustomization(prev => ({ ...prev, backgroundColor: color }))}
-                                    className="w-8 h-8 rounded-md border-2 border-gray-300 hover:scale-110 transition-transform"
-                                    style={{ backgroundColor: color }}
-                                    title={color}
-                                  />
-                                ))}
-                              </div>
                             </div>
                           </div>
                         )}
@@ -1382,9 +1386,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                                 onChange={(e) => setEasyCustomization(prev => ({ ...prev, borderRadius: parseInt(e.target.value) }))}
                                 disabled={saving}
                                 className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${easyCustomization.borderRadius * 2}%, #e5e7eb ${easyCustomization.borderRadius * 2}%, #e5e7eb 100%)`
-                                }}
                               />
                               <span className="text-xs text-gray-500 w-12">Round</span>
                             </div>
@@ -1396,29 +1397,54 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                           </div>
                         </div>
 
-                        {/* Shadow & Effects */}
+                        {/* Avatar Frame */}
                         <div className="space-y-3">
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Shadow & Effects</label>
-                          <div className="space-y-2">
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Avatar Frame</label>
+                          <div className="flex space-x-2">
                             {[
-                              { key: 'shadow', label: 'Drop Shadow', desc: 'Adds depth to the card' },
-                              { key: 'glow', label: 'Outer Glow', desc: 'Soft light around card' },
-                              { key: 'border', label: 'Border', desc: 'Outline around card' }
-                            ].map((effect) => (
-                              <label key={effect.key} className="flex items-start space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={easyCustomization[effect.key as keyof typeof easyCustomization] as boolean}
-                                  onChange={(e) => setEasyCustomization(prev => ({ ...prev, [effect.key]: e.target.checked }))}
-                                  className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                />
-                                <div>
-                                  <div className="text-sm font-medium">{effect.label}</div>
-                                  <div className="text-xs text-gray-500">{effect.desc}</div>
-                                </div>
-                              </label>
+                              { key: 'circle', label: 'Circle', icon: '⭕' },
+                              { key: 'square', label: 'Square', icon: '⬜' }
+                            ].map((frame) => (
+                              <button
+                                key={frame.key}
+                                onClick={() => setEasyCustomization(prev => ({ ...prev, avatarFrame: frame.key as any }))}
+                                className={cn(
+                                  "flex-1 p-2 rounded border text-sm font-medium transition-all",
+                                  easyCustomization.avatarFrame === frame.key
+                                    ? "bg-blue-100 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-white border-gray-300 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600"
+                                )}
+                              >
+                                <span className="mr-1">{frame.icon}</span>
+                                {frame.label}
+                              </button>
                             ))}
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Shadow & Effects */}
+                      <div className="space-y-3">
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Shadow & Effects</label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          {[
+                            { key: 'shadow', label: 'Drop Shadow', desc: 'Adds depth to the card' },
+                            { key: 'glow', label: 'Outer Glow', desc: 'Soft light around card' },
+                            { key: 'border', label: 'Border', desc: 'Outline around card' }
+                          ].map((effect) => (
+                            <label key={effect.key} className="flex items-start space-x-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={easyCustomization[effect.key as keyof typeof easyCustomization] as boolean}
+                                onChange={(e) => setEasyCustomization(prev => ({ ...prev, [effect.key]: e.target.checked }))}
+                                className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                              />
+                              <div>
+                                <div className="text-sm font-medium">{effect.label}</div>
+                                <div className="text-xs text-gray-500">{effect.desc}</div>
+                              </div>
+                            </label>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -1491,7 +1517,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                                 type="range"
                                 min="10"
                                 max="40"
-                                value={easyCustomization.contentPadding || 20}
+                                value={easyCustomization.contentPadding}
                                 onChange={(e) => setEasyCustomization(prev => ({ ...prev, contentPadding: parseInt(e.target.value) }))}
                                 disabled={saving}
                                 className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -1500,7 +1526,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                             </div>
                             <div className="flex justify-center">
                               <span className="text-xs font-mono bg-orange-100 dark:bg-orange-900 px-3 py-1 rounded-full text-orange-700 dark:text-orange-300">
-                                {easyCustomization.contentPadding || 20}px
+                                {easyCustomization.contentPadding}px
                               </span>
                             </div>
                           </div>
@@ -1549,7 +1575,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                             <div>
                               <label className="block text-xs mb-1">Font Family</label>
                               <select
-                                value={easyCustomization.fontFamily || 'default'}
+                                value={easyCustomization.fontFamily}
                                 onChange={(e) => setEasyCustomization(prev => ({ ...prev, fontFamily: e.target.value }))}
                                 className="w-full p-2 border rounded-md text-sm bg-white dark:bg-gray-700"
                               >
@@ -1568,11 +1594,16 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                                   type="range"
                                   min="12"
                                   max="24"
-                                  value={easyCustomization.fontSize || 16}
+                                  value={easyCustomization.fontSize}
                                   onChange={(e) => setEasyCustomization(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
                                   className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                 />
                                 <span className="text-xs w-8">Large</span>
+                              </div>
+                              <div className="flex justify-center mt-1">
+                                <span className="text-xs font-mono bg-indigo-100 dark:bg-indigo-900 px-2 py-1 rounded text-indigo-700 dark:text-indigo-300">
+                                  {easyCustomization.fontSize}px
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -1596,7 +1627,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                           </h4>
                           <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
                             <li>• <strong>Drag & Drop:</strong> Click and drag elements in the preview to reposition them</li>
-                            <li>• <strong>Right-Click:</strong> Right-click any element for quick color and style options</li>
+                            <li>• <strong>Right-Click:</strong> Right-click any element for quick options</li>
                             <li>• <strong>Live Preview:</strong> All changes update instantly in the preview panel</li>
                             <li>• <strong>Responsive:</strong> Your design will look great on all devices</li>
                             <li>• <strong>CSS Generated:</strong> All your changes are converted to CSS automatically</li>
@@ -1744,7 +1775,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                 )}>
                   <div className="flex justify-center">
                     <EnhancedProfilePreview 
-                      customCSS={cssMode === 'easy' ? generateEasyCSS() : customCSS}
+                      customCSS={customCSS}
                       bio={bio}
                       displayName={displayName}
                       username={username}
@@ -1757,6 +1788,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       bannerPreview={bannerPreview}
                       currentUser={currentUser}
                       cssMode={cssMode}
+                      easyCustomization={easyCustomization}
                       onElementMouseDown={handlePreviewMouseDown}
                       onElementContextMenu={handlePreviewContextMenu}
                       onMouseMove={handlePreviewMouseMove}
@@ -1799,24 +1831,28 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
-              onClick={() => {
-                setColorPicker({ element: contextMenu.element, type: 'color' });
-                setContextMenu(null);
-              }}
-            >
-              Change Color
-            </button>
-            <button
-              className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
-              onClick={() => {
-                setColorPicker({ element: contextMenu.element, type: 'gradient' });
-                setContextMenu(null);
-              }}
-            >
-              Add Gradient
-            </button>
+            {contextMenu.element === 'profile-avatar' && (
+              <>
+                <button
+                  className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                  onClick={() => {
+                    setEasyCustomization(prev => ({ ...prev, avatarFrame: 'circle' }));
+                    setContextMenu(null);
+                  }}
+                >
+                  Circle Frame
+                </button>
+                <button
+                  className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                  onClick={() => {
+                    setEasyCustomization(prev => ({ ...prev, avatarFrame: 'square' }));
+                    setContextMenu(null);
+                  }}
+                >
+                  Square Frame
+                </button>
+              </>
+            )}
             <button
               className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
               onClick={() => {
@@ -1826,6 +1862,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                   elements: {
                     ...prev.elements,
                     [contextMenu.element]: {
+                      ...prev.elements[contextMenu.element],
                       x: 0,
                       y: 0,
                       scale: 1
@@ -1837,51 +1874,25 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
             >
               Reset Position
             </button>
-          </div>
-        )}
-
-        {/* Color Picker Modal */}
-        {colorPicker && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001]">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border">
-              <h4 className="text-lg font-semibold mb-3">
-                {colorPicker.type === 'gradient' ? 'Gradient Colors' : 'Element Color'}
-              </h4>
-              
-              {colorPicker.type === 'gradient' ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm mb-1">Color 1</label>
-                    <Input type="color" className="w-full h-8" />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">Color 2</label>
-                    <Input type="color" className="w-full h-8" />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm mb-1">Color</label>
-                  <Input type="color" className="w-full h-8" />
-                </div>
-              )}
-              
-              <div className="flex space-x-2 mt-4">
-                <Button
-                  onClick={() => setColorPicker(null)}
-                  variant="outline"
-                  size="sm"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => setColorPicker(null)}
-                  size="sm"
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
+            <button
+              className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+              onClick={() => {
+                // Toggle visibility
+                setEasyCustomization(prev => ({
+                  ...prev,
+                  elements: {
+                    ...prev.elements,
+                    [contextMenu.element]: {
+                      ...prev.elements[contextMenu.element],
+                      visible: !prev.elements[contextMenu.element]?.visible
+                    }
+                  }
+                }));
+                setContextMenu(null);
+              }}
+            >
+              {easyCustomization.elements[contextMenu.element]?.visible !== false ? 'Hide Element' : 'Show Element'}
+            </button>
           </div>
         )}
       </div>
@@ -1903,6 +1914,7 @@ interface EnhancedProfilePreviewProps {
   bannerPreview: string | null;
   currentUser: any;
   cssMode: 'custom' | 'easy';
+  easyCustomization: EasyCustomization;
   onElementMouseDown?: (e: React.MouseEvent, element: string) => void;
   onElementContextMenu?: (e: React.MouseEvent, element: string) => void;
   onMouseMove?: (e: React.MouseEvent) => void;
@@ -1923,6 +1935,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
   bannerPreview,
   currentUser,
   cssMode,
+  easyCustomization,
   onElementMouseDown,
   onElementContextMenu,
   onMouseMove,
@@ -1952,80 +1965,11 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       cursor: ${cssMode === 'easy' ? 'move' : 'default'};
     }
     
-    .profile-banner img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    
-    .profile-content {
-      padding: 20px;
-      position: relative;
-      margin-top: -40px;
-    }
-    
-    .profile-avatar {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      border: 4px solid white;
-      margin-bottom: 15px;
-      object-fit: cover;
-      background: #ccc;
-      position: relative;
-      z-index: 2;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-status {
-      position: absolute;
-      bottom: 4px;
-      right: 4px;
-      width: 20px;
-      height: 20px;
-      border: 3px solid white;
-      border-radius: 50%;
-      z-index: 3;
-    }
-    
-    .profile-display-name {
-      font-size: 22px;
-      font-weight: bold;
-      margin-bottom: 8px;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      word-wrap: break-word;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-username {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-bottom: 8px;
-      font-weight: 500;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-pronouns {
-      font-size: 12px;
-      opacity: 0.8;
-      margin-bottom: 12px;
-      font-style: italic;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-bio {
-      font-size: 13px;
-      line-height: 1.5;
-      opacity: 0.95;
-      margin-top: 12px;
-      word-wrap: break-word;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
     .profile-divider {
       height: 1px;
       background: rgba(255, 255, 255, 0.3);
       margin: 15px 0;
+      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
     }
 
     /* Display name animations */
@@ -2083,7 +2027,8 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
     }
     
     .profile-card-container *:hover {
-      transform: scale(1.02);
+      outline: 2px dashed rgba(59, 130, 246, 0.5);
+      outline-offset: 2px;
     }
     ` : ''}
   `;
@@ -2111,6 +2056,17 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
     return statusOption ? statusOption.icon : '/icons/offline.png';
   };
 
+  const getElementStyle = (elementName: string) => {
+    const element = easyCustomization.elements[elementName];
+    if (!element) return {};
+    
+    return {
+      transform: `translate(${element.x}px, ${element.y}px) scale(${element.scale})`,
+      display: element.visible === false ? 'none' : undefined,
+      color: element.color || undefined
+    };
+  };
+
   return (
     <div
       onMouseMove={onMouseMove}
@@ -2121,6 +2077,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       <div className="profile-card-container">
         <div 
           className="profile-banner"
+          style={getElementStyle('profile-banner')}
           onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-banner') : undefined}
           onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-banner') : undefined}
         >
@@ -2138,12 +2095,14 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
                 src={avatarPreview} 
                 alt="Profile Avatar" 
                 className="profile-avatar"
+                style={getElementStyle('profile-avatar')}
                 onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-avatar') : undefined}
                 onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-avatar') : undefined}
               />
             ) : (
               <div 
                 className="profile-avatar bg-gray-300 flex items-center justify-center"
+                style={getElementStyle('profile-avatar')}
                 onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-avatar') : undefined}
                 onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-avatar') : undefined}
               >
@@ -2158,12 +2117,16 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
               width={20}
               height={20}
               className="profile-status"
+              style={getElementStyle('profile-status')}
+              onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-status') : undefined}
+              onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-status') : undefined}
             />
           </div>
           
           <div 
             className={cn("profile-display-name", getDisplayNameClass())}
             style={{ 
+              ...getElementStyle('profile-display-name'),
               color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient' 
                 ? undefined 
                 : displayNameColor,
@@ -2177,6 +2140,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           
           <div 
             className="profile-username"
+            style={getElementStyle('profile-username')}
             onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-username') : undefined}
             onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-username') : undefined}
           >
@@ -2186,6 +2150,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           {pronouns && (
             <div 
               className="profile-pronouns"
+              style={getElementStyle('profile-pronouns')}
               onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-pronouns') : undefined}
               onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-pronouns') : undefined}
             >
@@ -2195,9 +2160,15 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           
           {bio && (
             <>
-              <div className="profile-divider"></div>
+              <div 
+                className="profile-divider"
+                style={getElementStyle('profile-divider')}
+                onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-divider') : undefined}
+                onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-divider') : undefined}
+              ></div>
               <div 
                 className="profile-bio"
+                style={getElementStyle('profile-bio')}
                 onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-bio') : undefined}
                 onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-bio') : undefined}
               >
