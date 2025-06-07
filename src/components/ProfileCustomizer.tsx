@@ -2562,6 +2562,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
             </>
           )}
         </div>
+        
       </div>
     </div>
   );
