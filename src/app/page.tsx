@@ -1,6 +1,3 @@
-// src/app/page.tsx
-'use client';
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -97,11 +94,11 @@ export default function SelectionLobby() {
 
       tempSocket.on('connect_error', (err) => {
         console.error("SelectionLobby: Socket connection error for user count. Full error:", err);
-        setUsersOnline(0); 
+        setUsersOnline(0);
         if (tempSocket?.connected) tempSocket.disconnect();
       });
 
-      tempSocket.on('error', (err) => { 
+      tempSocket.on('error', (err) => {
         console.error("SelectionLobby: General socket error for user count:", err);
         setUsersOnline(0);
         if (tempSocket?.connected) tempSocket.disconnect();
@@ -137,7 +134,7 @@ export default function SelectionLobby() {
     } else if (newInterest && selectedInterests.includes(newInterest)) {
       toast({ title: "Duplicate Interest", description: `"${newInterest}" is already added.`, variant: "default" });
       setCurrentInterest('');
-    } else if (selectedInterests.length >= 5) {
+    } else if (selectedIntercents.length >= 5) {
       toast({ title: "Max Interests Reached", description: "You can add up to 5 interests.", variant: "default" });
       setCurrentInterest('');
     }
@@ -165,10 +162,10 @@ export default function SelectionLobby() {
     if (!router) {
       console.error("SelectionLobby: Router is not available in handleStartChat.");
       toast({ variant: "destructive", title: "Navigation Error", description: "Could not initiate chat. Router not available." });
-      setIsNavigating(false); 
+      setIsNavigating(false);
       return;
     }
-    setIsNavigating(true); 
+    setIsNavigating(true);
     const interestsString = selectedInterests.join(',');
     const params = new URLSearchParams();
     if (interestsString) {
@@ -181,7 +178,7 @@ export default function SelectionLobby() {
     } else {
         path = `/chat${queryString ? `?${queryString}` : ''}`;
     }
-    
+
     // router.push returns a Promise
     const navigationPromise = router.push(path);
     if (navigationPromise && typeof navigationPromise.catch === 'function') {
@@ -207,7 +204,7 @@ export default function SelectionLobby() {
 
     if (opening && cardWrapperRef.current) {
       const cardRect = cardWrapperRef.current.getBoundingClientRect();
-      
+
       // Adjust positioning for mobile
       if (isMobile) {
         setPanelPosition({
@@ -242,7 +239,7 @@ export default function SelectionLobby() {
     const updatePosition = () => {
       if (isSettingsOpen && cardWrapperRef.current) {
         const cardRect = cardWrapperRef.current.getBoundingClientRect();
-        
+
         if (isMobile) {
           setPanelPosition({
             top: cardRect.bottom + window.scrollY + 8,
@@ -329,27 +326,6 @@ export default function SelectionLobby() {
           "flex flex-col items-center w-full relative",
           isMobile ? "space-y-4" : "space-y-6"
         )}>
-          {/* Discord Link - Left side of card */}
-          <Link 
-            href="https://discord.gg/gayporn" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className={cn(
-              "absolute z-10 transition-transform hover:scale-110",
-              isMobile 
-                ? "left-2 top-1/2 transform -translate-y-1/2" 
-                : "left-0 top-1/2 transform -translate-y-1/2 -translate-x-16"
-            )}
-          >
-            <Image
-              src="/icons/discord.gif"
-              alt="discord"
-              width={isMobile ? 32 : 40}
-              height={isMobile ? 32 : 40}
-              className="transition-opacity hover:opacity-80"
-            />
-          </Link>
-
           {/* Main Card - Mobile Responsive */}
           <div ref={cardWrapperRef} className={cn(
             "relative z-10 w-full",
@@ -370,12 +346,12 @@ export default function SelectionLobby() {
                 )}>
                   Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
                 </CardDescription>
-                
+
                 {/* Online Users Indicator - Mobile Positioned */}
                 <div className={cn(
                   "flex items-center text-xs",
-                  isMobile 
-                    ? "justify-center mt-2" 
+                  isMobile
+                    ? "justify-center mt-2"
                     : "absolute top-3 right-3"
                 )}>
                   <img
@@ -395,7 +371,7 @@ export default function SelectionLobby() {
                   <span>Users Online!</span>
                 </div>
               </CardHeader>
-              
+
               <CardContent className={cn(
                 "space-y-4",
                 isMobile && "px-4"
@@ -405,21 +381,21 @@ export default function SelectionLobby() {
                     "flex justify-between items-center mb-2",
                     isMobile && "flex-col space-y-2"
                   )}>
-                    <Label 
-                      htmlFor="interests-input-field" 
+                    <Label
+                      htmlFor="interests-input-field"
                       className={cn(
                         isMobile ? "text-sm font-medium" : ""
                       )}
                     >
                       Your Interests
                     </Label>
-                    
+
                     {/* Settings Button - Mobile Positioned */}
                     <Button
                       className={cn(
                         "flex items-center justify-center relative z-30",
-                        isMobile 
-                          ? "w-8 h-8 p-0 min-w-0" 
+                        isMobile
+                          ? "w-8 h-8 p-0 min-w-0"
                           : "p-0 w-[20px] h-[20px] min-w-0"
                       )}
                       aria-label="Settings"
@@ -439,7 +415,7 @@ export default function SelectionLobby() {
                       />
                     </Button>
                   </div>
-                  
+
                   {/* Interests Input - Mobile Optimized */}
                   <div
                     className={cn(
@@ -482,7 +458,7 @@ export default function SelectionLobby() {
                       autoCapitalize="none"
                     />
                   </div>
-                  
+
                   <p className={cn(
                     "text-gray-500 dark:text-gray-400",
                     isMobile ? "text-xs leading-relaxed" : "text-xs"
@@ -491,18 +467,18 @@ export default function SelectionLobby() {
                   </p>
                 </div>
               </CardContent>
-              
+
               {/* Action Buttons - Mobile Optimized */}
               <CardFooter className={cn(
                 "flex space-x-4",
                 isMobile ? "flex-col space-x-0 space-y-3 px-4 pb-6" : "justify-between"
               )}>
-                <Button 
+                <Button
                   className={cn(
                     "accent transition-all duration-200",
                     isMobile ? "w-full h-12 text-base" : "flex-1"
-                  )} 
-                  onClick={() => handleStartChat('text')} 
+                  )}
+                  onClick={() => handleStartChat('text')}
                   disabled={isNavigating}
                 >
                   {isNavigating ? (
@@ -514,13 +490,13 @@ export default function SelectionLobby() {
                     <span className="animate-rainbow-text">Start Text Chat</span>
                   )}
                 </Button>
-                
-                <Button 
+
+                <Button
                   className={cn(
                     "accent transition-all duration-200",
                     isMobile ? "w-full h-12 text-base" : "flex-1"
-                  )} 
-                  onClick={() => handleStartChat('video')} 
+                  )}
+                  onClick={() => handleStartChat('video')}
                   disabled={isNavigating}
                 >
                   {isNavigating ? (
@@ -536,26 +512,43 @@ export default function SelectionLobby() {
             </Card>
           </div>
 
-          {/* Donate Link - Right side of card */}
-          <Link 
-            href="https://paypal.me/ekansh32" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className={cn(
-              "absolute z-10 transition-transform hover:scale-110",
-              isMobile 
-                ? "right-2 top-1/2 transform -translate-y-1/2" 
-                : "right-0 top-1/2 transform -translate-y-1/2 translate-x-16"
-            )}
-          >
-            <Image
-              src="/icons/donate.png"
-              alt="donate"
-              width={isMobile ? 32 : 40}
-              height={isMobile ? 32 : 40}
-              className="transition-opacity hover:opacity-80"
-            />
-          </Link>
+          {/* New Container for Discord and Donate Links below the card */}
+          <div className={cn(
+            "flex w-full",
+            isMobile ? "flex-col space-y-4 items-center mt-4" : "justify-between max-w-md mt-4" // Adjust max-width to match card
+          )}>
+            {/* Discord Link */}
+            <Link
+              href="https://discord.gg/gayporn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-transform hover:scale-110"
+            >
+              <Image
+                src="/icons/discord.gif"
+                alt="discord"
+                width={isMobile ? 32 : 40}
+                height={isMobile ? 32 : 40}
+                className="transition-opacity hover:opacity-80"
+              />
+            </Link>
+
+            {/* Donate Link */}
+            <Link
+              href="https://paypal.me/ekansh32"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-transform hover:scale-110"
+            >
+              <Image
+                src="/icons/donate.png"
+                alt="donate"
+                width={isMobile ? 32 : 40}
+                height={isMobile ? 32 : 40}
+                className="transition-opacity hover:opacity-80"
+              />
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -593,7 +586,7 @@ export default function SelectionLobby() {
                 </Button>
               </div>
             )}
-            
+
             <menu role="tablist" className={cn(currentTheme === 'theme-98' ? 'mb-0.5' : 'mb-2 border-b border-gray-300 dark:border-gray-600')}>
               <li role="tab" aria-selected="true"
                   className={cn(
@@ -605,7 +598,7 @@ export default function SelectionLobby() {
                 <a>Cursors</a>
               </li>
             </menu>
-            
+
             <div
               className={cn(
                 currentTheme === 'theme-98' ? 'sunken-panel' : '',
@@ -615,17 +608,17 @@ export default function SelectionLobby() {
               style={{ marginTop: currentTheme === 'theme-98' ? '1px' : '' }}
             >
               <div className={cn(currentTheme === 'theme-7' ? 'p-2' : 'p-1')}>
-                <Button 
-                  onClick={handleDefaultCursor} 
+                <Button
+                  onClick={handleDefaultCursor}
                   className={cn(
                     "w-full mb-2",
                     isMobile ? "text-xs h-8" : "text-xs"
-                  )} 
+                  )}
                   disabled={isNavigating}
                 >
                   Default Cursor
                 </Button>
-                
+
                 {cursorsLoading ? (
                   <p className="text-center text-xs">Loading cursors...</p>
                 ) : settingsError ? (
@@ -633,8 +626,8 @@ export default function SelectionLobby() {
                 ) : cursorImages.length > 0 ? (
                   <div className={cn(
                     "overflow-y-auto grid gap-2 p-1",
-                    isMobile 
-                      ? "h-32 grid-cols-3" 
+                    isMobile
+                      ? "h-32 grid-cols-3"
                       : "h-48 grid-cols-4"
                   )}>
                     {cursorImages.map((url) => (
