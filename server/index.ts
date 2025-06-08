@@ -731,6 +731,7 @@ server.listen(PORT, () => {
   if (!supabase) {
     console.warn('[SERVER_START] Running without Supabase integration - profiles will not be loaded');
   }
+  
 });
 
 export {};
