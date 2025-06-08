@@ -195,6 +195,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const previewRef = useRef<HTMLDivElement>(null);
+  const typographyPopupRef = useRef<HTMLDivElement>(null);
   const GRID_SIZE = 10; // Grid snap size in pixels
 
   useEffect(() => {
@@ -221,7 +222,11 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       }
       
       setContextMenu(null);
-      setTypographyPopup(null);
+      
+      // Close typography popup if clicking outside
+      if (typographyPopupRef.current && !typographyPopupRef.current.contains(target)) {
+        setTypographyPopup(null);
+      }
     };
 
     if (contextMenu || typographyPopup) {
@@ -573,12 +578,18 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     }
   };
 
-  // Easy mode event handlers
+  // FIXED: Easy mode event handlers with proper mouse coordinate handling
   const handlePreviewMouseDown = (e: React.MouseEvent, element: string) => {
     if (cssMode !== 'easy') return;
     
     e.preventDefault();
     e.stopPropagation();
+    
+    // Get preview container bounds for proper coordinate calculation
+    const previewContainer = previewRef.current;
+    if (!previewContainer) return;
+    
+    const containerRect = previewContainer.getBoundingClientRect();
     
     // Check if clicking on resize handle
     const target = e.target as HTMLElement;
@@ -614,6 +625,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     });
   };
 
+  // FIXED: Mouse move handler with proper coordinate calculations
   const handlePreviewMouseMove = (e: React.MouseEvent) => {
     if (cssMode !== 'easy') return;
 
@@ -633,28 +645,28 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       // Handle different resize modes
       if (resizeHandle.includes('e')) {
         if (newWidth > 0) {
-          newWidth = Math.max(20, dragStart.elementWidth + deltaX);
+          newWidth = Math.max(20, snapToGrid(dragStart.elementWidth + deltaX));
         } else {
           scaleChange += deltaX / 100;
         }
       }
       if (resizeHandle.includes('w')) {
         if (newWidth > 0) {
-          newWidth = Math.max(20, dragStart.elementWidth - deltaX);
+          newWidth = Math.max(20, snapToGrid(dragStart.elementWidth - deltaX));
         } else {
           scaleChange -= deltaX / 100;
         }
       }
       if (resizeHandle.includes('s')) {
         if (newHeight > 0) {
-          newHeight = Math.max(20, dragStart.elementHeight + deltaY);
+          newHeight = Math.max(20, snapToGrid(dragStart.elementHeight + deltaY));
         } else {
           scaleChange += deltaY / 100;
         }
       }
       if (resizeHandle.includes('n')) {
         if (newHeight > 0) {
-          newHeight = Math.max(20, dragStart.elementHeight - deltaY);
+          newHeight = Math.max(20, snapToGrid(dragStart.elementHeight - deltaY));
         } else {
           scaleChange -= deltaY / 100;
         }
@@ -692,10 +704,11 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         
         elementsToUpdate.forEach(element => {
           if (element && newElements[element]) {
+            const currentElement = newElements[element];
             newElements[element] = {
-              ...newElements[element],
-              x: dragStart.elementX + deltaX,
-              y: dragStart.elementY + deltaY,
+              ...currentElement,
+              x: snapToGrid(dragStart.elementX + deltaX),
+              y: snapToGrid(dragStart.elementY + deltaY),
             };
           }
         });
@@ -714,19 +727,25 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     setResizeHandle(null);
   };
 
+  // FIXED: Context menu with proper positioning
   const handlePreviewContextMenu = (e: React.MouseEvent, element: string) => {
     if (cssMode !== 'easy') return;
     
     e.preventDefault();
     e.stopPropagation();
     
+    // Position context menu relative to viewport
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 150);
+    
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       element
     });
   };
 
+  // FIXED: Typography popup with proper positioning and Windows 98 theme
   const handleTextElementRightClick = (e: React.MouseEvent, element: string) => {
     if (cssMode !== 'easy') return;
     
@@ -737,9 +756,14 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     const textElements = ['profile-display-name', 'profile-username', 'profile-bio', 'profile-pronouns'];
     if (textElements.includes(element)) {
       const currentElement = easyCustomization.elements[element];
+      
+      // Position popup near the element but ensure it stays in viewport
+      const x = Math.min(e.clientX + 10, window.innerWidth - 300);
+      const y = Math.min(e.clientY + 10, window.innerHeight - 400);
+      
       setTypographyPopup({
-        x: e.clientX,
-        y: e.clientY,
+        x,
+        y,
         element,
         options: {
           textAlign: 'left',
@@ -1849,6 +1873,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                 )}>
                   <div className="flex justify-center">
                     <EnhancedProfilePreview 
+                      ref={previewRef}
                       customCSS={customCSS}
                       bio={bio}
                       displayName={displayName}
@@ -1863,6 +1888,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       badges={badges}
                       currentUser={currentUser}
                       cssMode={cssMode}
+                      positionMode={positionMode}
                       easyCustomization={easyCustomization}
                       selectedElements={selectedElements}
                       onElementMouseDown={handlePreviewMouseDown}
@@ -1953,27 +1979,49 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           </div>
         )}
 
-        {/* Typography Popup */}
+        {/* FIXED: Typography Popup with Windows 98 theme and proper positioning */}
         {typographyPopup && cssMode === 'easy' && (
           <div
+            ref={typographyPopupRef}
             className={cn(
-              "typography-popup fixed border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] p-3 w-64",
+              "typography-popup fixed border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] w-72",
               isTheme98 ? "window" : "bg-white dark:bg-gray-800"
             )}
             style={{ 
-              left: Math.max(10, Math.min(typographyPopup.x, window.innerWidth - 280)), 
-              top: Math.max(10, Math.min(typographyPopup.y, window.innerHeight - 400))
+              left: typographyPopup.x, 
+              top: typographyPopup.y
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {isTheme98 && (
               <div className="title-bar mb-2">
                 <div className="title-bar-text">Text Effects</div>
+                <div className="title-bar-controls">
+                  <Button
+                    onClick={() => setTypographyPopup(null)}
+                    className="title-bar-control"
+                    size="sm"
+                  >
+                    ×
+                  </Button>
+                </div>
               </div>
             )}
             
-            <div className="window-body">
-              {!isTheme98 && <h4 className="font-medium mb-3 text-sm">Text Effects</h4>}
+            <div className={cn("p-3", isTheme98 && "window-body")}>
+              {!isTheme98 && (
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-sm">Text Effects</h4>
+                  <Button
+                    onClick={() => setTypographyPopup(null)}
+                    variant="outline"
+                    size="sm"
+                    className="w-6 h-6 p-0"
+                  >
+                    ×
+                  </Button>
+                </div>
+              )}
               
               {/* Font Selection */}
               <div className="mb-3">
@@ -2022,7 +2070,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
               <div className="mb-3">
                 <label className="block text-xs font-medium mb-1">Alignment</label>
                 <div className="flex space-x-1">
-                  {['left', 'center', 'right'].map((align) => (
+                  {(['left', 'center', 'right'] as const).map((align) => (
                     <button
                       key={align}
                       className={cn(
@@ -2034,7 +2082,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       onClick={() => {
                         setTypographyPopup(prev => prev ? {
                           ...prev,
-                          options: { ...prev.options, textAlign: align as 'left' | 'center' | 'right' }
+                          options: { ...prev.options, textAlign: align }
                         } : null);
                       }}
                     >
@@ -2077,23 +2125,12 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                 </div>
               </div>
 
-              {/* Text Color */}
+              {/* FIXED: Text Color with proper positioning */}
               <div className="mb-3">
                 <label className="block text-xs font-medium mb-1">Text Color</label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
-                    value={typographyPopup.options.textColor}
-                    onChange={(e) => {
-                      setTypographyPopup(prev => prev ? {
-                        ...prev,
-                        options: { ...prev.options, textColor: e.target.value }
-                      } : null);
-                    }}
-                    className="w-8 h-8 border rounded cursor-pointer"
-                  />
-                  <input
-                    type="text"
                     value={typographyPopup.options.textColor}
                     onChange={(e) => {
                       setTypographyPopup(prev => prev ? {
@@ -2155,527 +2192,4 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       </div>
     </div>
   );
-};
-
-interface EnhancedProfilePreviewProps {
-  customCSS: string;
-  bio: string;
-  displayName: string;
-  username: string;
-  pronouns: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
-  displayNameColor: string;
-  displayNameAnimation: string;
-  rainbowSpeed: number;
-  avatarPreview: string | null;
-  bannerPreview: string | null;
-  badges: Badge[];
-  currentUser: any;
-  cssMode: 'custom' | 'easy';
-  easyCustomization: EasyCustomization;
-  selectedElements: string[];
-  onElementMouseDown?: (e: React.MouseEvent, element: string) => void;
-  onElementContextMenu?: (e: React.MouseEvent, element: string) => void;
-  onMouseMove?: (e: React.MouseEvent) => void;
-  onMouseUp?: () => void;
-}
-
-const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({ 
-  customCSS, 
-  bio, 
-  displayName,
-  username,
-  pronouns,
-  status,
-  displayNameColor,
-  displayNameAnimation,
-  rainbowSpeed,
-  avatarPreview,
-  bannerPreview,
-  badges,
-  currentUser,
-  cssMode,
-  easyCustomization,
-  selectedElements,
-  onElementMouseDown,
-  onElementContextMenu,
-  onMouseMove,
-  onMouseUp
-}) => {
-  const defaultCSS = `
-    .profile-card-container {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 16px;
-      padding: 0;
-      color: white;
-      font-family: Arial, sans-serif;
-      width: 320px;
-      min-height: 480px;
-      position: relative;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
-      user-select: none;
-    }
-    
-    .profile-banner {
-      width: 100%;
-      height: 120px;
-      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-      position: relative;
-      overflow: hidden;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-content {
-      padding: 24px;
-      position: relative;
-      margin-top: -50px;
-      z-index: 2;
-    }
-    
-    .profile-avatar {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      border: 4px solid white;
-      object-fit: cover;
-      background: #ffffff;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-status {
-      position: absolute;
-      bottom: 4px;
-      right: 4px;
-      width: 20px;
-      height: 20px;
-      border: 3px solid white;
-      border-radius: 50%;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-display-name {
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-username {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-bottom: 8px;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-pronouns {
-      font-size: 12px;
-      opacity: 0.8;
-      margin-bottom: 16px;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 6px;
-      border-radius: 8px;
-      display: inline-block;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-bio {
-      font-size: 13px;
-      line-height: 1.5;
-      opacity: 0.95;
-      margin-top: 16px;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 8px;
-      border-radius: 6px;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-    
-    .profile-divider {
-      height: 1px;
-      background: rgba(255, 255, 255, 0.3);
-      margin: 15px 0;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-
-    .profile-badges {
-      position: absolute;
-      top: 140px;
-      right: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      z-index: 3;
-      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
-    }
-
-    .profile-badge {
-      width: 24px;
-      height: 24px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-      padding: 2px;
-      backdrop-filter: blur(5px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .profile-badge img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 2px;
-    }
-
-    /* Display name animations */
-    .display-name-rainbow {
-      background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
-      background-size: 400% 400%;
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: rainbow ${rainbowSpeed}s ease-in-out infinite;
-    }
-
-    @keyframes rainbow {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    .display-name-gradient {
-      background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
-      background-size: 300% 300%;
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: gradientShift 4s ease-in-out infinite;
-    }
-
-    @keyframes gradientShift {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-    }
-
-    .display-name-pulse {
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.8; transform: scale(1.05); }
-    }
-
-    .display-name-glow {
-      text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
-      animation: glow 2s ease-in-out infinite alternate;
-    }
-
-    @keyframes glow {
-      from { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
-      to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
-    }
-
-    ${cssMode === 'easy' ? `
-    .profile-card-container * {
-      transition: transform 0.1s ease;
-    }
-    
-    .draggable-element {
-      position: relative;
-    }
-    
-    .draggable-element:hover {
-      outline: 2px dashed rgba(59, 130, 246, 0.5);
-      outline-offset: 2px;
-    }
-    
-    .selected-element {
-      outline: 2px solid rgba(59, 130, 246, 0.8) !important;
-      outline-offset: 2px;
-    }
-    
-    .resize-handle {
-      position: absolute;
-      background: rgba(59, 130, 246, 0.8);
-      border: 1px solid white;
-      width: 8px;
-      height: 8px;
-      border-radius: 2px;
-      z-index: 10;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    
-    .draggable-element:hover .resize-handle,
-    .selected-element .resize-handle {
-      opacity: 1;
-    }
-    
-    .resize-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
-    .resize-handle.ne { top: -4px; right: -4px; cursor: ne-resize; }
-    .resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
-    .resize-handle.se { bottom: -4px; right: -4px; cursor: se-resize; }
-    .resize-handle.n { top: -4px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
-    .resize-handle.s { bottom: -4px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
-    .resize-handle.e { top: 50%; right: -4px; transform: translateY(-50%); cursor: e-resize; }
-    .resize-handle.w { top: 50%; left: -4px; transform: translateY(-50%); cursor: w-resize; }
-    ` : ''}
-  `;
-
-  const sanitizedCSS = sanitizeCSS(customCSS);
-  const finalCSS = defaultCSS + '\n' + sanitizedCSS;
-
-  const getDisplayNameClass = () => {
-    switch (displayNameAnimation) {
-      case 'rainbow':
-        return 'display-name-rainbow';
-      case 'gradient':
-        return 'display-name-gradient';
-      case 'pulse':
-        return 'display-name-pulse';
-      case 'glow':
-        return 'display-name-glow';
-      default:
-        return '';
-    }
-  };
-
-  const getStatusIcon = () => {
-    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
-    return statusOption ? statusOption.icon : '/icons/offline.png';
-  };
-
-  const getElementStyle = (elementName: string) => {
-    const element = easyCustomization.elements[elementName];
-    if (!element) return {};
-    
-    let transform = `translate(${element.x}px, ${element.y}px) scale(${element.scale})`;
-    
-    return {
-      transform,
-      display: element.visible === false ? 'none' : undefined,
-      color: element.color || undefined,
-      width: element.width ? `${element.width}px` : undefined,
-      height: element.height ? `${element.height}px` : undefined
-    };
-  };
-
-  const isElementSelected = (element: string) => {
-    return selectedElements.includes(element);
-  };
-
-  const renderResizeHandles = (element: string) => {
-    if (cssMode !== 'easy' || !isElementSelected(element)) return null;
-    
-    return (
-      <>
-        <div className="resize-handle nw" data-handle="nw" />
-        <div className="resize-handle ne" data-handle="ne" />
-        <div className="resize-handle sw" data-handle="sw" />
-        <div className="resize-handle se" data-handle="se" />
-        <div className="resize-handle n" data-handle="n" />
-        <div className="resize-handle s" data-handle="s" />
-        <div className="resize-handle e" data-handle="e" />
-        <div className="resize-handle w" data-handle="w" />
-      </>
-    );
-  };
-
-  return (
-    <div
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      className={cssMode === 'easy' ? 'select-none' : ''}
-    >
-      <style dangerouslySetInnerHTML={{ __html: finalCSS }} />
-      <div className="profile-card-container">
-        <div 
-          className={cn(
-            "profile-banner",
-            cssMode === 'easy' && "draggable-element",
-            isElementSelected('profile-banner') && "selected-element"
-          )}
-          style={getElementStyle('profile-banner')}
-          onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-banner') : undefined}
-          onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-banner') : undefined}
-        >
-          {bannerPreview ? (
-            <img src={bannerPreview} alt="Profile Banner" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500" />
-          )}
-          {renderResizeHandles('profile-banner')}
-        </div>
-        
-        {/* Badges positioned next to avatar */}
-        {badges.length > 0 && (
-          <div 
-            className={cn(
-              "profile-badges",
-              cssMode === 'easy' && "draggable-element",
-              isElementSelected('profile-badges') && "selected-element"
-            )}
-            style={getElementStyle('profile-badges')}
-            onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-badges') : undefined}
-            onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-badges') : undefined}
-          >
-            {badges.map((badge) => (
-              <div key={badge.id} className="profile-badge">
-                <img
-                  src={badge.url}
-                  alt={badge.name || 'Badge'}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA2VjE4TTYgMTJIMTgiIHN0cm9rZT0iIzk0QTNCOCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+';
-                  }}
-                />
-              </div>
-            ))}
-            {renderResizeHandles('profile-badges')}
-          </div>
-        )}
-        
-        <div className="profile-content">
-          <div className="relative inline-block">
-            {avatarPreview ? (
-              <div className="relative">
-                <img 
-                  src={avatarPreview} 
-                  alt="Profile Avatar" 
-                  className={cn(
-                    "profile-avatar",
-                    cssMode === 'easy' && "draggable-element",
-                    isElementSelected('profile-avatar') && "selected-element"
-                  )}
-                  style={getElementStyle('profile-avatar')}
-                  onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-avatar') : undefined}
-                  onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-avatar') : undefined}
-                />
-                {renderResizeHandles('profile-avatar')}
-              </div>
-            ) : (
-              <div 
-                className={cn(
-                  "profile-avatar bg-gray-300 flex items-center justify-center",
-                  cssMode === 'easy' && "draggable-element",
-                  isElementSelected('profile-avatar') && "selected-element"
-                )}
-                style={getElementStyle('profile-avatar')}
-                onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-avatar') : undefined}
-                onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-avatar') : undefined}
-              >
-                <svg className="w-10 h-10 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                {renderResizeHandles('profile-avatar')}
-              </div>
-            )}
-            
-            <div className="relative">
-              <Image
-                src={getStatusIcon()}
-                alt={status}
-                width={20}
-                height={20}
-                className={cn(
-                  "profile-status",
-                  cssMode === 'easy' && "draggable-element",
-                  isElementSelected('profile-status') && "selected-element"
-                )}
-                style={getElementStyle('profile-status')}
-                onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-status') : undefined}
-                onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-status') : undefined}
-              />
-              {renderResizeHandles('profile-status')}
-            </div>
-          </div>
-          
-          <div 
-            className={cn(
-              "profile-display-name", 
-              getDisplayNameClass(),
-              cssMode === 'easy' && "draggable-element",
-              isElementSelected('profile-display-name') && "selected-element"
-            )}
-            style={{ 
-              ...getElementStyle('profile-display-name'),
-              color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient' 
-                ? undefined 
-                : displayNameColor,
-              animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
-            }}
-            onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-display-name') : undefined}
-            onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-display-name') : undefined}
-          >
-            {displayName || 'Display Name'}
-            {renderResizeHandles('profile-display-name')}
-          </div>
-          
-          <div 
-            className={cn(
-              "profile-username",
-              cssMode === 'easy' && "draggable-element",
-              isElementSelected('profile-username') && "selected-element"
-            )}
-            style={getElementStyle('profile-username')}
-            onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-username') : undefined}
-            onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-username') : undefined}
-          >
-            @{username || currentUser?.email?.split('@')[0] || 'username'}
-            {renderResizeHandles('profile-username')}
-          </div>
-          
-          {pronouns && (
-            <div 
-              className={cn(
-                "profile-pronouns",
-                cssMode === 'easy' && "draggable-element",
-                isElementSelected('profile-pronouns') && "selected-element"
-              )}
-              style={getElementStyle('profile-pronouns')}
-              onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-pronouns') : undefined}
-              onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-pronouns') : undefined}
-            >
-              {pronouns}
-              {renderResizeHandles('profile-pronouns')}
-            </div>
-          )}
-          
-          {bio && (
-            <>
-              <div 
-                className={cn(
-                  "profile-divider",
-                  cssMode === 'easy' && "draggable-element",
-                  isElementSelected('profile-divider') && "selected-element"
-                )}
-                style={getElementStyle('profile-divider')}
-                onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-divider') : undefined}
-                onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-divider') : undefined}
-              >
-                {renderResizeHandles('profile-divider')}
-              </div>
-              <div 
-                className={cn(
-                  "profile-bio",
-                  cssMode === 'easy' && "draggable-element",
-                  isElementSelected('profile-bio') && "selected-element"
-                )}
-                style={getElementStyle('profile-bio')}
-                onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-bio') : undefined}
-                onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-bio') : undefined}
-              >
-                {bio}
-                {renderResizeHandles('profile-bio')}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+}; 

@@ -158,12 +158,13 @@ function logQueueState(chatType: 'text' | 'video', context: string) {
       username: u.username || 'no-username',
       status: u.status || 'offline',
       displayNameColor: u.displayNameColor || '#ffffff',
-      displayNameAnimation: u.displayNameAnimation || 'none'
+      displayNameAnimation: u.displayNameAnimation || 'none',
+      badges: u.badges?.length || 0
     }))
   );
 }
 
-// Enhanced helper function to fetch user profile from Supabase with complete styling info
+// FIXED: Enhanced helper function to fetch user profile with complete styling info and badges
 async function fetchUserProfile(authId: string) {
   if (!supabase || !authId) return null;
   
@@ -191,7 +192,25 @@ async function fetchUserProfile(authId: string) {
       }
       return null;
     }
-    return data;
+    
+    // FIXED: Parse badges properly
+    let parsedBadges = [];
+    if (data.badges) {
+      try {
+        parsedBadges = JSON.parse(data.badges);
+        if (!Array.isArray(parsedBadges)) {
+          parsedBadges = [];
+        }
+      } catch (e) {
+        console.warn(`[BADGE_PARSE_ERROR] Failed to parse badges for ${authId}:`, e);
+        parsedBadges = [];
+      }
+    }
+    
+    return {
+      ...data,
+      badges: parsedBadges
+    };
   } catch (err) {
     console.error(`[SUPABASE_EXCEPTION] Exception fetching profile for ${authId}:`, err);
     return null;
@@ -384,7 +403,7 @@ io.on('connection', (socket: Socket) => {
         authId: authId || null 
       };
       
-      // Fetch enhanced profile if authenticated
+      // FIXED: Fetch enhanced profile if authenticated
       if (authId && supabase) {
         console.log(`[PROFILE_FETCH_ATTEMPT] Fetching enhanced profile for authId: ${authId}`);
         const profile = await fetchUserProfile(authId);
@@ -398,7 +417,7 @@ io.on('connection', (socket: Socket) => {
           currentUser.displayNameColor = profile.display_name_color;
           currentUser.displayNameAnimation = profile.display_name_animation;
           currentUser.rainbowSpeed = profile.rainbow_speed;
-          currentUser.badges = profile.badges ? JSON.parse(profile.badges) : [];
+          currentUser.badges = profile.badges || []; // FIXED: Include badges
           console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
             username: profile.username || 'null',
             displayName: profile.display_name || 'null',
@@ -416,6 +435,7 @@ io.on('connection', (socket: Socket) => {
           currentUser.displayNameColor = '#ffffff';
           currentUser.displayNameAnimation = 'none';
           currentUser.rainbowSpeed = 3;
+          currentUser.badges = [];
         }
       } else {
         console.log(`[PROFILE_FETCH_SKIP] Skipping profile fetch for anonymous user ${socket.id}`);
@@ -423,6 +443,7 @@ io.on('connection', (socket: Socket) => {
         currentUser.displayNameColor = '#ffffff';
         currentUser.displayNameAnimation = 'none';
         currentUser.rainbowSpeed = 3;
+        currentUser.badges = [];
       }
 
       // Log current queue state before attempting match
@@ -447,7 +468,7 @@ io.on('connection', (socket: Socket) => {
 
           console.log(`[MATCH_SUCCESS_USERNAMES] Current user display name: "${currentUserDisplayName}", Partner display name: "${partnerDisplayName}"`);
 
-          // Enhanced partner found event with complete profile data including styling
+          // FIXED: Enhanced partner found event with complete profile data including styling and badges
           socket.emit('partnerFound', {
             partnerId: matchedPartner.id,
             roomId,
@@ -462,7 +483,7 @@ io.on('connection', (socket: Socket) => {
             partnerDisplayNameAnimation: matchedPartner.displayNameAnimation || 'none',
             partnerRainbowSpeed: matchedPartner.rainbowSpeed || 3,
             partnerAuthId: matchedPartner.authId,
-            partnerBadges: matchedPartner.badges || [],
+            partnerBadges: matchedPartner.badges || [], // FIXED: Include badges
           });
 
           partnerSocket.emit('partnerFound', {
@@ -479,7 +500,7 @@ io.on('connection', (socket: Socket) => {
             partnerDisplayNameAnimation: currentUser.displayNameAnimation || 'none',
             partnerRainbowSpeed: currentUser.rainbowSpeed || 3,
             partnerAuthId: currentUser.authId,
-            partnerBadges: currentUser.badges || [],
+            partnerBadges: currentUser.badges || [], // FIXED: Include badges
           });
         } else {
           console.warn(`[MATCH_FAIL_SOCKET_ISSUE] Partner ${matchedPartner.id} socket not found/disconnected. Re-queuing current user ${currentUser.id} and potential partner ${matchedPartner.id}.`);
@@ -527,7 +548,7 @@ io.on('connection', (socket: Socket) => {
           senderUsernameToSend = username;
           console.log(`[MESSAGE_AUTHENTICATED_USER] Using authenticated username: ${username}`);
           
-          // Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
+          // FIXED: Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
           const profile = await fetchUserProfile(authId);
           if (profile) {
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
@@ -596,18 +617,19 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on('typing_start', (payload: unknown) => {
-    try {
-      const { roomId } = RoomIdPayloadSchema.parse(payload);
-      const roomDetails = rooms[roomId];
-      if (roomDetails && roomDetails.users.includes(socket.id)) {
-        const partnerId = roomDetails.users.find(id => id !== socket.id);
-        if (partnerId) io.to(partnerId).emit('partner_typing_start');
-      }
-    } catch (error: any) {
-      console.warn(`[VALIDATION_FAIL_TYPING_START] Invalid typing_start payload from ${socket.id}: ${error.errors ? JSON.stringify(error.errors) : error.message}`);
+socket.on('typing_start', (payload: unknown) => {
+  try {
+    const { roomId } = RoomIdPayloadSchema.parse(payload);
+    const roomDetails = rooms[roomId];
+    if (roomDetails && roomDetails.users.includes(socket.id)) {
+      const partnerId = roomDetails.users.find(id => id !== socket.id);
+      if (partnerId) io.to(partnerId).emit('partner_typing_start');
     }
-  });
+  } catch (error: any) {
+    console.warn(`[TYPING_START_ERROR] Invalid typing_start payload from ${socket.id}: ${error.message}`);
+  }
+});
+
 
   socket.on('typing_stop', (payload: unknown) => {
     try {

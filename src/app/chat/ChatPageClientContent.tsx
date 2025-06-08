@@ -84,6 +84,7 @@ interface PartnerInfo {
   displayNameAnimation?: string;
   rainbowSpeed?: number;
   authId?: string;
+  badges?: any[];
 }
 
 // --- Helper Functions ---
@@ -883,7 +884,8 @@ const ChatPageClientContent: React.FC = () => {
       partnerDisplayNameColor,
       partnerDisplayNameAnimation,
       partnerRainbowSpeed,
-      partnerAuthId 
+      partnerAuthId,
+      partnerBadges
     }: { 
       partnerId: string, 
       roomId: string, 
@@ -897,19 +899,20 @@ const ChatPageClientContent: React.FC = () => {
       partnerDisplayNameColor?: string,
       partnerDisplayNameAnimation?: string,
       partnerRainbowSpeed?: number,
-      partnerAuthId?: string 
+      partnerAuthId?: string,
+      partnerBadges?: any[]
     }) => {
       console.log(`${LOG_PREFIX}: %cSOCKET EVENT: partnerFound`, 'color: green; font-weight: bold;', { 
         partnerId, rId, partnerUsername, pInterests, partnerDisplayName, partnerAvatarUrl, 
         partnerBannerUrl, partnerPronouns, partnerStatus, partnerDisplayNameColor, 
-        partnerDisplayNameAnimation, partnerRainbowSpeed, partnerAuthId 
+        partnerDisplayNameAnimation, partnerRainbowSpeed, partnerAuthId, partnerBadges 
       });
       playSound("Match.wav");
       setMessages([]);
       setRoomId(rId); 
       setPartnerInterests(pInterests || []);
       
-      // Set enhanced partner info
+      // Set enhanced partner info with badges
       setPartnerInfo({
         id: partnerId,
         username: partnerUsername || 'Stranger',
@@ -921,7 +924,8 @@ const ChatPageClientContent: React.FC = () => {
         displayNameColor: partnerDisplayNameColor || '#ff0000',
         displayNameAnimation: partnerDisplayNameAnimation || 'none',
         rainbowSpeed: partnerRainbowSpeed || 3,
-        authId: partnerAuthId
+        authId: partnerAuthId,
+        badges: partnerBadges || []
       });
       
       setIsFindingPartner(false);
