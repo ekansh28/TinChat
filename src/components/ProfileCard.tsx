@@ -22,6 +22,13 @@ interface ProfileData {
   display_name_color?: string;
   display_name_animation?: string;
   profile_card_css?: string;
+  badges?: string;
+}
+
+interface Badge {
+  id: string;
+  url: string;
+  name?: string;
 }
 
 interface ProfileCardProps {
@@ -119,6 +126,42 @@ const DEFAULT_PROFILE_CSS = `
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 3;
+}
+
+.profile-badges {
+  position: absolute;
+  top: 140px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 3;
+}
+
+.profile-badge {
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 2px;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.profile-badge:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.profile-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
 .profile-display-name {
@@ -243,6 +286,11 @@ const DEFAULT_PROFILE_CSS = `
   border: 2px outset #c0c0c0;
 }
 
+.theme-98 .profile-badge {
+  background: #dfdfdf;
+  border: 1px inset #c0c0c0;
+}
+
 .theme-98 .profile-pronouns {
   background: #dfdfdf;
   border: 1px inset #c0c0c0;
@@ -292,6 +340,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   clickPosition
 }) => {
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [badges, setBadges] = useState<Badge[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -389,7 +438,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
     try {
       console.log('Fetching enhanced profile for userId:', userId);
       
-      // Fetch all profile data including new fields
+      // Fetch all profile data including badges
       const { data, error: fetchError } = await supabase
         .from('user_profiles')
         .select(`
@@ -403,7 +452,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
           status,
           display_name_color,
           display_name_animation,
-          profile_card_css
+          profile_card_css,
+          badges
         `)
         .eq('id', userId);
 
@@ -424,13 +474,30 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
           display_name: 'Unknown User',
           status: 'offline'
         });
+        setBadges([]);
       } else {
         console.log('Enhanced profile data fetched:', data[0]);
-        setProfileData(data[0]);
+        const profile = data[0];
+        setProfileData(profile);
+        
+        // Parse badges if they exist
+        if (profile.badges) {
+          try {
+            const parsedBadges = JSON.parse(profile.badges);
+            setBadges(Array.isArray(parsedBadges) ? parsedBadges : []);
+            console.log('Parsed badges:', parsedBadges);
+          } catch (e) {
+            console.warn('Failed to parse badges JSON:', e);
+            setBadges([]);
+          }
+        } else {
+          setBadges([]);
+        }
       }
     } catch (err) {
       console.error('Error fetching enhanced profile:', err);
       setError('Failed to load profile');
+      setBadges([]);
     } finally {
       setLoading(false);
     }
@@ -540,6 +607,24 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
                 )}
               </div>
               
+              {/* Badges */}
+              {badges.length > 0 && (
+                <div className="profile-badges">
+                  {badges.map((badge) => (
+                    <div key={badge.id} className="profile-badge" title={badge.name || 'Badge'}>
+                      <img
+                        src={badge.url}
+                        alt={badge.name || 'Badge'}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNCAxMFYxOE0xMCAxNEgxOCIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4=';
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               {/* Content */}
               <div className="profile-content">
                 <div className="profile-avatar-container">
@@ -630,6 +715,24 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
               <div className="w-full h-full" />
             )}
           </div>
+          
+          {/* Badges */}
+          {badges.length > 0 && (
+            <div className="profile-badges">
+              {badges.map((badge) => (
+                <div key={badge.id} className="profile-badge" title={badge.name || 'Badge'}>
+                  <img
+                    src={badge.url}
+                    alt={badge.name || 'Badge'}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNCAxMFYxOE0xMCAxNEgxOCIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4=';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           
           {/* Content */}
           <div className="profile-content">

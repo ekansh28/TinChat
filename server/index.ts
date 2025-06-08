@@ -98,6 +98,7 @@ interface User {
   displayNameColor?: string;
   displayNameAnimation?: string;
   rainbowSpeed?: number;
+  badges?: any[];
 }
 
 interface Room {
@@ -162,7 +163,7 @@ function logQueueState(chatType: 'text' | 'video', context: string) {
   );
 }
 
-// Helper function to fetch enhanced user profile from Supabase
+// Enhanced helper function to fetch user profile from Supabase with complete styling info
 async function fetchUserProfile(authId: string) {
   if (!supabase || !authId) return null;
   
@@ -178,7 +179,8 @@ async function fetchUserProfile(authId: string) {
         status, 
         display_name_color, 
         display_name_animation,
-        rainbow_speed
+        rainbow_speed,
+        badges
       `)
       .eq('id', authId)
       .single();
@@ -396,6 +398,7 @@ io.on('connection', (socket: Socket) => {
           currentUser.displayNameColor = profile.display_name_color;
           currentUser.displayNameAnimation = profile.display_name_animation;
           currentUser.rainbowSpeed = profile.rainbow_speed;
+          currentUser.badges = profile.badges ? JSON.parse(profile.badges) : [];
           console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
             username: profile.username || 'null',
             displayName: profile.display_name || 'null',
@@ -403,16 +406,23 @@ io.on('connection', (socket: Socket) => {
             status: profile.status || 'online',
             displayNameColor: profile.display_name_color || '#ffffff',
             displayNameAnimation: profile.display_name_animation || 'none',
-            rainbowSpeed: profile.rainbow_speed || 3
+            rainbowSpeed: profile.rainbow_speed || 3,
+            badges: currentUser.badges?.length || 0
           });
         } else {
           console.log(`[PROFILE_FETCH_NO_PROFILE] No profile found or error for ${authId}.`);
           // Set default status for new users
           currentUser.status = 'online';
+          currentUser.displayNameColor = '#ffffff';
+          currentUser.displayNameAnimation = 'none';
+          currentUser.rainbowSpeed = 3;
         }
       } else {
         console.log(`[PROFILE_FETCH_SKIP] Skipping profile fetch for anonymous user ${socket.id}`);
         currentUser.status = 'online';
+        currentUser.displayNameColor = '#ffffff';
+        currentUser.displayNameAnimation = 'none';
+        currentUser.rainbowSpeed = 3;
       }
 
       // Log current queue state before attempting match
@@ -437,7 +447,7 @@ io.on('connection', (socket: Socket) => {
 
           console.log(`[MATCH_SUCCESS_USERNAMES] Current user display name: "${currentUserDisplayName}", Partner display name: "${partnerDisplayName}"`);
 
-          // Enhanced partner found event with new profile data
+          // Enhanced partner found event with complete profile data including styling
           socket.emit('partnerFound', {
             partnerId: matchedPartner.id,
             roomId,
@@ -448,10 +458,11 @@ io.on('connection', (socket: Socket) => {
             partnerBannerUrl: matchedPartner.bannerUrl,
             partnerPronouns: matchedPartner.pronouns,
             partnerStatus: matchedPartner.status || 'online',
-            partnerDisplayNameColor: matchedPartner.displayNameColor,
-            partnerDisplayNameAnimation: matchedPartner.displayNameAnimation,
-            partnerRainbowSpeed: matchedPartner.rainbowSpeed,
+            partnerDisplayNameColor: matchedPartner.displayNameColor || '#ffffff',
+            partnerDisplayNameAnimation: matchedPartner.displayNameAnimation || 'none',
+            partnerRainbowSpeed: matchedPartner.rainbowSpeed || 3,
             partnerAuthId: matchedPartner.authId,
+            partnerBadges: matchedPartner.badges || [],
           });
 
           partnerSocket.emit('partnerFound', {
@@ -464,10 +475,11 @@ io.on('connection', (socket: Socket) => {
             partnerBannerUrl: currentUser.bannerUrl,
             partnerPronouns: currentUser.pronouns,
             partnerStatus: currentUser.status || 'online',
-            partnerDisplayNameColor: currentUser.displayNameColor,
-            partnerDisplayNameAnimation: currentUser.displayNameAnimation,
-            partnerRainbowSpeed: currentUser.rainbowSpeed,
+            partnerDisplayNameColor: currentUser.displayNameColor || '#ffffff',
+            partnerDisplayNameAnimation: currentUser.displayNameAnimation || 'none',
+            partnerRainbowSpeed: currentUser.rainbowSpeed || 3,
             partnerAuthId: currentUser.authId,
+            partnerBadges: currentUser.badges || [],
           });
         } else {
           console.warn(`[MATCH_FAIL_SOCKET_ISSUE] Partner ${matchedPartner.id} socket not found/disconnected. Re-queuing current user ${currentUser.id} and potential partner ${matchedPartner.id}.`);
@@ -515,7 +527,7 @@ io.on('connection', (socket: Socket) => {
           senderUsernameToSend = username;
           console.log(`[MESSAGE_AUTHENTICATED_USER] Using authenticated username: ${username}`);
           
-          // Fetch current profile data for display name styling
+          // Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
           const profile = await fetchUserProfile(authId);
           if (profile) {
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
@@ -531,10 +543,10 @@ io.on('connection', (socket: Socket) => {
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
             senderDisplayNameAnimation = profile.display_name_animation || 'none';
             senderRainbowSpeed = profile.rainbow_speed || 3;
-            console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling`);
+            console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}`);
           }
         } else {
-          console.log(`[MESSAGE_ANONYMOUS_USER] Anonymous user, using 'Stranger'`);
+          console.log(`[MESSAGE_ANONYMOUS_USER] Anonymous user, using 'Stranger' with default styling`);
         }
         
         const messagePayload = { 
@@ -549,7 +561,7 @@ io.on('connection', (socket: Socket) => {
         
         const partnerId = roomDetails.users.find(id => id !== socket.id);
         if (partnerId) {
-          console.log(`[MESSAGE_RELAY_DIRECT_IO_TO] Relaying message from ${socket.id} (${senderUsernameToSend}) to partner ${partnerId} in room ${roomId}.`);
+          console.log(`[MESSAGE_RELAY_DIRECT_IO_TO] Relaying message from ${socket.id} (${senderUsernameToSend}) to partner ${partnerId} in room ${roomId} with color ${senderDisplayNameColor}.`);
           io.to(partnerId).emit('receiveMessage', messagePayload);
         } else {
           console.warn(`[MESSAGE_WARN_RELAY_FAIL] No partner found in room ${roomId} for user ${socket.id}.`);

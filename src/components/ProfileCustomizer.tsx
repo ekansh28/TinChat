@@ -43,6 +43,17 @@ const POSITION_MODES = [
   { value: 'grid', label: 'Grid Snap' }
 ] as const;
 
+const FONT_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'Arial', label: 'Arial' },
+  { value: 'Georgia', label: 'Georgia' },
+  { value: 'Times New Roman', label: 'Times New Roman' },
+  { value: 'Courier New', label: 'Courier New' },
+  { value: 'Verdana', label: 'Verdana' },
+  { value: 'Trebuchet MS', label: 'Trebuchet MS' },
+  { value: 'Tahoma', label: 'Tahoma' }
+] as const;
+
 interface EasyCustomization {
   backgroundColor: string;
   backgroundGradient?: {
@@ -69,6 +80,8 @@ interface EasyCustomization {
       x: number;
       y: number;
       scale: number;
+      width?: number;
+      height?: number;
       color?: string;
       visible: boolean;
     };
@@ -78,6 +91,7 @@ interface EasyCustomization {
 interface TypographyOptions {
   textAlign: 'left' | 'center' | 'right';
   fontFamily: string;
+  fontSize: number;
   borderWidth: number;
   borderColor: string;
   bold: boolean;
@@ -86,8 +100,12 @@ interface TypographyOptions {
   textColor: string;
   lineSpacing: number;
   paragraphSpacing: number;
-  bulletList: boolean;
-  numberedList: boolean;
+}
+
+interface Badge {
+  id: string;
+  url: string;
+  name?: string;
 }
 
 export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({ 
@@ -126,7 +144,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       'profile-bio': { x: 0, y: 0, scale: 1, visible: true },
       'profile-status': { x: 0, y: 0, scale: 1, visible: true },
       'profile-banner': { x: 0, y: 0, scale: 1, visible: true },
-      'profile-divider': { x: 0, y: 0, scale: 1, visible: true }
+      'profile-divider': { x: 0, y: 0, scale: 1, visible: true },
+      'profile-badges': { x: 0, y: 0, scale: 1, visible: true }
     }
   });
 
@@ -147,6 +166,11 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [isBadgeManagerOpen, setIsBadgeManagerOpen] = useState(false);
+  const [newBadgeUrl, setNewBadgeUrl] = useState('');
+  const [newBadgeName, setNewBadgeName] = useState('');
+  
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -159,7 +183,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w' | null>(null);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0, elementX: 0, elementY: 0 });
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0, elementX: 0, elementY: 0, elementWidth: 0, elementHeight: 0 });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: string } | null>(null);
   const [typographyPopup, setTypographyPopup] = useState<{ x: number; y: number; element: string; options: TypographyOptions } | null>(null);
 
@@ -188,7 +212,14 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
 
   // Close context menu and typography popup when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Don't close if clicking on color picker or its elements
+      if (target.closest('input[type="color"]') || target.closest('.typography-popup')) {
+        return;
+      }
+      
       setContextMenu(null);
       setTypographyPopup(null);
     };
@@ -286,7 +317,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           display_name_color,
           display_name_animation,
           rainbow_speed,
-          easy_customization_data
+          easy_customization_data,
+          badges
         `)
         .eq('id', user.id);
 
@@ -309,6 +341,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         setAvatarPreview(null);
         setBannerUrl(null);
         setBannerPreview(null);
+        setBadges([]);
       } else if (data && data.length > 0) {
         const profile = data[0];
         console.log('ProfileCustomizer: Profile data loaded:', profile);
@@ -324,6 +357,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         setRainbowSpeed(profile.rainbow_speed || 3);
         setAvatarUrl(profile.avatar_url);
         setBannerUrl(profile.banner_url);
+        setBadges(profile.badges ? JSON.parse(profile.badges) : []);
         
         // Load easy customization data
         if (profile.easy_customization_data) {
@@ -335,6 +369,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           }
         }
         
+        // Set previews using direct URLs instead of Next.js Image optimization
         if (profile.avatar_url) {
           setAvatarPreview(profile.avatar_url);
         }
@@ -357,6 +392,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         setAvatarPreview(null);
         setBannerUrl(null);
         setBannerPreview(null);
+        setBadges([]);
       }
     } catch (error) {
       console.error('ProfileCustomizer: Exception loading profile:', error);
@@ -482,10 +518,23 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           display: none;
         }\n`;
       } else {
+        let transform = `translate(${props.x}px, ${props.y}px) scale(${props.scale})`;
         css += `.${element} {
-          transform: translate(${props.x}px, ${props.y}px) scale(${props.scale});
+          transform: ${transform};
           position: relative;
         }\n`;
+        
+        if (props.width) {
+          css += `.${element} {
+            width: ${props.width}px;
+          }\n`;
+        }
+        
+        if (props.height) {
+          css += `.${element} {
+            height: ${props.height}px;
+          }\n`;
+        }
         
         if (props.color) {
           css += `.${element} {
@@ -538,6 +587,16 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       setIsResizing(true);
       setResizeHandle(handle);
       setSelectedElement(element);
+      
+      const currentElement = easyCustomization.elements[element] || { x: 0, y: 0, scale: 1, width: 0, height: 0, visible: true };
+      setDragStart({ 
+        x: e.clientX, 
+        y: e.clientY,
+        elementX: currentElement.x,
+        elementY: currentElement.y,
+        elementWidth: currentElement.width || 0,
+        elementHeight: currentElement.height || 0
+      });
       return;
     }
 
@@ -549,7 +608,9 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       x: e.clientX, 
       y: e.clientY,
       elementX: currentElement.x,
-      elementY: currentElement.y
+      elementY: currentElement.y,
+      elementWidth: currentElement.width || 0,
+      elementHeight: currentElement.height || 0
     });
   };
 
@@ -562,20 +623,49 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       const element = easyCustomization.elements[selectedElement];
       if (!element) return;
 
-      // Calculate scale change based on resize handle
       const deltaX = e.clientX - dragStart.x;
       const deltaY = e.clientY - dragStart.y;
       
+      let newWidth = dragStart.elementWidth;
+      let newHeight = dragStart.elementHeight;
       let scaleChange = 0;
-      if (resizeHandle.includes('e') || resizeHandle.includes('w')) {
-        scaleChange = deltaX / 100; // Horizontal resize
-      } else if (resizeHandle.includes('n') || resizeHandle.includes('s')) {
-        scaleChange = deltaY / 100; // Vertical resize
-      } else {
-        scaleChange = (deltaX + deltaY) / 200; // Corner resize (both directions)
+      
+      // Handle different resize modes
+      if (resizeHandle.includes('e')) {
+        if (newWidth > 0) {
+          newWidth = Math.max(20, dragStart.elementWidth + deltaX);
+        } else {
+          scaleChange += deltaX / 100;
+        }
+      }
+      if (resizeHandle.includes('w')) {
+        if (newWidth > 0) {
+          newWidth = Math.max(20, dragStart.elementWidth - deltaX);
+        } else {
+          scaleChange -= deltaX / 100;
+        }
+      }
+      if (resizeHandle.includes('s')) {
+        if (newHeight > 0) {
+          newHeight = Math.max(20, dragStart.elementHeight + deltaY);
+        } else {
+          scaleChange += deltaY / 100;
+        }
+      }
+      if (resizeHandle.includes('n')) {
+        if (newHeight > 0) {
+          newHeight = Math.max(20, dragStart.elementHeight - deltaY);
+        } else {
+          scaleChange -= deltaY / 100;
+        }
       }
       
-      const newScale = Math.max(0.5, Math.min(2, element.scale + scaleChange));
+      // For corner handles, use both directions
+      if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
+        scaleChange = (deltaX + deltaY) / 200;
+      }
+      
+      const newScale = Math.max(0.3, Math.min(3, element.scale + scaleChange));
       
       setEasyCustomization(prev => ({
         ...prev,
@@ -583,7 +673,9 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           ...prev.elements,
           [selectedElement]: {
             ...prev.elements[selectedElement],
-            scale: newScale,
+            scale: newWidth > 0 || newHeight > 0 ? element.scale : newScale,
+            width: newWidth > 0 ? newWidth : undefined,
+            height: newHeight > 0 ? newHeight : undefined,
           }
         }
       }));
@@ -600,9 +692,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         
         elementsToUpdate.forEach(element => {
           if (element && newElements[element]) {
-            const originalElement = prev.elements[element];
             newElements[element] = {
-              ...originalElement,
+              ...newElements[element],
               x: dragStart.elementX + deltaX,
               y: dragStart.elementY + deltaY,
             };
@@ -645,6 +736,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     // Check if it's a text element
     const textElements = ['profile-display-name', 'profile-username', 'profile-bio', 'profile-pronouns'];
     if (textElements.includes(element)) {
+      const currentElement = easyCustomization.elements[element];
       setTypographyPopup({
         x: e.clientX,
         y: e.clientY,
@@ -652,16 +744,15 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         options: {
           textAlign: 'left',
           fontFamily: 'default',
+          fontSize: 16,
           borderWidth: 0,
           borderColor: '#000000',
           bold: false,
           italic: false,
           underline: false,
-          textColor: '#ffffff',
+          textColor: currentElement?.color || '#ffffff',
           lineSpacing: 1.5,
-          paragraphSpacing: 16,
-          bulletList: false,
-          numberedList: false
+          paragraphSpacing: 16
         }
       });
     } else {
@@ -669,16 +760,68 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     }
   };
 
-  // Banner resize handlers
-  const handleBannerResize = (direction: 'horizontal' | 'vertical', delta: number) => {
-    if (direction === 'vertical') {
-      const newHeight = Math.max(80, Math.min(300, easyCustomization.bannerHeight + delta));
-      setEasyCustomization(prev => ({
-        ...prev,
-        bannerHeight: newHeight
-      }));
+  // Badge management functions
+  const addBadge = () => {
+    if (!newBadgeUrl.trim()) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid image URL",
+        variant: "destructive"
+      });
+      return;
     }
-    // Horizontal resize would require image aspect ratio handling
+
+    // Validate URL format
+    try {
+      new URL(newBadgeUrl);
+    } catch {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid URL",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if it's an image URL
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+    const isImageUrl = imageExtensions.some(ext => 
+      newBadgeUrl.toLowerCase().includes(ext)
+    ) || newBadgeUrl.includes('image') || newBadgeUrl.includes('img');
+
+    if (!isImageUrl) {
+      toast({
+        title: "Invalid Image",
+        description: "URL must point to an image file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const newBadge: Badge = {
+      id: uuidv4(),
+      url: newBadgeUrl.trim(),
+      name: newBadgeName.trim() || `Badge ${badges.length + 1}`
+    };
+
+    setBadges(prev => [...prev, newBadge]);
+    setNewBadgeUrl('');
+    setNewBadgeName('');
+    
+    toast({
+      title: "Badge Added",
+      description: "Badge has been added to your profile",
+      variant: "default"
+    });
+  };
+
+  const removeBadge = (badgeId: string) => {
+    setBadges(prev => prev.filter(badge => badge.id !== badgeId));
+    toast({
+      title: "Badge Removed",
+      description: "Badge has been removed from your profile",
+      variant: "default"
+    });
   };
 
   const handleFileChange = (
@@ -816,6 +959,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         rainbow_speed: rainbowSpeed,
         avatar_url: finalAvatarUrl,
         banner_url: finalBannerUrl,
+        badges: JSON.stringify(badges),
         easy_customization_data: JSON.stringify(easyCustomization),
         last_seen: new Date().toISOString()
       };
@@ -911,7 +1055,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           'profile-bio': { x: 0, y: 0, scale: 1, visible: true },
           'profile-status': { x: 0, y: 0, scale: 1, visible: true },
           'profile-banner': { x: 0, y: 0, scale: 1, visible: true },
-          'profile-divider': { x: 0, y: 0, scale: 1, visible: true }
+          'profile-divider': { x: 0, y: 0, scale: 1, visible: true },
+          'profile-badges': { x: 0, y: 0, scale: 1, visible: true }
         }
       });
     }
@@ -992,11 +1137,9 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       <div className="relative group">
                         <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 dark:border-gray-600 flex-shrink-0">
                           {avatarPreview ? (
-                            <Image 
+                            <img 
                               src={avatarPreview} 
                               alt="Avatar preview" 
-                              width={80} 
-                              height={80} 
                               className="object-cover w-full h-full transition-transform group-hover:scale-105" 
                             />
                           ) : (
@@ -1066,11 +1209,10 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       <div className="relative group">
                         <div className="aspect-[3/1] w-full max-w-md mx-auto overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100">
                           {bannerPreview ? (
-                            <Image 
+                            <img 
                               src={bannerPreview} 
                               alt="Banner preview" 
-                              fill
-                              className="object-cover transition-transform group-hover:scale-105" 
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105" 
                             />
                           ) : (
                             <div className="flex items-center justify-center h-full text-gray-400">
@@ -1133,6 +1275,129 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       className="hidden"
                     />
                   </div>
+                </div>
+
+                {/* Badges Section */}
+                <div className={cn(
+                  "p-4 rounded-lg border space-y-4",
+                  isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Profile Badges</h3>
+                    <Button
+                      onClick={() => setIsBadgeManagerOpen(!isBadgeManagerOpen)}
+                      variant="outline"
+                      size="sm"
+                      className="text-sm"
+                    >
+                      {isBadgeManagerOpen ? 'Hide' : 'Manage Badges'}
+                    </Button>
+                  </div>
+
+                  {/* Current Badges Display */}
+                  {badges.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Current Badges:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {badges.map((badge) => (
+                          <div
+                            key={badge.id}
+                            className="relative group bg-white/10 p-2 rounded-lg border border-gray-300 dark:border-gray-600"
+                          >
+                            <img
+                              src={badge.url}
+                              alt={badge.name}
+                              className="w-8 h-8 object-cover rounded"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiA4VjI0TTggMTZIMjQiIHN0cm9rZT0iIzk0QTNCOCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+';
+                              }}
+                            />
+                            <button
+                              onClick={() => removeBadge(badge.id)}
+                              className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove badge"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Badge Manager */}
+                  {isBadgeManagerOpen && (
+                    <div className="space-y-3 p-3 bg-white/5 rounded-lg border border-gray-300 dark:border-gray-600">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">Badge Image URL</label>
+                        <Input
+                          value={newBadgeUrl}
+                          onChange={(e) => setNewBadgeUrl(e.target.value)}
+                          placeholder="https://example.com/badge.png"
+                          className="text-sm"
+                        />
+                        <div className="text-xs text-gray-500">
+                          • Supported: JPG, PNG, GIF, SVG, WebP
+                          • Recommended size: 32x32px or larger
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">Badge Name (optional)</label>
+                        <Input
+                          value={newBadgeName}
+                          onChange={(e) => setNewBadgeName(e.target.value)}
+                          placeholder="Badge name"
+                          className="text-sm"
+                          maxLength={20}
+                        />
+                      </div>
+
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={addBadge}
+                          disabled={!newBadgeUrl.trim()}
+                          size="sm"
+                          className="flex-1 text-sm"
+                        >
+                          Add Badge
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setNewBadgeUrl('');
+                            setNewBadgeName('');
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="text-sm"
+                        >
+                          Clear
+                        </Button>
+                      </div>
+
+                      {newBadgeUrl && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Preview:</p>
+                          <div className="bg-white/10 p-2 rounded-lg border border-gray-300 dark:border-gray-600 w-fit">
+                            <img
+                              src={newBadgeUrl}
+                              alt="Badge preview"
+                              className="w-8 h-8 object-cover rounded"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                              onLoad={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'block';
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Basic Info Section */}
@@ -1434,10 +1699,6 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       </div>
                     </div>
                     
-                    {/* Easy customization controls would continue here... */}
-                    {/* For brevity, I'm including a note that the rest of the easy customization controls */}
-                    {/* from the original file would go here */}
-                    
                     <div className="text-sm text-gray-600 dark:text-gray-400 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                       <p className="font-medium mb-2">🎨 Easy Mode Features:</p>
                       <ul className="text-xs space-y-1">
@@ -1599,6 +1860,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                       rainbowSpeed={rainbowSpeed}
                       avatarPreview={avatarPreview}
                       bannerPreview={bannerPreview}
+                      badges={badges}
                       currentUser={currentUser}
                       cssMode={cssMode}
                       easyCustomization={easyCustomization}
@@ -1641,7 +1903,10 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         {/* Context Menu */}
         {contextMenu && cssMode === 'easy' && (
           <div
-            className="fixed bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] py-1"
+            className={cn(
+              "fixed border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] py-1",
+              isTheme98 ? "window" : "bg-white dark:bg-gray-800"
+            )}
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1691,113 +1956,199 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         {/* Typography Popup */}
         {typographyPopup && cssMode === 'easy' && (
           <div
-            className="fixed bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] p-3 w-64"
-            style={{ left: typographyPopup.x, top: typographyPopup.y }}
+            className={cn(
+              "typography-popup fixed border border-gray-300 dark:border-gray-600 rounded shadow-lg z-[10000] p-3 w-64",
+              isTheme98 ? "window" : "bg-white dark:bg-gray-800"
+            )}
+            style={{ 
+              left: Math.max(10, Math.min(typographyPopup.x, window.innerWidth - 280)), 
+              top: Math.max(10, Math.min(typographyPopup.y, window.innerHeight - 400))
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="font-medium mb-3 text-sm">Text Effects</h4>
+            {isTheme98 && (
+              <div className="title-bar mb-2">
+                <div className="title-bar-text">Text Effects</div>
+              </div>
+            )}
             
-            {/* Text Alignment */}
-            <div className="mb-3">
-              <label className="block text-xs font-medium mb-1">Alignment</label>
-              <div className="flex space-x-1">
-                {['left', 'center', 'right'].map((align) => (
-                  <button
-                    key={align}
-                    className={cn(
-                      "flex-1 p-1 text-xs border rounded",
-                      typographyPopup.options.textAlign === align
-                        ? "bg-blue-100 border-blue-500 text-blue-700"
-                        : "bg-gray-50 border-gray-300"
-                    )}
-                    onClick={() => {
+            <div className="window-body">
+              {!isTheme98 && <h4 className="font-medium mb-3 text-sm">Text Effects</h4>}
+              
+              {/* Font Selection */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1">Font</label>
+                <select
+                  value={typographyPopup.options.fontFamily}
+                  onChange={(e) => {
+                    setTypographyPopup(prev => prev ? {
+                      ...prev,
+                      options: { ...prev.options, fontFamily: e.target.value }
+                    } : null);
+                  }}
+                  className={cn(
+                    "w-full p-1 text-xs border rounded",
+                    isTheme98 ? "sunken-panel" : "bg-gray-50 border-gray-300"
+                  )}
+                >
+                  {FONT_OPTIONS.map((font) => (
+                    <option key={font.value} value={font.value}>
+                      {font.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Font Size */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1">Size</label>
+                <input
+                  type="range"
+                  min="10"
+                  max="32"
+                  value={typographyPopup.options.fontSize}
+                  onChange={(e) => {
+                    setTypographyPopup(prev => prev ? {
+                      ...prev,
+                      options: { ...prev.options, fontSize: parseInt(e.target.value) }
+                    } : null);
+                  }}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-500 text-center">{typographyPopup.options.fontSize}px</div>
+              </div>
+
+              {/* Text Alignment */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1">Alignment</label>
+                <div className="flex space-x-1">
+                  {['left', 'center', 'right'].map((align) => (
+                    <button
+                      key={align}
+                      className={cn(
+                        "flex-1 p-1 text-xs border rounded",
+                        typographyPopup.options.textAlign === align
+                          ? "bg-blue-100 border-blue-500 text-blue-700"
+                          : isTheme98 ? "sunken-panel" : "bg-gray-50 border-gray-300"
+                      )}
+                      onClick={() => {
+                        setTypographyPopup(prev => prev ? {
+                          ...prev,
+                          options: { ...prev.options, textAlign: align as 'left' | 'center' | 'right' }
+                        } : null);
+                      }}
+                    >
+                      {align}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font Weight & Style */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1">Style</label>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    { key: 'bold', label: 'B' },
+                    { key: 'italic', label: 'I' },
+                    { key: 'underline', label: 'U' }
+                  ].map((style) => (
+                    <button
+                      key={style.key}
+                      className={cn(
+                        "px-2 py-1 text-xs border rounded font-bold",
+                        typographyPopup.options[style.key as keyof TypographyOptions]
+                          ? "bg-blue-100 border-blue-500 text-blue-700"
+                          : isTheme98 ? "sunken-panel" : "bg-gray-50 border-gray-300"
+                      )}
+                      onClick={() => {
+                        setTypographyPopup(prev => prev ? {
+                          ...prev,
+                          options: { 
+                            ...prev.options, 
+                            [style.key]: !prev.options[style.key as keyof TypographyOptions] 
+                          }
+                        } : null);
+                      }}
+                    >
+                      {style.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Text Color */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1">Text Color</label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="color"
+                    value={typographyPopup.options.textColor}
+                    onChange={(e) => {
                       setTypographyPopup(prev => prev ? {
                         ...prev,
-                        options: { ...prev.options, textAlign: align as 'left' | 'center' | 'right' }
+                        options: { ...prev.options, textColor: e.target.value }
                       } : null);
                     }}
-                  >
-                    {align}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Font Weight & Style */}
-            <div className="mb-3">
-              <label className="block text-xs font-medium mb-1">Style</label>
-              <div className="flex flex-wrap gap-1">
-                {[
-                  { key: 'bold', label: 'B' },
-                  { key: 'italic', label: 'I' },
-                  { key: 'underline', label: 'U' }
-                ].map((style) => (
-                  <button
-                    key={style.key}
-                    className={cn(
-                      "px-2 py-1 text-xs border rounded font-bold",
-                      typographyPopup.options[style.key as keyof TypographyOptions]
-                        ? "bg-blue-100 border-blue-500 text-blue-700"
-                        : "bg-gray-50 border-gray-300"
-                    )}
-                    onClick={() => {
+                    className="w-8 h-8 border rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={typographyPopup.options.textColor}
+                    onChange={(e) => {
                       setTypographyPopup(prev => prev ? {
                         ...prev,
-                        options: { 
-                          ...prev.options, 
-                          [style.key]: !prev.options[style.key as keyof TypographyOptions] 
+                        options: { ...prev.options, textColor: e.target.value }
+                      } : null);
+                    }}
+                    className={cn(
+                      "flex-1 p-1 text-xs border rounded font-mono",
+                      isTheme98 ? "sunken-panel" : "bg-white border-gray-300"
+                    )}
+                    maxLength={7}
+                    placeholder="#ffffff"
+                  />
+                </div>
+              </div>
+
+              {/* Apply/Cancel */}
+              <div className="flex space-x-2">
+                <Button
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => {
+                    // Apply typography options to the element
+                    if (typographyPopup) {
+                      setEasyCustomization(prev => ({
+                        ...prev,
+                        elements: {
+                          ...prev.elements,
+                          [typographyPopup.element]: {
+                            ...prev.elements[typographyPopup.element],
+                            color: typographyPopup.options.textColor
+                          }
                         }
-                      } : null);
-                    }}
-                  >
-                    {style.label}
-                  </button>
-                ))}
+                      }));
+                    }
+                    setTypographyPopup(null);
+                    toast({
+                      title: "Typography Applied",
+                      description: "Text effects have been applied to the element",
+                      variant: "default"
+                    });
+                  }}
+                >
+                  Apply
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  onClick={() => setTypographyPopup(null)}
+                >
+                  Cancel
+                </Button>
               </div>
-            </div>
-
-            {/* Text Color */}
-            <div className="mb-3">
-              <label className="block text-xs font-medium mb-1">Text Color</label>
-              <input
-                type="color"
-                value={typographyPopup.options.textColor}
-                onChange={(e) => {
-                  setTypographyPopup(prev => prev ? {
-                    ...prev,
-                    options: { ...prev.options, textColor: e.target.value }
-                  } : null);
-                }}
-                className="w-full h-8 border rounded cursor-pointer"
-              />
-            </div>
-
-            {/* Apply/Cancel */}
-            <div className="flex space-x-2">
-              <Button
-                size="sm"
-                className="flex-1 text-xs"
-                onClick={() => {
-                  // Apply typography options to the element
-                  // This would involve updating the CSS for the specific element
-                  setTypographyPopup(null);
-                  toast({
-                    title: "Typography Applied",
-                    description: "Text effects have been applied to the element",
-                    variant: "default"
-                  });
-                }}
-              >
-                Apply
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 text-xs"
-                onClick={() => setTypographyPopup(null)}
-              >
-                Cancel
-              </Button>
             </div>
           </div>
         )}
@@ -1818,6 +2169,7 @@ interface EnhancedProfilePreviewProps {
   rainbowSpeed: number;
   avatarPreview: string | null;
   bannerPreview: string | null;
+  badges: Badge[];
   currentUser: any;
   cssMode: 'custom' | 'easy';
   easyCustomization: EasyCustomization;
@@ -1840,6 +2192,7 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
   rainbowSpeed,
   avatarPreview,
   bannerPreview,
+  badges,
   currentUser,
   cssMode,
   easyCustomization,
@@ -1946,6 +2299,37 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       cursor: ${cssMode === 'easy' ? 'move' : 'default'};
     }
 
+    .profile-badges {
+      position: absolute;
+      top: 140px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 3;
+      cursor: ${cssMode === 'easy' ? 'move' : 'default'};
+    }
+
+    .profile-badge {
+      width: 24px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 2px;
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .profile-badge img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 2px;
+    }
+
     /* Display name animations */
     .display-name-rainbow {
       background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
@@ -2022,6 +2406,13 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       height: 8px;
       border-radius: 2px;
       z-index: 10;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    
+    .draggable-element:hover .resize-handle,
+    .selected-element .resize-handle {
+      opacity: 1;
     }
     
     .resize-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
@@ -2062,10 +2453,14 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
     const element = easyCustomization.elements[elementName];
     if (!element) return {};
     
+    let transform = `translate(${element.x}px, ${element.y}px) scale(${element.scale})`;
+    
     return {
-      transform: `translate(${element.x}px, ${element.y}px) scale(${element.scale})`,
+      transform,
       display: element.visible === false ? 'none' : undefined,
-      color: element.color || undefined
+      color: element.color || undefined,
+      width: element.width ? `${element.width}px` : undefined,
+      height: element.height ? `${element.height}px` : undefined
     };
   };
 
@@ -2115,6 +2510,34 @@ const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           )}
           {renderResizeHandles('profile-banner')}
         </div>
+        
+        {/* Badges positioned next to avatar */}
+        {badges.length > 0 && (
+          <div 
+            className={cn(
+              "profile-badges",
+              cssMode === 'easy' && "draggable-element",
+              isElementSelected('profile-badges') && "selected-element"
+            )}
+            style={getElementStyle('profile-badges')}
+            onMouseDown={cssMode === 'easy' ? (e) => onElementMouseDown?.(e, 'profile-badges') : undefined}
+            onContextMenu={cssMode === 'easy' ? (e) => onElementContextMenu?.(e, 'profile-badges') : undefined}
+          >
+            {badges.map((badge) => (
+              <div key={badge.id} className="profile-badge">
+                <img
+                  src={badge.url}
+                  alt={badge.name || 'Badge'}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA2VjE4TTYgMTJIMTgiIHN0cm9rZT0iIzk0QTNCOCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+';
+                  }}
+                />
+              </div>
+            ))}
+            {renderResizeHandles('profile-badges')}
+          </div>
+        )}
         
         <div className="profile-content">
           <div className="relative inline-block">
