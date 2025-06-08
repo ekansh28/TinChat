@@ -727,7 +727,7 @@ setInterval(async () => {
 }, 5 * 60 * 1000); // Run every 5 minutes
 
 server.listen(PORT, () => {
-  console.log(`[SERVER_START] Socket.IO server running on port :: ${PORT}`);
+  console.log(`[SERVER_START] Socket.IO server running on port ::: ${PORT}`);
   if (!supabase) {
     console.warn('[SERVER_START] Running without Supabase integration - profiles will not be loaded');
   }
