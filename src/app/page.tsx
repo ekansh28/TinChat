@@ -342,7 +342,7 @@ export default function SelectionLobby() {
             )}
           >
             <Image
-              src="/icons/discord.png"
+              src="/icons/discord.gif"
               alt="discord"
               width={isMobile ? 32 : 40}
               height={isMobile ? 32 : 40}
