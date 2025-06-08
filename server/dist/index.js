@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config"); // Add this line at the very top
 const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
 const zod_1 = require("zod");
@@ -120,10 +121,13 @@ function logQueueState(chatType, context) {
         authId: u.authId || 'anonymous',
         interests: u.interests,
         username: u.username || 'no-username',
-        status: u.status || 'offline'
+        status: u.status || 'offline',
+        displayNameColor: u.displayNameColor || '#ffffff',
+        displayNameAnimation: u.displayNameAnimation || 'none',
+        badges: u.badges?.length || 0
     })));
 }
-// Helper function to fetch enhanced user profile from Supabase
+// FIXED: Enhanced helper function to fetch user profile with complete styling info and badges
 async function fetchUserProfile(authId) {
     if (!supabase || !authId)
         return null;
@@ -138,7 +142,9 @@ async function fetchUserProfile(authId) {
         pronouns, 
         status, 
         display_name_color, 
-        display_name_animation
+        display_name_animation,
+        rainbow_speed,
+        badges
       `)
             .eq('id', authId)
             .single();
@@ -148,7 +154,24 @@ async function fetchUserProfile(authId) {
             }
             return null;
         }
-        return data;
+        // FIXED: Parse badges properly
+        let parsedBadges = [];
+        if (data.badges) {
+            try {
+                parsedBadges = JSON.parse(data.badges);
+                if (!Array.isArray(parsedBadges)) {
+                    parsedBadges = [];
+                }
+            }
+            catch (e) {
+                console.warn(`[BADGE_PARSE_ERROR] Failed to parse badges for ${authId}:`, e);
+                parsedBadges = [];
+            }
+        }
+        return {
+            ...data,
+            badges: parsedBadges
+        };
     }
     catch (err) {
         console.error(`[SUPABASE_EXCEPTION] Exception fetching profile for ${authId}:`, err);
@@ -318,7 +341,7 @@ io.on('connection', (socket) => {
                 chatType,
                 authId: authId || null
             };
-            // Fetch enhanced profile if authenticated
+            // FIXED: Fetch enhanced profile if authenticated
             if (authId && supabase) {
                 console.log(`[PROFILE_FETCH_ATTEMPT] Fetching enhanced profile for authId: ${authId}`);
                 const profile = await fetchUserProfile(authId);
@@ -331,24 +354,36 @@ io.on('connection', (socket) => {
                     currentUser.status = profile.status || 'online';
                     currentUser.displayNameColor = profile.display_name_color;
                     currentUser.displayNameAnimation = profile.display_name_animation;
+                    currentUser.rainbowSpeed = profile.rainbow_speed;
+                    currentUser.badges = profile.badges || []; // FIXED: Include badges
                     console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
                         username: profile.username || 'null',
                         displayName: profile.display_name || 'null',
                         pronouns: profile.pronouns || 'null',
                         status: profile.status || 'online',
                         displayNameColor: profile.display_name_color || '#ffffff',
-                        displayNameAnimation: profile.display_name_animation || 'none'
+                        displayNameAnimation: profile.display_name_animation || 'none',
+                        rainbowSpeed: profile.rainbow_speed || 3,
+                        badges: currentUser.badges?.length || 0
                     });
                 }
                 else {
                     console.log(`[PROFILE_FETCH_NO_PROFILE] No profile found or error for ${authId}.`);
                     // Set default status for new users
                     currentUser.status = 'online';
+                    currentUser.displayNameColor = '#ffffff';
+                    currentUser.displayNameAnimation = 'none';
+                    currentUser.rainbowSpeed = 3;
+                    currentUser.badges = [];
                 }
             }
             else {
                 console.log(`[PROFILE_FETCH_SKIP] Skipping profile fetch for anonymous user ${socket.id}`);
                 currentUser.status = 'online';
+                currentUser.displayNameColor = '#ffffff';
+                currentUser.displayNameAnimation = 'none';
+                currentUser.rainbowSpeed = 3;
+                currentUser.badges = [];
             }
             // Log current queue state before attempting match
             logQueueState(chatType, 'BEFORE_MATCH');
@@ -366,7 +401,7 @@ io.on('connection', (socket) => {
                     const currentUserDisplayName = currentUser.displayName || currentUser.username || "Stranger";
                     const partnerDisplayName = matchedPartner.displayName || matchedPartner.username || "Stranger";
                     console.log(`[MATCH_SUCCESS_USERNAMES] Current user display name: "${currentUserDisplayName}", Partner display name: "${partnerDisplayName}"`);
-                    // Enhanced partner found event with new profile data
+                    // FIXED: Enhanced partner found event with complete profile data including styling and badges
                     socket.emit('partnerFound', {
                         partnerId: matchedPartner.id,
                         roomId,
@@ -377,9 +412,11 @@ io.on('connection', (socket) => {
                         partnerBannerUrl: matchedPartner.bannerUrl,
                         partnerPronouns: matchedPartner.pronouns,
                         partnerStatus: matchedPartner.status || 'online',
-                        partnerDisplayNameColor: matchedPartner.displayNameColor,
-                        partnerDisplayNameAnimation: matchedPartner.displayNameAnimation,
+                        partnerDisplayNameColor: matchedPartner.displayNameColor || '#ffffff',
+                        partnerDisplayNameAnimation: matchedPartner.displayNameAnimation || 'none',
+                        partnerRainbowSpeed: matchedPartner.rainbowSpeed || 3,
                         partnerAuthId: matchedPartner.authId,
+                        partnerBadges: matchedPartner.badges || [], // FIXED: Include badges
                     });
                     partnerSocket.emit('partnerFound', {
                         partnerId: currentUser.id,
@@ -391,9 +428,11 @@ io.on('connection', (socket) => {
                         partnerBannerUrl: currentUser.bannerUrl,
                         partnerPronouns: currentUser.pronouns,
                         partnerStatus: currentUser.status || 'online',
-                        partnerDisplayNameColor: currentUser.displayNameColor,
-                        partnerDisplayNameAnimation: currentUser.displayNameAnimation,
+                        partnerDisplayNameColor: currentUser.displayNameColor || '#ffffff',
+                        partnerDisplayNameAnimation: currentUser.displayNameAnimation || 'none',
+                        partnerRainbowSpeed: currentUser.rainbowSpeed || 3,
                         partnerAuthId: currentUser.authId,
+                        partnerBadges: currentUser.badges || [], // FIXED: Include badges
                     });
                 }
                 else {
@@ -435,15 +474,17 @@ io.on('connection', (socket) => {
                 let senderUsernameToSend = 'Stranger';
                 let senderDisplayNameColor = '#ffffff';
                 let senderDisplayNameAnimation = 'none';
+                let senderRainbowSpeed = 3;
                 if (authId && username) {
                     senderUsernameToSend = username;
                     console.log(`[MESSAGE_AUTHENTICATED_USER] Using authenticated username: ${username}`);
-                    // Fetch current profile data for display name styling
+                    // FIXED: Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
                     const profile = await fetchUserProfile(authId);
                     if (profile) {
                         senderDisplayNameColor = profile.display_name_color || '#ffffff';
                         senderDisplayNameAnimation = profile.display_name_animation || 'none';
-                        console.log(`[MESSAGE_STYLE_INFO] Display name styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}`);
+                        senderRainbowSpeed = profile.rainbow_speed || 3;
+                        console.log(`[MESSAGE_STYLE_INFO] Display name styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}, Rainbow Speed: ${senderRainbowSpeed}`);
                     }
                 }
                 else if (authId && !username) {
@@ -453,11 +494,12 @@ io.on('connection', (socket) => {
                         senderUsernameToSend = profile.display_name || profile.username || 'Stranger';
                         senderDisplayNameColor = profile.display_name_color || '#ffffff';
                         senderDisplayNameAnimation = profile.display_name_animation || 'none';
-                        console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling`);
+                        senderRainbowSpeed = profile.rainbow_speed || 3;
+                        console.log(`[MESSAGE_FETCHED_USERNAME] Fetched username: ${senderUsernameToSend} with styling - Color: ${senderDisplayNameColor}, Animation: ${senderDisplayNameAnimation}`);
                     }
                 }
                 else {
-                    console.log(`[MESSAGE_ANONYMOUS_USER] Anonymous user, using 'Stranger'`);
+                    console.log(`[MESSAGE_ANONYMOUS_USER] Anonymous user, using 'Stranger' with default styling`);
                 }
                 const messagePayload = {
                     senderId: socket.id,
@@ -465,11 +507,12 @@ io.on('connection', (socket) => {
                     senderUsername: senderUsernameToSend,
                     senderAuthId: authId || null,
                     senderDisplayNameColor,
-                    senderDisplayNameAnimation
+                    senderDisplayNameAnimation,
+                    senderRainbowSpeed
                 };
                 const partnerId = roomDetails.users.find(id => id !== socket.id);
                 if (partnerId) {
-                    console.log(`[MESSAGE_RELAY_DIRECT_IO_TO] Relaying message from ${socket.id} (${senderUsernameToSend}) to partner ${partnerId} in room ${roomId}.`);
+                    console.log(`[MESSAGE_RELAY_DIRECT_IO_TO] Relaying message from ${socket.id} (${senderUsernameToSend}) to partner ${partnerId} in room ${roomId} with color ${senderDisplayNameColor}.`);
                     io.to(partnerId).emit('receiveMessage', messagePayload);
                 }
                 else {
@@ -519,7 +562,7 @@ io.on('connection', (socket) => {
             }
         }
         catch (error) {
-            console.warn(`[VALIDATION_FAIL_TYPING_START] Invalid typing_start payload from ${socket.id}: ${error.errors ? JSON.stringify(error.errors) : error.message}`);
+            console.warn(`[TYPING_START_ERROR] Invalid typing_start payload from ${socket.id}: ${error.message}`);
         }
     });
     socket.on('typing_stop', (payload) => {
