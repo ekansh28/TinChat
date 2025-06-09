@@ -68,6 +68,7 @@ export const PROFILE_ELEMENTS = [
 
 export const GRID_SIZE = 10; // Grid snap size in pixels
 
+// FIXED: More robust default customization with all required properties
 export const DEFAULT_EASY_CUSTOMIZATION = {
   backgroundColor: '#667eea',
   backgroundGradient: {
@@ -77,27 +78,128 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
     direction: '135deg'
   },
   borderRadius: 16,
-  bannerHeight: 120,
-  avatarSize: 80,
+  bannerHeight: 140,
+  avatarSize: 100,
   avatarFrame: 'circle' as const,
   textShadow: true,
   textGlow: false,
   textBold: false,
   fontFamily: 'default',
   fontSize: 16,
-  contentPadding: 20,
+  contentPadding: 24,
   shadow: true,
   glow: false,
   border: false,
   elements: {
-    'profile-avatar': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-display-name': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-username': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-pronouns': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-bio': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-status': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-banner': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-divider': { x: 0, y: 0, scale: 1, visible: true },
-    'profile-badges': { x: 0, y: 0, scale: 1, visible: true }
+    'profile-avatar': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: undefined,
+      fontFamily: undefined,
+      fontSize: undefined,
+      width: undefined,
+      height: undefined
+    },
+    'profile-display-name': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: '#ffffff',
+      fontFamily: 'default',
+      fontSize: 26,
+      width: undefined,
+      height: undefined
+    },
+    'profile-username': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: '#ffffff',
+      fontFamily: 'default',
+      fontSize: 16,
+      width: undefined,
+      height: undefined
+    },
+    'profile-pronouns': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: '#ffffff',
+      fontFamily: 'default',
+      fontSize: 14,
+      width: undefined,
+      height: undefined
+    },
+    'profile-bio': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: '#ffffff',
+      fontFamily: 'default',
+      fontSize: 14,
+      width: undefined,
+      height: undefined
+    },
+    'profile-status': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: undefined,
+      fontFamily: undefined,
+      fontSize: undefined,
+      width: undefined,
+      height: undefined
+    },
+    'profile-banner': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: undefined,
+      fontFamily: undefined,
+      fontSize: undefined,
+      width: undefined,
+      height: undefined
+    },
+    'profile-divider': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: undefined,
+      fontFamily: undefined,
+      fontSize: undefined,
+      width: undefined,
+      height: undefined
+    },
+    'profile-badges': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: undefined,
+      fontFamily: undefined,
+      fontSize: undefined,
+      width: undefined,
+      height: undefined
+    },
+    'profile-status-text': { 
+      x: 0, 
+      y: 0, 
+      scale: 1, 
+      visible: true,
+      color: '#ffffff',
+      fontFamily: 'default',
+      fontSize: 14,
+      width: undefined,
+      height: undefined
+    }
   }
 };

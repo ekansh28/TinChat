@@ -4,16 +4,26 @@ import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
+// Initialize Supabase client with proper error handling
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
 let supabase: any = null;
 if (supabaseUrl && supabaseServiceKey) {
-  supabase = createClient(supabaseUrl, supabaseServiceKey);
-  console.log('[SUPABASE] Client initialized successfully');
+  try {
+    supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+    console.log('[SUPABASE] Client initialized successfully');
+  } catch (error) {
+    console.error('[SUPABASE] Failed to initialize client:', error);
+  }
 } else {
   console.warn('[SUPABASE] Missing SUPABASE_URL or SUPABASE_SERVICE_KEY - profile features will be disabled');
+  console.warn('[SUPABASE] URL exists:', !!supabaseUrl, 'Service key exists:', !!supabaseServiceKey);
 }
 
 // Define allowed origins
@@ -120,6 +130,10 @@ let onlineUserCount = 0;
 const lastMatchRequest: { [socketId: string]: number } = {};
 const FIND_PARTNER_COOLDOWN_MS = 2000; // 2 seconds
 
+// Profile fetch cache to prevent repeated calls
+const profileCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 30000; // 30 seconds
+
 // Zod Schemas for input validation
 const StringArraySchema = z.array(z.string().max(100)).max(10);
 
@@ -164,9 +178,15 @@ function logQueueState(chatType: 'text' | 'video', context: string) {
   );
 }
 
-// FIXED: Enhanced helper function to fetch user profile with complete styling info and badges
+// Enhanced helper function to fetch user profile with caching and proper error handling
 async function fetchUserProfile(authId: string) {
   if (!supabase || !authId) return null;
+  
+  // Check cache first
+  const cached = profileCache.get(authId);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
   
   try {
     const { data, error } = await supabase
@@ -184,7 +204,7 @@ async function fetchUserProfile(authId: string) {
         badges
       `)
       .eq('id', authId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       if (error.code !== 'PGRST116') {
@@ -193,11 +213,19 @@ async function fetchUserProfile(authId: string) {
       return null;
     }
     
-    // FIXED: Parse badges properly
+    if (!data) {
+      return null;
+    }
+    
+    // Parse badges properly
     let parsedBadges = [];
     if (data.badges) {
       try {
-        parsedBadges = JSON.parse(data.badges);
+        if (typeof data.badges === 'string') {
+          parsedBadges = JSON.parse(data.badges);
+        } else {
+          parsedBadges = data.badges;
+        }
         if (!Array.isArray(parsedBadges)) {
           parsedBadges = [];
         }
@@ -207,36 +235,52 @@ async function fetchUserProfile(authId: string) {
       }
     }
     
-    return {
+    const profileData = {
       ...data,
       badges: parsedBadges
     };
+    
+    // Cache the result
+    profileCache.set(authId, { data: profileData, timestamp: Date.now() });
+    
+    return profileData;
   } catch (err) {
     console.error(`[SUPABASE_EXCEPTION] Exception fetching profile for ${authId}:`, err);
     return null;
   }
 }
 
-// Helper function to update user status in database
-async function updateUserStatus(authId: string, status: 'online' | 'idle' | 'dnd' | 'offline') {
+// Helper function to update user status in database with retry logic
+async function updateUserStatus(authId: string, status: 'online' | 'idle' | 'dnd' | 'offline', retryCount = 0) {
   if (!supabase || !authId) return;
   
   try {
     const { error } = await supabase
       .from('user_profiles')
-      .update({ 
+      .upsert({ 
+        id: authId,
         status: status,
         last_seen: new Date().toISOString()
-      })
-      .eq('id', authId);
+      }, {
+        onConflict: 'id'
+      });
 
     if (error) {
       console.error(`[SUPABASE_ERROR] Error updating status for ${authId}:`, error);
+      // Retry once on failure
+      if (retryCount === 0) {
+        setTimeout(() => updateUserStatus(authId, status, 1), 1000);
+      }
     } else {
       console.log(`[STATUS_UPDATE] Updated ${authId} status to ${status}`);
+      // Clear cache entry so next fetch gets fresh data
+      profileCache.delete(authId);
     }
   } catch (err) {
     console.error(`[SUPABASE_EXCEPTION] Exception updating status for ${authId}:`, err);
+    if (retryCount === 0) {
+      setTimeout(() => updateUserStatus(authId, status, 1), 1000);
+    }
   }
 }
 
@@ -403,7 +447,7 @@ io.on('connection', (socket: Socket) => {
         authId: authId || null 
       };
       
-      // FIXED: Fetch enhanced profile if authenticated
+      // Fetch enhanced profile if authenticated
       if (authId && supabase) {
         console.log(`[PROFILE_FETCH_ATTEMPT] Fetching enhanced profile for authId: ${authId}`);
         const profile = await fetchUserProfile(authId);
@@ -417,7 +461,7 @@ io.on('connection', (socket: Socket) => {
           currentUser.displayNameColor = profile.display_name_color;
           currentUser.displayNameAnimation = profile.display_name_animation;
           currentUser.rainbowSpeed = profile.rainbow_speed;
-          currentUser.badges = profile.badges || []; // FIXED: Include badges
+          currentUser.badges = profile.badges || [];
           console.log(`[PROFILE_FETCH_SUCCESS] Fetched enhanced profile for ${authId}:`, {
             username: profile.username || 'null',
             displayName: profile.display_name || 'null',
@@ -468,7 +512,7 @@ io.on('connection', (socket: Socket) => {
 
           console.log(`[MATCH_SUCCESS_USERNAMES] Current user display name: "${currentUserDisplayName}", Partner display name: "${partnerDisplayName}"`);
 
-          // FIXED: Enhanced partner found event with complete profile data including styling and badges
+          // Enhanced partner found event with complete profile data including styling and badges
           socket.emit('partnerFound', {
             partnerId: matchedPartner.id,
             roomId,
@@ -483,7 +527,7 @@ io.on('connection', (socket: Socket) => {
             partnerDisplayNameAnimation: matchedPartner.displayNameAnimation || 'none',
             partnerRainbowSpeed: matchedPartner.rainbowSpeed || 3,
             partnerAuthId: matchedPartner.authId,
-            partnerBadges: matchedPartner.badges || [], // FIXED: Include badges
+            partnerBadges: matchedPartner.badges || [],
           });
 
           partnerSocket.emit('partnerFound', {
@@ -500,7 +544,7 @@ io.on('connection', (socket: Socket) => {
             partnerDisplayNameAnimation: currentUser.displayNameAnimation || 'none',
             partnerRainbowSpeed: currentUser.rainbowSpeed || 3,
             partnerAuthId: currentUser.authId,
-            partnerBadges: currentUser.badges || [], // FIXED: Include badges
+            partnerBadges: currentUser.badges || [],
           });
         } else {
           console.warn(`[MATCH_FAIL_SOCKET_ISSUE] Partner ${matchedPartner.id} socket not found/disconnected. Re-queuing current user ${currentUser.id} and potential partner ${matchedPartner.id}.`);
@@ -548,7 +592,7 @@ io.on('connection', (socket: Socket) => {
           senderUsernameToSend = username;
           console.log(`[MESSAGE_AUTHENTICATED_USER] Using authenticated username: ${username}`);
           
-          // FIXED: Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
+          // Fetch current profile data for display name styling - CRITICAL FOR COLOR SYNC
           const profile = await fetchUserProfile(authId);
           if (profile) {
             senderDisplayNameColor = profile.display_name_color || '#ffffff';
@@ -657,6 +701,8 @@ socket.on('typing_start', (payload: unknown) => {
       await updateUserStatus(authId, 'offline');
       delete socketToAuthId[socket.id];
       delete authIdToSocketId[authId];
+      // Clear profile cache on disconnect
+      profileCache.delete(authId);
     }
 
     for (const roomIdInLoop in rooms) {
@@ -710,11 +756,20 @@ socket.on('typing_start', (payload: unknown) => {
   });
 });
 
-// Periodic cleanup function to set inactive users offline
+// Periodic cleanup function to set inactive users offline with proper error handling
 setInterval(async () => {
   if (supabase) {
     try {
-      const { error } = await supabase.rpc('set_inactive_users_offline');
+      // Use a simpler query instead of RPC function that might not exist
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          status: 'offline',
+          updated_at: new Date().toISOString()
+        })
+        .lt('last_seen', new Date(Date.now() - 10 * 60 * 1000).toISOString()) // 10 minutes ago
+        .neq('status', 'offline');
+
       if (error) {
         console.error('[PERIODIC_CLEANUP] Error setting inactive users offline:', error);
       } else {
@@ -726,12 +781,24 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000); // Run every 5 minutes
 
+// Clear profile cache periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [authId, cached] of profileCache.entries()) {
+    if (now - cached.timestamp > CACHE_DURATION * 2) {
+      profileCache.delete(authId);
+    }
+  }
+  console.log(`[CACHE_CLEANUP] Profile cache size: ${profileCache.size}`);
+}, 2 * 60 * 1000); // Every 2 minutes
+
 server.listen(PORT, () => {
   console.log(`[SERVER_START] Socket.IO server running on port ::: ${PORT}`);
   if (!supabase) {
     console.warn('[SERVER_START] Running without Supabase integration - profiles will not be loaded');
+  } else {
+    console.log('[SERVER_START] Supabase integration enabled');
   }
-
 });
 
 export {};

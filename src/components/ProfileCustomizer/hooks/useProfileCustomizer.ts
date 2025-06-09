@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '@/components/theme-provider';
 import { generateEasyCSS } from '../utils/cssGenerator';
+import { getDefaultProfileCSS } from '@/lib/SafeCSS';
 import { DEFAULT_EASY_CUSTOMIZATION } from '../utils/constants';
 import type { 
   EasyCustomization, 
@@ -11,20 +12,22 @@ import type {
 } from '../types';
 
 export const useProfileCustomizer = () => {
-  // CSS and mode states
-  const [customCSS, setCustomCSS] = useState('');
+  // CSS and mode states - FIXED: Initialize with proper defaults
+  const [customCSS, setCustomCSS] = useState(() => getDefaultProfileCSS());
   const [cssMode, setCSSMode] = useState<'custom' | 'easy'>('easy');
   const [positionMode, setPositionMode] = useState<'normal' | 'grid'>('normal');
   
-  // Easy customization state
-  const [easyCustomization, setEasyCustomization] = useState<EasyCustomization>(DEFAULT_EASY_CUSTOMIZATION);
+  // Easy customization state - FIXED: Ensure proper initialization
+  const [easyCustomization, setEasyCustomization] = useState<EasyCustomization>(() => ({
+    ...DEFAULT_EASY_CUSTOMIZATION
+  }));
   
   // Profile data states
   const [bio, setBio] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [pronouns, setPronouns] = useState('');
-  const [status, setStatus] = useState<StatusType>('online');
+  const [status, setStatus] = useState<StatusType>('online'); // FIXED: Default to online
   const [displayNameColor, setDisplayNameColor] = useState('#ffffff');
   const [displayNameAnimation, setDisplayNameAnimation] = useState<DisplayNameAnimation>('none');
   const [rainbowSpeed, setRainbowSpeed] = useState(3);
@@ -65,13 +68,27 @@ export const useProfileCustomizer = () => {
     };
   }, []);
 
-  // Update custom CSS when easy customization changes
+  // FIXED: Update custom CSS when easy customization changes - with proper safety checks
   useEffect(() => {
-    if (cssMode === 'easy') {
-      const generatedCSS = generateEasyCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
-      setCustomCSS(generatedCSS);
+    if (cssMode === 'easy' && easyCustomization && easyCustomization.elements) {
+      try {
+        const generatedCSS = generateEasyCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
+        setCustomCSS(generatedCSS);
+      } catch (error) {
+        console.error('Error generating CSS from easy customization:', error);
+        // Fallback to default CSS if generation fails
+        setCustomCSS(getDefaultProfileCSS());
+      }
     }
   }, [easyCustomization, cssMode, displayNameAnimation, rainbowSpeed]);
+
+  // FIXED: Ensure CSS is never empty
+  useEffect(() => {
+    if (!customCSS || customCSS.trim() === '') {
+      console.log('Setting default CSS as customCSS was empty');
+      setCustomCSS(getDefaultProfileCSS());
+    }
+  }, [customCSS]);
 
   // Computed values
   const isTheme98 = currentTheme === 'theme-98';

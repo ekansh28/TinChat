@@ -1,11 +1,18 @@
 // src/components/ProfileCustomizer/utils/cssGenerator.ts
 import type { EasyCustomization, DisplayNameAnimation } from '../types';
+import { getDefaultProfileCSS } from '@/lib/SafeCSS';
 
 export const generateEasyCSS = (
   easyCustomization: EasyCustomization,
   displayNameAnimation: DisplayNameAnimation,
   rainbowSpeed: number
 ): string => {
+  // FIXED: Safety check for undefined easyCustomization
+  if (!easyCustomization || !easyCustomization.elements) {
+    console.warn('Invalid easyCustomization data, returning default CSS');
+    return getDefaultProfileCSS();
+  }
+
   let css = `
 /* Enhanced Profile Card Styles */
 .profile-card-container {
@@ -70,6 +77,10 @@ export const generateEasyCSS = (
   background: #ffffff;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .profile-avatar:hover {
@@ -264,136 +275,174 @@ export const generateEasyCSS = (
 }
 `;
   
-  // Background
-  if (easyCustomization.backgroundGradient?.enabled) {
-    const direction = easyCustomization.backgroundGradient.direction === 'radial' 
-      ? 'radial-gradient(circle' 
-      : `linear-gradient(${easyCustomization.backgroundGradient.direction}`;
-    css += `.profile-card-container {
-      background: ${direction}, ${easyCustomization.backgroundGradient.color1}, ${easyCustomization.backgroundGradient.color2});
-    }\n`;
-  } else {
-    css += `.profile-card-container {
-      background: ${easyCustomization.backgroundColor};
-    }\n`;
-  }
-  
-  // Border radius
-  css += `.profile-card-container {
-    border-radius: ${easyCustomization.borderRadius}px;
-  }\n`;
-  
-  // Shadow and effects
-  let boxShadow = '';
-  if (easyCustomization.shadow) {
-    boxShadow += '0 15px 35px rgba(0, 0, 0, 0.3)';
-  }
-  if (easyCustomization.glow) {
-    if (boxShadow) boxShadow += ', ';
-    boxShadow += '0 0 20px rgba(102, 126, 234, 0.5)';
-  }
-  if (boxShadow) {
-    css += `.profile-card-container {
-      box-shadow: ${boxShadow};
-    }\n`;
-  }
-  
-  // Border
-  if (easyCustomization.border) {
-    css += `.profile-card-container {
-      border: 2px solid rgba(255, 255, 255, 0.3);
-    }\n`;
-  }
-  
-  // Banner height
-  css += `.profile-banner {
-    height: ${easyCustomization.bannerHeight}px;
-  }\n`;
-  
-  // Avatar size and frame
-  css += `.profile-avatar {
-    width: ${easyCustomization.avatarSize}px;
-    height: ${easyCustomization.avatarSize}px;
-    border-radius: ${easyCustomization.avatarFrame === 'circle' ? '50%' : '8px'};
-  }\n`;
-  
-  // Content padding
-  css += `.profile-content {
-    padding: ${easyCustomization.contentPadding}px;
-  }\n`;
-  
-  // Typography
-  const fontFamily = easyCustomization.fontFamily === 'default' ? 'inherit' : easyCustomization.fontFamily;
-  css += `.profile-card-container {
-    font-family: ${fontFamily};
-    font-size: ${easyCustomization.fontSize}px;
-  }\n`;
-  
-  // Text effects
-  let textShadow = '';
-  if (easyCustomization.textShadow) {
-    textShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
-  }
-  if (easyCustomization.textGlow) {
-    if (textShadow) textShadow += ', ';
-    textShadow += '0 0 10px currentColor';
-  }
-  if (textShadow) {
-    css += `.profile-display-name, .profile-username, .profile-bio {
-      text-shadow: ${textShadow};
-    }\n`;
-  }
-  
-  if (easyCustomization.textBold) {
-    css += `.profile-display-name, .profile-username, .profile-bio {
-      font-weight: bold;
-    }\n`;
-  }
-  
-  // Rainbow speed
-  if (displayNameAnimation === 'rainbow') {
-    css += `@keyframes rainbow {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-    .display-name-rainbow {
-      animation: rainbow ${rainbowSpeed}s ease-in-out infinite;
-    }\n`;
-  }
-  
-  // Element positions and scales
-  Object.entries(easyCustomization.elements).forEach(([element, props]) => {
-    if (!props.visible) {
-      css += `.${element} {
-        display: none;
+  try {
+    // Background - FIXED: Safe property access
+    if (easyCustomization.backgroundGradient?.enabled) {
+      const direction = easyCustomization.backgroundGradient.direction === 'radial' 
+        ? 'radial-gradient(circle' 
+        : `linear-gradient(${easyCustomization.backgroundGradient.direction}`;
+      css += `.profile-card-container {
+        background: ${direction}, ${easyCustomization.backgroundGradient.color1}, ${easyCustomization.backgroundGradient.color2}) !important;
       }\n`;
-    } else {
-      let transform = `translate(${props.x}px, ${props.y}px) scale(${props.scale})`;
-      css += `.${element} {
-        transform: ${transform};
-        position: relative;
+    } else if (easyCustomization.backgroundColor) {
+      css += `.profile-card-container {
+        background: ${easyCustomization.backgroundColor} !important;
       }\n`;
-      
-      if (props.width) {
-        css += `.${element} {
-          width: ${props.width}px;
-        }\n`;
-      }
-      
-      if (props.height) {
-        css += `.${element} {
-          height: ${props.height}px;
-        }\n`;
-      }
-      
-      if (props.color) {
-        css += `.${element} {
-          color: ${props.color} !important;
-        }\n`;
-      }
     }
-  });
+    
+    // Border radius
+    if (typeof easyCustomization.borderRadius === 'number') {
+      css += `.profile-card-container {
+        border-radius: ${easyCustomization.borderRadius}px !important;
+      }\n`;
+    }
+    
+    // Shadow and effects
+    let boxShadow = '';
+    if (easyCustomization.shadow) {
+      boxShadow += '0 15px 35px rgba(0, 0, 0, 0.3)';
+    }
+    if (easyCustomization.glow) {
+      if (boxShadow) boxShadow += ', ';
+      boxShadow += '0 0 20px rgba(102, 126, 234, 0.5)';
+    }
+    if (boxShadow) {
+      css += `.profile-card-container {
+        box-shadow: ${boxShadow} !important;
+      }\n`;
+    }
+    
+    // Border
+    if (easyCustomization.border) {
+      css += `.profile-card-container {
+        border: 2px solid rgba(255, 255, 255, 0.3) !important;
+      }\n`;
+    }
+    
+    // Banner height
+    if (typeof easyCustomization.bannerHeight === 'number') {
+      css += `.profile-banner {
+        height: ${easyCustomization.bannerHeight}px !important;
+      }\n`;
+    }
+    
+    // Avatar size and frame
+    if (typeof easyCustomization.avatarSize === 'number') {
+      css += `.profile-avatar {
+        width: ${easyCustomization.avatarSize}px !important;
+        height: ${easyCustomization.avatarSize}px !important;
+        border-radius: ${easyCustomization.avatarFrame === 'circle' ? '50%' : '8px'} !important;
+      }\n`;
+    }
+    
+    // Content padding
+    if (typeof easyCustomization.contentPadding === 'number') {
+      css += `.profile-content {
+        padding: ${easyCustomization.contentPadding}px !important;
+      }\n`;
+    }
+    
+    // Typography
+    const fontFamily = easyCustomization.fontFamily === 'default' ? 'inherit' : easyCustomization.fontFamily;
+    if (fontFamily && typeof easyCustomization.fontSize === 'number') {
+      css += `.profile-card-container {
+        font-family: ${fontFamily} !important;
+        font-size: ${easyCustomization.fontSize}px !important;
+      }\n`;
+    }
+    
+    // Text effects
+    let textShadow = '';
+    if (easyCustomization.textShadow) {
+      textShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
+    }
+    if (easyCustomization.textGlow) {
+      if (textShadow) textShadow += ', ';
+      textShadow += '0 0 10px currentColor';
+    }
+    if (textShadow) {
+      css += `.profile-display-name, .profile-username, .profile-bio {
+        text-shadow: ${textShadow} !important;
+      }\n`;
+    }
+    
+    if (easyCustomization.textBold) {
+      css += `.profile-display-name, .profile-username, .profile-bio {
+        font-weight: bold !important;
+      }\n`;
+    }
+    
+    // Rainbow speed
+    if (displayNameAnimation === 'rainbow' && typeof rainbowSpeed === 'number') {
+      css += `@keyframes rainbow {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .display-name-rainbow {
+        animation: rainbow ${rainbowSpeed}s ease-in-out infinite !important;
+      }\n`;
+    }
+    
+    // Element positions and scales - FIXED: Safe iteration
+    if (easyCustomization.elements && typeof easyCustomization.elements === 'object') {
+      Object.entries(easyCustomization.elements).forEach(([element, props]) => {
+        if (!props || typeof props !== 'object') return;
+        
+        if (props.visible === false) {
+          css += `.${element} {
+            display: none !important;
+          }\n`;
+        } else {
+          const x = typeof props.x === 'number' ? props.x : 0;
+          const y = typeof props.y === 'number' ? props.y : 0;
+          const scale = typeof props.scale === 'number' ? props.scale : 1;
+          
+          let transform = `translate(${x}px, ${y}px) scale(${scale})`;
+          css += `.${element} {
+            transform: ${transform} !important;
+            position: relative !important;
+          }\n`;
+          
+          if (typeof props.width === 'number') {
+            css += `.${element} {
+              width: ${props.width}px !important;
+            }\n`;
+          }
+          
+          if (typeof props.height === 'number') {
+            css += `.${element} {
+              height: ${props.height}px !important;
+            }\n`;
+          }
+          
+          if (props.color && typeof props.color === 'string') {
+            css += `.${element} {
+              color: ${props.color} !important;
+            }\n`;
+          }
+          
+          if (props.fontFamily && typeof props.fontFamily === 'string') {
+            const elementFontFamily = props.fontFamily === 'default' ? 'inherit' : props.fontFamily;
+            css += `.${element} {
+              font-family: ${elementFontFamily} !important;
+            }\n`;
+          }
+          
+          if (typeof props.fontSize === 'number') {
+            css += `.${element} {
+              font-size: ${props.fontSize}px !important;
+            }\n`;
+          }
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error generating CSS from easyCustomization:', error);
+    console.log('easyCustomization data:', easyCustomization);
+    // Return default CSS if generation fails
+    return getDefaultProfileCSS();
+  }
   
   return css;
 };

@@ -111,9 +111,13 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     currentUser,
     mountedRef,
     onProfileLoaded: ({ user, profile }) => {
+      console.log('ProfileCustomizer: Profile loaded callback', { user, profile });
       setCurrentUser(user);
       if (profile) {
-        setCustomCSS(profile.profile_card_css || '');
+        // FIXED: Always set default CSS first to prevent undefined states
+        const profileCSS = profile.profile_card_css || getDefaultProfileCSS();
+        setCustomCSS(profileCSS);
+        
         setBio(profile.bio || '');
         setDisplayName(profile.display_name || '');
         setUsername(profile.username || '');
@@ -131,15 +135,46 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         if (profile.avatar_url) setAvatarPreview(profile.avatar_url);
         if (profile.banner_url) setBannerPreview(profile.banner_url);
         
-        // Load easy customization data
-        if (profile.easy_customization_data) {
-          try {
-            const easyData = JSON.parse(profile.easy_customization_data);
-            setEasyCustomization({ ...easyCustomization, ...easyData });
-          } catch (e) {
-            console.warn('Failed to parse easy customization data');
+        // FIXED: Safe parsing with comprehensive error handling
+        try {
+          if (profile.easy_customization_data && typeof profile.easy_customization_data === 'string') {
+            const parsedData = JSON.parse(profile.easy_customization_data);
+            console.log('Successfully parsed easy customization data:', parsedData);
+            
+            // Validate the parsed data structure
+            if (parsedData && typeof parsedData === 'object' && parsedData.elements) {
+              setEasyCustomization({ 
+                ...DEFAULT_EASY_CUSTOMIZATION, 
+                ...parsedData,
+                // Ensure elements always exists with proper defaults
+                elements: {
+                  ...DEFAULT_EASY_CUSTOMIZATION.elements,
+                  ...parsedData.elements
+                }
+              });
+            } else {
+              console.warn('Parsed easy customization data is invalid, using defaults');
+              setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+            }
+          } else {
+            console.log('No easy customization data found, using defaults');
+            setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
           }
+        } catch (e) {
+          console.error('Failed to parse easy customization data:', e);
+          console.log('Raw easy_customization_data:', profile.easy_customization_data);
+          // FIXED: Always fallback to defaults instead of leaving undefined
+          setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
         }
+      } else {
+        // FIXED: Initialize with proper defaults for new profile
+        console.log('No profile found, initializing with defaults');
+        setCustomCSS(getDefaultProfileCSS());
+        setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+        setStatus('online'); // FIXED: Set default status to prevent "Offline" showing
+        setDisplayNameColor('#ffffff');
+        setDisplayNameAnimation('none');
+        setRainbowSpeed(3);
       }
     }
   });
@@ -168,14 +203,30 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   // Load profile when component opens
   useEffect(() => {
     if (isOpen) {
+      console.log('ProfileCustomizer: Component opened, loading profile');
       loadCurrentProfile();
     }
   }, [isOpen, loadCurrentProfile]);
 
+  // FIXED: Ensure default CSS is set when CSS mode changes
+  useEffect(() => {
+    if (cssMode === 'custom' && !customCSS) {
+      console.log('Setting default CSS for custom mode');
+      setCustomCSS(getDefaultProfileCSS());
+    }
+  }, [cssMode, customCSS, setCustomCSS]);
+
+  // FIXED: Initialize CSS properly when component mounts
+  useEffect(() => {
+    if (!customCSS && cssMode === 'custom') {
+      setCustomCSS(getDefaultProfileCSS());
+    }
+  }, []);
+
   // Handle save
   const handleSave = async () => {
     const success = await saveProfile({
-      customCSS,
+      customCSS: customCSS || getDefaultProfileCSS(), // FIXED: Ensure CSS is never empty
       bio,
       displayName,
       username,
@@ -391,7 +442,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                   </div>
                   <div className="flex-1 p-3 overflow-auto bg-gray-100 dark:bg-gray-900 rounded-lg">
                     <EnhancedProfilePreview
-                      customCSS={customCSS}
+                      customCSS={customCSS || getDefaultProfileCSS()}
                       bio={bio}
                       displayName={displayName}
                       username={username}

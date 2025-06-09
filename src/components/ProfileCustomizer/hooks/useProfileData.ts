@@ -1,5 +1,5 @@
 // src/components/ProfileCustomizer/hooks/useProfileData.ts
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { sanitizeCSS } from '@/lib/SafeCSS';
 import { useToast } from '@/hooks/use-toast';
@@ -26,17 +26,28 @@ export const useProfileData = ({
   const [saving, setSaving] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null | 'checking'>(null);
   
+  // Track if profile has been loaded to prevent repeated loads
+  const profileLoadedRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
+  
   const { toast } = useToast();
   const debouncedUsername = useDebounce(username, 500);
 
-  // Username availability check
+  // Username availability check - FIXED to prevent infinite loops
   useEffect(() => {
     const checkUsername = async () => {
-      if (!debouncedUsername || debouncedUsername.length < 3 || !currentUser || !mountedRef.current) {
+      // Early returns to prevent unnecessary API calls
+      if (!debouncedUsername || 
+          debouncedUsername.length < 3 || 
+          !currentUser || 
+          !mountedRef.current ||
+          saving || 
+          loading) {
         setUsernameAvailable(null);
         return;
       }
 
+      // If username matches original, it's available (user's own username)
       if (debouncedUsername === originalUsername) {
         setUsernameAvailable(true);
         return;
@@ -49,7 +60,8 @@ export const useProfileData = ({
           .from('user_profiles')
           .select('username')
           .eq('username', debouncedUsername)
-          .neq('id', currentUser.id);
+          .neq('id', currentUser.id)
+          .limit(1); // Limit to 1 for performance
 
         if (!mountedRef.current) return;
 
@@ -67,13 +79,23 @@ export const useProfileData = ({
       }
     };
 
-    checkUsername();
-  }, [debouncedUsername, currentUser, originalUsername, mountedRef]);
+    // Only check if conditions are met
+    if (currentUser && debouncedUsername && debouncedUsername.length >= 3) {
+      checkUsername();
+    }
+  }, [debouncedUsername, currentUser?.id, originalUsername, mountedRef, saving, loading]);
 
+  // FIXED: Stable loadCurrentProfile function that prevents infinite loops
   const loadCurrentProfile = useCallback(async () => {
-    if (!mountedRef.current) return;
+    // Prevent multiple simultaneous loads
+    if (!mountedRef.current || loading || saving) {
+      console.log('ProfileCustomizer: Skipping load - component unmounted or already loading');
+      return null;
+    }
     
     setLoading(true);
+    console.log('ProfileCustomizer: Starting profile load...');
+    
     try {
       console.log('ProfileCustomizer: Getting current user...');
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -87,7 +109,17 @@ export const useProfileData = ({
         return null;
       }
 
-      if (!mountedRef.current) return null;
+      if (!mountedRef.current) {
+        console.log('ProfileCustomizer: Component unmounted during auth check');
+        return null;
+      }
+
+      // Check if we already loaded this user's profile
+      if (profileLoadedRef.current && lastUserIdRef.current === user.id) {
+        console.log('ProfileCustomizer: Profile already loaded for this user');
+        setLoading(false);
+        return { user, profile: null, alreadyLoaded: true };
+      }
 
       console.log('ProfileCustomizer: Loading profile for user:', user.id);
 
@@ -108,22 +140,35 @@ export const useProfileData = ({
           easy_customization_data,
           badges
         `)
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .maybeSingle(); // Use maybeSingle instead of expecting array
 
-      if (!mountedRef.current) return null;
+      if (!mountedRef.current) {
+        console.log('ProfileCustomizer: Component unmounted during profile fetch');
+        return null;
+      }
 
       if (error) {
         console.error('ProfileCustomizer: Error loading profile:', error);
-        return null;
-      } else if (data && data.length > 0) {
-        const profile = data[0];
+        // Don't show error for missing profile (PGRST116)
+        if (error.code !== 'PGRST116') {
+          toast({
+            title: "Error",
+            description: "Failed to load profile data"
+          });
+        }
+        // Still call onProfileLoaded for new profiles
+        onProfileLoaded({ user, profile: null });
+        profileLoadedRef.current = true;
+        lastUserIdRef.current = user.id;
+        return { user, profile: null };
+      } else {
+        const profile = data;
         console.log('ProfileCustomizer: Profile data loaded:', profile);
         onProfileLoaded({ user, profile });
+        profileLoadedRef.current = true;
+        lastUserIdRef.current = user.id;
         return { user, profile };
-      } else {
-        // Initialize defaults for new profile
-        onProfileLoaded({ user, profile: null });
-        return { user, profile: null };
       }
     } catch (error) {
       console.error('ProfileCustomizer: Exception loading profile:', error);
@@ -139,7 +184,15 @@ export const useProfileData = ({
         setLoading(false);
       }
     }
-  }, [mountedRef, onProfileLoaded, toast]);
+  }, [mountedRef, onProfileLoaded, toast, loading, saving]); // Stable dependencies
+
+  // Reset profile loaded state when user changes
+  useEffect(() => {
+    if (currentUser?.id && lastUserIdRef.current !== currentUser.id) {
+      profileLoadedRef.current = false;
+      lastUserIdRef.current = null;
+    }
+  }, [currentUser?.id]);
 
   const handleSave = useCallback(async (profileData: {
     customCSS: string;
@@ -158,7 +211,10 @@ export const useProfileData = ({
     badges: Badge[];
     easyCustomization: EasyCustomization;
   }) => {
-    if (saving || !mountedRef.current) return false;
+    if (saving || !mountedRef.current) {
+      console.log('ProfileCustomizer: Save already in progress or component unmounted');
+      return false;
+    }
 
     if (!currentUser) {
       toast({
@@ -185,16 +241,20 @@ export const useProfileData = ({
     }
 
     setSaving(true);
+    console.log('ProfileCustomizer: Starting save process...');
     
     try {
       let finalAvatarUrl = profileData.avatarUrl;
       let finalBannerUrl = profileData.bannerUrl;
 
+      // Upload files if present
       if (profileData.avatarFile) {
+        console.log('ProfileCustomizer: Uploading avatar...');
         finalAvatarUrl = await uploadFile(profileData.avatarFile, 'avatars', currentUser.id);
       }
 
       if (profileData.bannerFile) {
+        console.log('ProfileCustomizer: Uploading banner...');
         finalBannerUrl = await uploadFile(profileData.bannerFile, 'banners', currentUser.id);
       }
 
@@ -214,15 +274,19 @@ export const useProfileData = ({
         banner_url: finalBannerUrl,
         badges: JSON.stringify(profileData.badges),
         easy_customization_data: JSON.stringify(profileData.easyCustomization),
+        updated_at: new Date().toISOString(),
         last_seen: new Date().toISOString()
       };
 
+      console.log('ProfileCustomizer: Checking if profile exists...');
       const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('id')
-        .eq('id', currentUser.id);
+        .eq('id', currentUser.id)
+        .maybeSingle();
 
-      if (existingProfile && existingProfile.length > 0) {
+      if (existingProfile) {
+        console.log('ProfileCustomizer: Updating existing profile...');
         const { error: updateError } = await supabase
           .from('user_profiles')
           .update(saveData)
@@ -232,10 +296,12 @@ export const useProfileData = ({
           throw new Error(`Failed to update profile: ${updateError.message}`);
         }
       } else {
+        console.log('ProfileCustomizer: Creating new profile...');
         const insertData = {
           id: currentUser.id,
           ...saveData,
-          profile_complete: true
+          profile_complete: true,
+          created_at: new Date().toISOString()
         };
 
         const { error: insertError } = await supabase
@@ -247,10 +313,14 @@ export const useProfileData = ({
         }
       }
 
+      console.log('ProfileCustomizer: Save completed successfully');
       toast({
         title: "Success",
         description: "Profile customization saved!"
       });
+
+      // Reset the profile loaded flag so next open will reload fresh data
+      profileLoadedRef.current = false;
 
       return true;
 
