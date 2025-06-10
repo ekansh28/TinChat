@@ -1,9 +1,8 @@
 
 // src/components/ProfileCustomizer/index.ts
 import React from 'react';
-
-// At the top with other imports
-import { ProfileCustomizer } from './ProfileCustomizer';
+// Change this line:
+import ProfileCustomizer from './ProfileCustomizer'; // Import as default
 
 // Enhanced preview component
 export { EnhancedProfilePreview } from './EnhancedProfilePreview';

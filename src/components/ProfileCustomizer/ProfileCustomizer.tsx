@@ -504,3 +504,5 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     </>
   );
 };
+
+export default ProfileCustomizer; // <--- This line is the fix!

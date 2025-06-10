@@ -14,7 +14,7 @@ import MainCard from '@/components/home/MainCard';
 import SideLinks from '@/components/home/SideLinks';
 import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
-import { ProfileCustomizer } from '@/components/ProfileCustomizer';
+import ProfileCustomizer from '@/components/ProfileCustomizer'; // Remove the curly braces
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 
