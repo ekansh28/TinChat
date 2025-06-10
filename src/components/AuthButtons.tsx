@@ -6,7 +6,7 @@ import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button-themed';
 import { usePathname, useRouter } from 'next/navigation';
 import { Settings } from 'lucide-react';
-import { ProfileCustomizer } from '@/components/ProfileCustomizer';
+import  ProfileCustomizer from '@/components/ProfileCustomizer';
 
 export default function AuthButtons() {
   const [user, setUser] = useState<User | null>(null);
