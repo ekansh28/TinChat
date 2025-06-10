@@ -1,22 +1,15 @@
-// ===== src/lib/utils.ts - Add missing playSound function =====
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+// Add this to your existing src/lib/utils.ts file
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-
-// Add missing playSound function
-export function playSound(soundFile: string, volume: number = 0.5) {
+export const playSound = (filename: string) => {
   try {
-    if (typeof window !== 'undefined' && 'Audio' in window) {
-      const audio = new Audio(`/sounds/${soundFile}`);
-      audio.volume = Math.max(0, Math.min(1, volume));
-      audio.play().catch(error => {
-        console.warn('Could not play sound:', error);
+    if (typeof window !== 'undefined') {
+      const audio = new Audio(`/sounds/${filename}`);
+      audio.volume = 0.5;
+      audio.play().catch(err => {
+        console.warn('Could not play sound:', err);
       });
     }
-  } catch (error) {
-    console.warn('Error playing sound:', error);
+  } catch (err) {
+    console.warn('Error creating audio:', err);
   }
-}
+};

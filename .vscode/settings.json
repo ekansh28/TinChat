@@ -1,4 +1,18 @@
 {
     "IDX.aI.enableInlineCompletion": true,
-    "IDX.aI.enableCodebaseIndexing": true
+    "IDX.aI.enableCodebaseIndexing": true,
+    "folder-color.pathColors": [
+        {
+            "folderPath": "chat\\ChatPageClientContent.tsx\\",
+            "color": "foldercolorizer.color_330099"
+        },
+        {
+            "folderPath": "chat\\page.tsx\\",
+            "color": "foldercolorizer.color_00ccff"
+        },
+        {
+            "folderPath": "chat\\components\\",
+            "color": "foldercolorizer.color_3300ff"
+        }
+    ]
 }
