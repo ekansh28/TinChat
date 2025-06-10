@@ -4,6 +4,8 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { z } from 'zod';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { User } from './types/User';
+import { Room } from './services/RoomManager';
 
 // Validation schemas
 const StringArraySchema = z.array(z.string().max(100)).max(10);
@@ -140,8 +142,8 @@ const io = new SocketIOServer(server, {
 // Global state
 const socketToAuthId: { [socketId: string]: string } = {};
 const authIdToSocketId: { [authId: string]: string } = {};
-const waitingUsers: { text: any[], video: any[] } = { text: [], video: [] };
-const rooms: { [roomId: string]: any } = {};
+const waitingUsers: Record<'text' | 'video', any[]> = { text: [], video: [] };
+const rooms: Record<string, Room> = {};
 let onlineUserCount = 0;
 const lastMatchRequest: { [socketId: string]: number } = {};
 const FIND_PARTNER_COOLDOWN_MS = 2000;
@@ -209,7 +211,7 @@ async function updateUserStatus(authId: string, status: string): Promise<void> {
 }
 
 function removeFromWaitingLists(socketId: string): void {
-  ['text', 'video'].forEach(type => {
+  (['text', 'video'] as const).forEach(type => {
     const index = waitingUsers[type].findIndex(u => u.id === socketId);
     if (index !== -1) {
       waitingUsers[type].splice(index, 1);
@@ -218,7 +220,7 @@ function removeFromWaitingLists(socketId: string): void {
   });
 }
 
-function findMatch(currentUser: any): any {
+function findMatch(currentUser: User): User | null {
   console.log(`[MATCH_START] Finding match for ${currentUser.id} (${currentUser.chatType})`);
   
   const queue = waitingUsers[currentUser.chatType];
@@ -360,10 +362,13 @@ io.on('connection', (socket) => {
         const partnerSocket = io.sockets.sockets.get(matchedPartner.id);
         if (partnerSocket?.connected) {
           const roomId = `${currentUser.id}#${Date.now()}`;
+          const now = Date.now(); // Get the current timestamp
           rooms[roomId] = { 
             id: roomId, 
             users: [currentUser.id, matchedPartner.id], 
-            chatType 
+            chatType,
+            createdAt: now,
+            lastActivity: now,
           };
 
           socket.join(roomId);
@@ -409,7 +414,7 @@ io.on('connection', (socket) => {
           console.log(`[MATCH_SUCCESS] Room ${roomId} created for ${currentUser.id} and ${matchedPartner.id}`);
         } else {
           console.warn(`[MATCH_FAIL] Partner ${matchedPartner.id} disconnected`);
-          waitingUsers[currentUser.chatType].push(currentUser);
+          waitingUsers[chatType].push(currentUser);
           socket.emit('waitingForPartner');
         }
       } else {
