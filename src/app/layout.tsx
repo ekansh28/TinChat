@@ -22,12 +22,12 @@ export default function RootLayout({
         {/* Load 98.css and 7.css from CDN */}
         <link 
           rel="stylesheet" 
-          href="https://unpkg.com/98.css@0.1.21/dist/98.css"
+          href="https://unpkg.com/98.css"
           crossOrigin="anonymous"
         />
         <link 
           rel="stylesheet" 
-          href="https://unpkg.com/7.css@0.1.2/dist/7.css"
+          href="https://unpkg.com/7.css"
           crossOrigin="anonymous"
         />
       </head>
