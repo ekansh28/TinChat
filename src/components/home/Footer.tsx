@@ -2,6 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import styles from '@/styles/page.module.css';
 
 interface FooterProps {
   isMobile: boolean;
@@ -10,11 +11,11 @@ interface FooterProps {
 export default function Footer({ isMobile }: FooterProps) {
   return (
     <footer className={cn(
-      "mt-auto py-4 text-center relative z-10",
+      styles.homeFooter,
       isMobile && "py-3"
     )}>
       <div className="max-w-5xl mx-auto">
-        <div className="border-t-2 border-gray-300 dark:border-gray-600 my-4 w-full"></div>
+        <div className={styles.footerDivider}></div>
       </div>
       <p className={cn(
         "text-gray-500 dark:text-gray-400",

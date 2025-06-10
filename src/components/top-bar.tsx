@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useTheme, type Theme } from '@/components/theme-provider';
 import { usePathname } from 'next/navigation';
-import { Label } from '@/components/ui/label-themed';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select-themed';
 import { cn } from '@/lib/utils';
 
 const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
@@ -24,7 +21,6 @@ const availableStamps: ThemeStamp[] = [
 ];
 
 export function TopBar() {
-  const { currentTheme, selectedTheme, setTheme } = useTheme();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
@@ -110,45 +106,23 @@ export function TopBar() {
     if (!mounted) return;
     
     // If we're on the home page, always clear any sub-themes
-    if (pathname === '/' && selectedTheme === 'theme-98') {
+    if (pathname === '/') {
       console.log("TopBar: On home page, clearing any sub-themes");
       applyWin98SubTheme(null);
     }
-    // If we're NOT on home page and theme is 98, apply stored subtheme
-    else if (pathname !== '/' && selectedTheme === 'theme-98') {
+    // If we're NOT on home page, apply stored subtheme
+    else if (pathname !== '/') {
       const storedSubTheme = localStorage.getItem('selectedWin98SubTheme');
       if (storedSubTheme) {
         console.log("TopBar: Not on home page, applying stored sub-theme:", storedSubTheme);
         applyWin98SubTheme(storedSubTheme);
       }
     }
-  }, [pathname, selectedTheme, applyWin98SubTheme, mounted]);
+  }, [pathname, applyWin98SubTheme, mounted]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const handleThemeChange = (newThemeString: string) => {
-    if (newThemeString === 'theme-98' || newThemeString === 'theme-7') {
-      const newTheme = newThemeString as Theme;
-      console.log("TopBar: User selected theme:", newTheme);
-      setTheme(newTheme); 
-      
-      if (newTheme === 'theme-7') {
-        applyWin98SubTheme(null); 
-      } else if (newTheme === 'theme-98') {
-        // If on home page, don't apply any sub-theme
-        if (pathname === '/') {
-          applyWin98SubTheme(null);
-        } else {
-          // If not on home page, apply stored sub-theme
-          const storedSubTheme = localStorage.getItem('selectedWin98SubTheme');
-          applyWin98SubTheme(storedSubTheme); 
-        }
-      }
-    }
-    setIsCustomizerOpen(false);
-  };
 
   const handleSubThemeSelect = useCallback((cssFile: string | null) => {
     // If on home page, don't allow sub-theme selection (or reset immediately)
@@ -213,54 +187,18 @@ export function TopBar() {
   if (!mounted) {
     return (
       <div className="flex justify-end items-center p-2 space-x-2">
-        <Label htmlFor="theme-select-dropdown" className="mr-2" suppressHydrationWarning>Theme:</Label>
-        <select
-          id="theme-select-dropdown"
-          value="theme-98" 
-          disabled
-          className="w-[120px] field-row"
-          style={{ height: '21px' }}
-          onChange={() => {}} 
-        >
-          <option value="theme-98">Windows 98</option>
-          <option value="theme-7">Windows 7</option>
-        </select>
+        <span className="mr-2 text-sm">Theme: Windows 98</span>
         {/* Don't show customize icon during loading */}
       </div>
     );
   }
 
   return (
-    <div className={cn("flex justify-end items-center p-2 space-x-2", currentTheme === 'theme-7' ? 'top-bar-main-body' : '')}>
-      <Label htmlFor={currentTheme === 'theme-98' ? "theme-select-dropdown" : "theme-select-custom"} className="mr-2" suppressHydrationWarning>Theme:</Label>
-      {currentTheme === 'theme-98' ? (
-        <select
-          id="theme-select-dropdown"
-          value={selectedTheme} 
-          onChange={(e) => handleThemeChange(e.target.value)}
-          className="w-[120px] field-row"
-          style={{ height: '21px' }}
-        >
-          <option value="theme-98">Windows 98</option>
-          <option value="theme-7">Windows 7</option>
-        </select>
-      ) : (
-        <Select
-          value={selectedTheme} 
-          onValueChange={(value: Theme) => handleThemeChange(value)}
-        >
-          <SelectTrigger id="theme-select-custom" className="w-[120px]">
-            <SelectValue placeholder="Select theme" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="theme-98">Windows 98</SelectItem>
-            <SelectItem value="theme-7">Windows 7</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
+    <div className="flex justify-end items-center p-2 space-x-2">
+      <span className="mr-2 text-sm">Theme: Windows 98</span>
 
-      {/* Only show customize icon if theme is 98 AND not on home page */}
-      {currentTheme === 'theme-98' && pathname !== '/' && (
+      {/* Only show customize icon if NOT on home page */}
+      {pathname !== '/' && (
         <img
           ref={themeIconRef}
           src="/icons/theme.png"
@@ -271,8 +209,8 @@ export function TopBar() {
         />
       )}
 
-      {/* Only show customizer if theme is 98 AND not on home page */}
-      {isCustomizerOpen && currentTheme === 'theme-98' && pathname !== '/' && (
+      {/* Only show customizer if NOT on home page */}
+      {isCustomizerOpen && pathname !== '/' && (
         <div
           ref={customizerWindowRef}
           className="window fixed z-50"

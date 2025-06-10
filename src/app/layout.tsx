@@ -25,11 +25,7 @@ export default function RootLayout({
           href="https://unpkg.com/98.css"
           crossOrigin="anonymous"
         />
-        <link 
-          rel="stylesheet" 
-          href="https://unpkg.com/7.css"
-          crossOrigin="anonymous"
-        />
+
       </head>
       <body className={inter.className}>
         <ThemeProvider

@@ -1,49 +1,374 @@
-/* Add these animations to your src/app/globals.css file */
 
-.display-name-rainbow {
-  background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
-  background-size: 400% 400%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: rainbow 3s ease-in-out infinite;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* For debugging purposes: outline all elements */
+/* * {
+  outline: 1px solid red !important;
+} */
+
+:root {
+  --accent-purple: #A020F0; /* Define the vivid purple accent color */
 }
 
-@keyframes rainbow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+html, body {
+  height: 100%;
+  margin: 0; /* Ensure no default margin */
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.display-name-gradient {
-  background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
-  background-size: 300% 300%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradientShift 4s ease-in-out infinite;
+body {
+  font-family: sans-serif; /* Default fallback font */
+  /* Default background/foreground, will be overridden by themes */
+  background-color: #fff;
+  color: #000;
+
+  /* Make body a flex container to manage its direct children (like #__next) */
+  display: flex;
+  flex-direction: column;
 }
 
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+#__next { /* This is the root div Next.js typically injects */
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Make #__next take all available space in body */
+  width: 100%; /* Ensure #__next also takes full width */
 }
 
-.display-name-pulse {
-  animation: pulse 2s ease-in-out infinite;
+
+*, *::before, *::after {
+  box-sizing: inherit;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
+/* Add specific styles for interactive elements using the accent color */
+button.accent, a.accent {
+  color: var(--accent-purple);
+  border-color: var(--accent-purple); /* Example usage */
 }
 
-.display-name-glow {
-  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
-  animation: glow 2s ease-in-out infinite alternate;
+button.accent:hover, a.accent:hover {
+  filter: brightness(1.1); /* Slight interaction feedback */
 }
 
-@keyframes glow {
-  from { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
-  to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
+/* Styles for 98.css theme background and font */
+html.theme-98 body {
+  font-family: "Pixelated MS Sans Serif", Tahoma, sans-serif; /* Ensure Win98 font */
+  background-image: url('/wallpapers/stars.gif');
+  background-repeat: repeat;
+  background-attachment: fixed;
+  background-size: 200px;
+  background-color: #008080; /* Teal fallback if image fails, also default 98 bg */
+  color: #000000;
 }
+
+
+/* Styles for 7.css theme background */
+html.theme-7 {
+    /* Retain if other html.theme-7 specific (non-background) styles are needed */
+}
+
+/* Apply Frutiger background directly to body for theme-7, overriding stars */
+html.theme-7 body {
+  background-image: url("/wallpapers/frutiger1.jpeg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  font-family: "Segoe UI", Frutiger, "Frutiger Linotype", "Dejavu Sans", "Helvetica Neue", Arial, sans-serif; /* Typical Win7 font stack */
+  color: #000; /* Default text color for Win7 theme */
+}
+
+
+/* Basic styling for the video elements */
+video {
+  width: 100%;
+  height: 100%; /* Make video fill container */
+  object-fit: cover; /* Ensure video covers the area */
+  background-color: #000; /* Placeholder background */
+}
+
+
+/* Basic styling for 98.css tree-view used for chat */
+.theme-98 .tree-view {
+  background-color: white;
+  padding: 4px;
+  margin: 0;
+}
+
+/* Styles for 7.css window body padding helper */
+.theme-7 .window-body.has-space {
+    padding: 12px; /* Adjust padding as needed for Win7 style */
+}
+
+/* Ensure window body with glass effect has a minimum contrast background for text */
+.theme-7 .window.glass .window-body.has-space { /* target only chat window body */
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.theme-7 .window.glass .window-body.glass-body-padding {
+    padding: 8px; /* Example padding, adjust as needed for glass windows */
+    background-color: rgba(255, 255, 255, 0.1); /* Ensure some background for readability */
+}
+
+.theme-98 .window-body.p-0 {
+    padding: 0 !important;
+}
+.theme-98 .window-body.p-0\.5 {
+  padding: 2px !important; /* 98.css typically has a small padding, 0.5px is not standard */
+}
+
+
+/* Styles for themed input with tags */
+.themed-input {
+    /* This class is applied to the container div */
+}
+
+.theme-98 .themed-input {
+    background-color: white;
+    border: 1px solid #808080; /* This is simplified, 98.css borders are more complex */
+    box-shadow: inset 1px 1px #000, inset -1px -1px #dfdfdf, inset 2px 2px #808080, inset -2px -2px #fff;
+}
+
+.theme-7 .themed-input {
+    background-color: white;
+    border: 1px solid #a3a3a3;
+}
+
+.themed-input-inner {
+    border: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    padding: 0 !important; /* Adjusted for better integration */
+    outline: none !important;
+    flex-grow: 1;
+    min-width: 60px;
+}
+
+
+@keyframes rainbow-text-animation {
+  0% { color: hsl(0, 100%, 50%); }
+  16.66% { color: hsl(60, 100%, 50%); }
+  33.33% { color: hsl(120, 100%, 50%); }
+  50% { color: hsl(180, 100%, 50%); }
+  66.66% { color: hsl(240, 100%, 50%); }
+  83.33% { color: hsl(300, 100%, 50%); }
+  100% { color: hsl(0, 100%, 50%); }
+}
+
+.animate-rainbow-text {
+  animation: rainbow-text-animation 10s linear infinite;
+}
+
+.animate-rainbow-text-alt {
+  animation: rainbow-text-animation 10s linear infinite;
+  animation-delay: 5s; /* Stagger the animation for the second button */
+}
+
+
+/* Window body content class to handle flex layout within window body */
+.window-body-content {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1; /* Allows messages area to take up available space */
+  overflow: hidden; /* Prevents content from overflowing the window body */
+}
+
+/* Ensure that for 7.css, video window bodies have no padding */
+.theme-7 .window-body.p-0 {
+  padding: 0 !important;
+}
+
+/* Style for the input area in 98.css theme */
+.theme-98 .input-area.status-bar {
+  /* This will apply status-bar styling from 98.css */
+  padding: 2px 3px; /* Typical 98.css status bar padding */
+  border-top: 1px solid #808080; /* Separator line */
+}
+
+.theme-7 .input-area {
+  background-color: transparent; /* Make input area background transparent for theme-7 */
+}
+
+/* Custom utility for very small text */
+.text-xxs {
+  font-size: 0.625rem; /* 10px if base is 16px */
+  line-height: 0.875rem; /* Adjust line height accordingly */
+}
+
+/* Additional style for scroll area if needed */
+.scroll-area-viewport {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ensure no-padding-window-body for 98.css applies no padding to window-body */
+.theme-98 .window.no-padding-window-body > .window-body {
+    padding: 0 !important;
+}
+
+/* For 7.css, ensure title bar text is visible on glass and has shadow */
+.theme-7 .window.glass .title-bar .title-bar-text {
+    color: #000;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+}
+
+/* Themed scrollbar styles */
+.themed-scrollbar-98 {
+  background-color: #c0c0c0; /* silver */
+}
+.themed-scrollbar-98 > [data-radix-scroll-area-thumb] {
+  background-color: #808080; /* gray, with button styles from 98.css it will look raised */
+  border-top: 1px solid #dfdfdf;
+  border-left: 1px solid #dfdfdf;
+  border-right: 1px solid #000000;
+  border-bottom: 1px solid #000000;
+  box-shadow: inset 1px 1px #fff, inset -1px -1px gray, 1px 1px gray;
+}
+
+.themed-scrollbar-7 {
+  background: rgba(200, 200, 200, 0.5); /* Light gray, slightly transparent */
+}
+.themed-scrollbar-7 > [data-radix-scroll-area-thumb] {
+  background-color: #a0a0a0; /* Darker gray for the thumb */
+  border-radius: 3px;
+}
+.themed-scrollbar-7:hover {
+    background: rgba(180,180,180,0.7);
+}
+.themed-scrollbar-7 > [data-radix-scroll-area-thumb]:hover {
+    background-color: #808080;
+}
+
+/* Make the TopBar main background transparent for theme-7 */
+.theme-7 .top-bar-main-body {
+  background-color: transparent;
+}
+
+/* Ensure title bar text is left-aligned and has shadow in theme-7 */
+/* Also applies to non-glass windows */
+.title-bar-text {
+  flex-grow: 1; /* Ensures the text container can expand */
+  text-align: left !important; /* Forces text to the left */
+}
+.theme-7 .title-bar .title-bar-text { /* Increased specificity for theme-7 title bar text */
+  color: #000;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.4); /* Added text shadow */
+}
+
+
+/* Glassmorphism Button for Theme 7 */
+.theme-7 button.glass-button-styled {
+  background: rgba(255, 255, 255, 0.15); /* Lighter, more translucent base */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); /* Safari */
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px; /* Curved corners */
+  color: #ffffff; /* White text */
+  padding: 6px 12px; /* Custom padding */
+  font-size: 0.875rem; /* 14px */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Subtle text shadow for readability */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), /* Softer outer shadow */
+              inset 0 1px 0 rgba(255, 255, 255, 0.25), /* Inner highlight for 3D effect */
+              inset 0 -1px 0 rgba(0, 0, 0, 0.1); /* Inner bottom shadow */
+  transition: background 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.1s ease-out;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.theme-7 button.glass-button-styled:hover {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.3),
+              inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+
+.theme-7 button.glass-button-styled:active {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2),
+              inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  transform: translateY(1px);
+}
+
+.theme-7 button.glass-button-styled:disabled,
+.theme-7 button.glass-button-styled[disabled] {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  box-shadow: none;
+  cursor: not-allowed;
+  text-shadow: none;
+}
+
+/* Text shadow for message content in theme-7 */
+.theme-7-text-shadow {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* For theme-98, completely hide the video feed title bars */
+.theme-98 .video-feed-title-bar {
+  height: 0px !important;
+  min-height: 0px !important;
+  padding: 0px !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* For theme-7, style the video feed title bar to be shorter */
+.theme-7 .video-feed-title-bar {
+  height: 12px !important; /* New reduced height, approx 50% of typical 21-25px */
+  min-height: 12px !important;
+  padding: 0 3px !important; /* Keep horizontal padding, remove vertical for controls (if any) */
+  background: transparent !important; /* To let parent's .glass effect show through */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important; /* Light separator for glass */
+  overflow: hidden; /* Hide any overflow */
+  display: flex; /* Standard for title-bar */
+  align-items: center; /* Standard for title-bar */
+}
+
+/* Ensure the .title-bar-text inside video feed title bars (which is empty) doesn't add height or show */
+.theme-7 .video-feed-title-bar .title-bar-text {
+    display: none !important;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+html,
+body {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* CSS for hiding/showing custom cursors on interactive element hover */
+button:hover,
+a:hover,
+select:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+[role="button"]:hover,
+[role="tab"]:hover {
+  cursor: pointer !important;
+}
+
+input[type="text"]:hover,
+textarea:hover {
+  cursor: text !important;
+}
+
+/* Theme transition class */
+html.theme-transitioning * {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+    

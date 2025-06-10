@@ -1,4 +1,4 @@
-// src/components/Home/Header.tsx
+// src/components/home/Header.tsx
 import React from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { cn } from '@/lib/utils';
@@ -13,8 +13,8 @@ interface HeaderProps {
 export default function Header({ version, isMobile, onOpenProfileCustomizer }: HeaderProps) {
   return (
     <div className={cn(
-      "absolute top-3 right-3 flex items-center space-x-2 z-20",
-      isMobile && "top-2 right-2 space-x-1"
+      "absolute top-0 right-0 flex items-center space-x-2 z-50",
+      isMobile ? "top-2 right-2 space-x-1 p-2" : "top-3 right-3 p-3"
     )}>
       <p className={cn(
         "text-gray-500",
@@ -37,6 +37,7 @@ export default function Header({ version, isMobile, onOpenProfileCustomizer }: H
         {!isMobile && <span>Profile</span>}
       </Button>
       
+      {/* Auth Buttons */}
       <div className={cn(isMobile && "scale-90")}>
         <AuthButtons />
       </div>

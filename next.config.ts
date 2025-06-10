@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    optimizePackageImports: ['98.css', '7.css']
+    optimizePackageImports: ['98.css']
   },
   images: {
     remotePatterns: [

@@ -1,11 +1,7 @@
 // src/components/home/MainCard.tsx
 import React, { useCallback } from 'react';
-import { Button } from '@/components/ui/button-themed';
-import { Input } from '@/components/ui/input-themed';
-import { Label } from '@/components/ui/label-themed';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card-themed';
 import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import styles from '@/styles/page.module.css';
 
 interface MainCardProps {
   currentInterest: string;
@@ -82,184 +78,220 @@ export default function MainCard({
   }, [inputRef]);
 
   return (
-    <Card className="relative">
-      <CardHeader className={cn(
-        "relative",
-        isMobile && "pb-4"
-      )}>
-        <CardTitle className={cn(
-          isMobile ? "text-lg text-center" : "text-xl"
-        )}>
+    <div className="window" style={{ width: '100%' }}>
+      {/* Title Bar - Pure 98.css */}
+      <div className="title-bar">
+        <div className="title-bar-text">
           Welcome to TinChat!
-        </CardTitle>
-        <CardDescription className={cn(
-          isMobile ? "text-sm text-center" : "text-base"
-        )}>
-          Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
-        </CardDescription>
+        </div>
         
-        {/* Online Users Indicator */}
-        <div className={cn(
-          "flex items-center text-xs",
-          isMobile 
-            ? "justify-center mt-2" 
-            : "absolute top-3 right-3"
-        )}>
+        {/* Online Users Indicator in title bar */}
+        <div className={styles.onlineIndicator}>
           <img
             src="/icons/greenlight.gif"
             alt="Green light"
-            className={cn(
-              "mr-1",
-              isMobile ? "w-2.5 h-2.5" : "w-3 h-3"
-            )}
+            style={{
+              width: isMobile ? '10px' : '12px',
+              height: isMobile ? '10px' : '12px',
+              marginRight: '4px'
+            }}
             data-ai-hint="green light indicator"
           />
           {usersOnline !== null ? (
-            <span className="font-bold mr-1">{usersOnline}</span>
+            <span style={{ fontWeight: 'bold', marginRight: '4px' }}>{usersOnline}</span>
           ) : (
-            <span className="font-bold mr-1">--</span>
+            <span style={{ fontWeight: 'bold', marginRight: '4px' }}>--</span>
           )}
           <span>Users Online!</span>
         </div>
-      </CardHeader>
+      </div>
       
-      <CardContent className={cn(
-        "space-y-4",
-        isMobile && "px-4"
-      )}>
-        <div className="space-y-2">
-          <div className={cn(
-            "flex justify-between items-center mb-2",
-            isMobile && "flex-col space-y-2"
-          )}>
-            <Label 
-              htmlFor="interests-input-field" 
-              className={cn(
-                isMobile ? "text-sm font-medium" : ""
-              )}
+      {/* Window Body - Pure 98.css */}
+      <div className="window-body">
+        <p style={{ 
+          fontSize: isMobile ? '14px' : '16px',
+          textAlign: isMobile ? 'center' : 'left',
+          marginBottom: '16px'
+        }}>
+          Connect with someone new. Add interests by typing them and pressing Comma, Space, or Enter. Max 5 interests.
+        </p>
+        
+        {/* Interests Section using 98.css field-row-stacked */}
+        <div className="field-row-stacked">
+          <div style={{ 
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '8px',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? '8px' : '0'
+          }}>
+            <label 
+              htmlFor="interests-input-field"
+              style={{
+                fontSize: isMobile ? '14px' : '16px',
+                fontWeight: isMobile ? '500' : 'normal',
+                color: 'black'
+              }}
             >
               Your Interests
-            </Label>
+            </label>
             
-            {/* Settings Button */}
-            <Button
-              className={cn(
-                "flex items-center justify-center relative z-30",
-                isMobile 
-                  ? "w-8 h-8 p-0 min-w-0" 
-                  : "p-0 w-[20px] h-[20px] min-w-0"
-              )}
+            {/* Settings Button - Pure 98.css button */}
+            <button
               aria-label="Settings"
               onClick={onToggleSettings}
               disabled={isNavigating}
-              variant="outline"
-              size="sm"
+              style={{ 
+                padding: '2px',
+                width: isMobile ? '32px' : '24px',
+                height: isMobile ? '32px' : '24px',
+                minWidth: isMobile ? '32px' : '24px'
+              }}
             >
               <img
                 src="/icons/gears-0.png"
                 alt="Settings"
-                className={cn(
-                  "object-contain",
-                  isMobile ? "w-4 h-4" : "max-w-full max-h-full"
-                )}
+                style={{
+                  width: isMobile ? '16px' : '12px',
+                  height: isMobile ? '16px' : '12px',
+                  objectFit: 'contain'
+                }}
                 data-ai-hint="settings icon"
               />
-            </Button>
+            </button>
           </div>
           
-          {/* Interests Input */}
+          {/* Interests Input using pure 98.css field-row */}
           <div
-            className={cn(
-              "flex flex-wrap items-center gap-1 cursor-text themed-input rounded-md",
-              isMobile ? "p-2 min-h-[44px]" : "p-1.5"
-            )}
+            className={`field-row ${styles.interestInputContainer}`}
             onClick={focusInput}
-            style={{ minHeight: isMobile ? '44px' : 'calc(1.5rem + 12px + 2px)' }}
+            style={{ cursor: 'text' }}
           >
             {selectedInterests.map((interest) => (
               <div
                 key={interest}
-                className={cn(
-                  "bg-black text-white pl-2 pr-1 py-0.5 rounded-sm flex items-center h-fit",
-                  isMobile ? "text-xs" : "text-xs"
-                )}
+                className={styles.interestTag}
               >
                 <span>{interest}</span>
                 <X
                   size={isMobile ? 12 : 14}
-                  className="ml-1 text-white hover:text-gray-300 cursor-pointer"
+                  style={{ 
+                    marginLeft: '4px',
+                    color: 'white',
+                    cursor: 'pointer'
+                  }}
+                  onMouseOver={(e) => {
+                    (e.target as HTMLElement).style.color = '#ccc';
+                  }}
+                  onMouseOut={(e) => {
+                    (e.target as HTMLElement).style.color = 'white';
+                  }}
                   onClick={(e) => handleRemoveInterest(interest, e)}
                   aria-label={`Remove ${interest}`}
                 />
               </div>
             ))}
-            <Input
+            <input
               id="interests-input-field"
               ref={inputRef}
               value={currentInterest}
               onChange={handleInterestInputChange}
               onKeyDown={handleInterestInputKeyDown}
               placeholder={selectedInterests.length < 5 ? "Add interest..." : "Max interests reached"}
-              className={cn(
-                "flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner",
-                isMobile ? "text-base min-w-[120px]" : "min-w-[80px]"
-              )}
+              className={styles.interestInput}
               disabled={(selectedInterests.length >= 5 && !currentInterest) || isNavigating}
               autoComplete="off"
               autoCapitalize="none"
+              style={{
+                fontSize: isMobile ? '16px' : '14px',
+                minWidth: isMobile ? '120px' : '80px'
+              }}
             />
           </div>
           
-          <p className={cn(
-            "text-gray-500 dark:text-gray-400",
-            isMobile ? "text-xs leading-relaxed" : "text-xs"
-          )}>
+          <p style={{
+            color: '#666',
+            marginTop: '8px',
+            fontSize: isMobile ? '12px' : '12px',
+            lineHeight: isMobile ? '1.5' : 'normal'
+          }}>
             Type an interest and press Comma, Space, or Enter. Backspace on empty input to remove last. Leave blank for random match.
           </p>
         </div>
-      </CardContent>
-      
-      {/* Action Buttons */}
-      <CardFooter className={cn(
-        "flex space-x-4",
-        isMobile ? "flex-col space-x-0 space-y-3 px-4 pb-6" : "justify-between"
-      )}>
-        <Button 
-          className={cn(
-            "accent transition-all duration-200",
-            isMobile ? "w-full h-12 text-base" : "flex-1"
-          )} 
-          onClick={() => onStartChat('text')} 
-          disabled={isNavigating}
-        >
-          {isNavigating ? (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Starting...
-            </div>
-          ) : (
-            <span className="animate-rainbow-text">Start Text Chat</span>
-          )}
-        </Button>
         
-        <Button 
-          className={cn(
-            "accent transition-all duration-200",
-            isMobile ? "w-full h-12 text-base" : "flex-1"
-          )} 
-          onClick={() => onStartChat('video')} 
-          disabled={isNavigating}
-        >
-          {isNavigating ? (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Starting...
-            </div>
-          ) : (
-            <span className="animate-rainbow-text-alt">Start Video Chat</span>
-          )}
-        </Button>
-      </CardFooter>
-    </Card>
+        {/* Action Buttons Section using 98.css buttons */}
+        <section className="field-row" style={{ 
+          justifyContent: 'space-between',
+          marginTop: '16px',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? '12px' : '8px'
+        }}>
+          <button 
+            onClick={() => onStartChat('text')} 
+            disabled={isNavigating}
+            style={{ 
+              flex: isMobile ? 'none' : '1',
+              width: isMobile ? '100%' : 'auto',
+              height: isMobile ? '48px' : 'auto',
+              fontSize: isMobile ? '16px' : '14px'
+            }}
+          >
+            {isNavigating ? (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid black',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  marginRight: '8px'
+                }}></div>
+                Starting...
+              </div>
+            ) : (
+              <span>Start Text Chat</span>
+            )}
+          </button>
+          
+          <button 
+            onClick={() => onStartChat('video')} 
+            disabled={isNavigating}
+            style={{ 
+              flex: isMobile ? 'none' : '1',
+              width: isMobile ? '100%' : 'auto',
+              height: isMobile ? '48px' : 'auto',
+              fontSize: isMobile ? '16px' : '14px'
+            }}
+          >
+            {isNavigating ? (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid black',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  marginRight: '8px'
+                }}></div>
+                Starting...
+              </div>
+            ) : (
+              <span>Start Video Chat</span>
+            )}
+          </button>
+        </section>
+      </div>
+    </div>
   );
 }

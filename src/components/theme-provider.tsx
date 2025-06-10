@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 
-type Theme = 'theme-98' | 'theme-7';
+// Only Windows 98 theme now
+type Theme = 'theme-98';
 
 interface ThemeProviderProps {
   children: ReactNode;
@@ -25,30 +26,20 @@ const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'theme-98',
+  defaultTheme = 'theme-98', // Always default to Windows 98
   storageKey = 'tinchat-theme',
 }: ThemeProviderProps) {
   const pathname = usePathname();
 
-  const [userSelectedTheme, setUserSelectedTheme] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-        try {
-          const storedTheme = window.localStorage.getItem(storageKey) as Theme | null;
-          if (storedTheme && (storedTheme === 'theme-98' || storedTheme === 'theme-7')) {
-            return storedTheme;
-          }
-        } catch (e) {
-          console.error("ThemeProvider: Error reading localStorage:", e);
-        }
-    }
-    return defaultTheme;
-  });
+  // Always use Windows 98 theme
+  const [userSelectedTheme, setUserSelectedTheme] = useState<Theme>('theme-98');
 
+  // Always apply Windows 98 theme
   const currentAppliedTheme = useMemo(() => {
-    return pathname === '/' ? 'theme-98' : userSelectedTheme;
-  }, [pathname, userSelectedTheme]);
+    return 'theme-98'; // Force Windows 98 everywhere
+  }, []);
 
-  // Apply theme classes (CSS is loaded from CDN via layout.tsx)
+  // Apply theme classes (Windows 98 only)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -56,15 +47,15 @@ export function ThemeProvider({
     
     root.classList.add('theme-transitioning');
     
-    // Remove existing theme classes
+    // Remove any existing theme classes
     root.classList.remove('theme-98', 'theme-7');
     
-    // Add current theme class
-    root.classList.add(currentAppliedTheme);
+    // Always add Windows 98 theme
+    root.classList.add('theme-98');
 
-    // Save user preference to localStorage
+    // Save preference to localStorage (always Windows 98)
     try {
-      localStorage.setItem(storageKey, userSelectedTheme);
+      localStorage.setItem(storageKey, 'theme-98');
     } catch (e) {
       console.error("ThemeProvider: Error setting localStorage:", e);
     }
@@ -74,7 +65,7 @@ export function ThemeProvider({
     }, 150); 
 
     return () => clearTimeout(timer);
-  }, [currentAppliedTheme, userSelectedTheme, storageKey]);
+  }, [storageKey]);
 
   // Force clear sub-themes when on home page
   useEffect(() => {
@@ -110,16 +101,17 @@ export function ThemeProvider({
   }, [pathname]);
 
   const setThemeCallback = useCallback((newTheme: Theme) => {
-    if (newTheme === 'theme-98' || newTheme === 'theme-7') {
+    // Only allow Windows 98 theme
+    if (newTheme === 'theme-98') {
       setUserSelectedTheme(newTheme);
     }
   }, []);
 
   const value = useMemo(() => ({
-    currentTheme: currentAppliedTheme,
-    selectedTheme: userSelectedTheme,
+    currentTheme: 'theme-98' as Theme, // Always Windows 98
+    selectedTheme: 'theme-98' as Theme, // Always Windows 98
     setTheme: setThemeCallback,
-  }), [currentAppliedTheme, userSelectedTheme, setThemeCallback]);
+  }), [setThemeCallback]);
 
   return (
     <ThemeProviderContext.Provider value={value}>
