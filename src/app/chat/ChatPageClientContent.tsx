@@ -17,7 +17,7 @@ import MatchStatus from './components/MatchStatus';
 
 // Import hooks and utilities
 import { useChatSocket, useChatState } from './hooks/useChatSocket';
-import { PartnerInfo, Message, changeFavicon, getDisplayNameClass } from './utils/ChatHelpers';
+import { PartnerInfo, Message, changeFavicon } from './utils/ChatHelpers';
 
 // Constants
 const FAVICON_IDLE = '/Idle.ico';
@@ -32,6 +32,8 @@ const SYS_MSG_CONNECTED_PARTNER = 'Connected with a partner. You can start chatt
 const SYS_MSG_YOU_DISCONNECTED = 'You have disconnected.';
 const SYS_MSG_PARTNER_DISCONNECTED = 'Your partner has disconnected.';
 const SYS_MSG_COMMON_INTERESTS_PREFIX = 'You both like ';
+
+const LOG_PREFIX = "ChatPageClientContent";
 
 const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
@@ -173,7 +175,7 @@ const ChatPageClientContent: React.FC = () => {
   // Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/chat') {
-      console.log('Navigation to chat page detected, resetting states');
+      console.log(`${LOG_PREFIX}: Navigation to chat page detected, resetting states`);
       setIsFindingPartner(false);
       setIsPartnerConnected(false);
       setMessages([]);
@@ -223,7 +225,7 @@ const ChatPageClientContent: React.FC = () => {
 
   // Socket event handlers
   const handleMessage = useCallback((data: any) => {
-    console.log('Message received:', data);
+    console.log(`${LOG_PREFIX}: Message received:`, data);
     
     // Update partner info if we have new styling information
     if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
@@ -248,7 +250,7 @@ const ChatPageClientContent: React.FC = () => {
   }, [addMessage, setIsPartnerTyping, setPartnerInfo]);
 
   const handlePartnerFound = useCallback((data: any) => {
-    console.log('Partner found:', data);
+    console.log(`${LOG_PREFIX}: Partner found:`, data);
     playSound('Match.wav');
     
     setPartnerInfo({
@@ -276,7 +278,7 @@ const ChatPageClientContent: React.FC = () => {
   }, [setPartnerInfo, setPartnerInterests, setIsFindingPartner, setIsPartnerConnected, setMessages]);
 
   const handlePartnerLeft = useCallback(() => {
-    console.log('Partner left');
+    console.log(`${LOG_PREFIX}: Partner left`);
     setIsPartnerConnected(false);
     setIsFindingPartner(false);
     setPartnerInfo(null);
@@ -305,7 +307,7 @@ const ChatPageClientContent: React.FC = () => {
   }, [setIsPartnerTyping]);
 
   const handleWaiting = useCallback(() => {
-    console.log('Waiting for partner...');
+    console.log(`${LOG_PREFIX}: Waiting for partner...`);
   }, []);
 
   const handleCooldown = useCallback(() => {
@@ -318,7 +320,7 @@ const ChatPageClientContent: React.FC = () => {
   }, [setIsFindingPartner, toast]);
 
   const handleDisconnect = useCallback((reason: string) => {
-    console.log('Disconnected:', reason);
+    console.log(`${LOG_PREFIX}: Disconnected:`, reason);
     setIsPartnerConnected(false);
     setIsFindingPartner(false);
     setIsPartnerTyping(false);
@@ -327,7 +329,7 @@ const ChatPageClientContent: React.FC = () => {
   }, [setIsPartnerConnected, setIsFindingPartner, setIsPartnerTyping, setPartnerInfo]);
 
   const handleConnectError = useCallback((err: Error) => {
-    console.error('Connection error:', err);
+    console.error(`${LOG_PREFIX}: Connection error:`, err);
     setIsFindingPartner(false);
     toast({ 
       title: "Connection Error", 
@@ -363,13 +365,13 @@ const ChatPageClientContent: React.FC = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        console.log('Starting auth check...');
+        console.log(`${LOG_PREFIX}: Starting auth check...`);
         const { data: { user } } = await supabase.auth.getUser();
         setAuthId(user?.id || null);
-        console.log('Auth check complete. User ID:', user?.id || 'anonymous');
+        console.log(`${LOG_PREFIX}: Auth check complete. User ID: ${user?.id || 'anonymous'}`);
         
         if (user) {
-          console.log('Fetching profile for authenticated user:', user.id);
+          console.log(`${LOG_PREFIX}: Fetching profile for authenticated user: ${user.id}`);
           const { data: profile, error } = await supabase
             .from('user_profiles')
             .select('username, display_name, display_name_color, display_name_animation')
@@ -377,36 +379,37 @@ const ChatPageClientContent: React.FC = () => {
             .single();
             
           if (error && error.code !== 'PGRST116') {
-            console.error('Error fetching profile:', error);
+            console.error(`${LOG_PREFIX}: Error fetching profile:`, error);
             setUsername(null);
             setOwnDisplayNameColor('#0066cc');
             setOwnDisplayNameAnimation('none');
           } else if (profile) {
-            console.log('Fetched profile:', profile);
+            console.log(`${LOG_PREFIX}: Fetched profile:`, profile);
             const displayUsername = profile.display_name || profile.username;
             setUsername(displayUsername);
             setOwnDisplayNameColor(profile.display_name_color || '#0066cc');
             setOwnDisplayNameAnimation(profile.display_name_animation || 'none');
+            console.log(`${LOG_PREFIX}: Set own display username to: ${displayUsername} with color: ${profile.display_name_color} and animation: ${profile.display_name_animation}`);
           } else {
-            console.log('No profile found for user');
+            console.log(`${LOG_PREFIX}: No profile found for user`);
             setUsername(null);
             setOwnDisplayNameColor('#0066cc');
             setOwnDisplayNameAnimation('none');
           }
         } else {
-          console.log('No authenticated user found - proceeding as anonymous');
+          console.log(`${LOG_PREFIX}: No authenticated user found - proceeding as anonymous`);
           setUsername(null);
           setOwnDisplayNameColor('#0066cc');
           setOwnDisplayNameAnimation('none');
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error(`${LOG_PREFIX}: Auth initialization error:`, error);
         setAuthId(null);
         setUsername(null);
         setOwnDisplayNameColor('#0066cc');
         setOwnDisplayNameAnimation('none');
       } finally {
-        console.log('Auth loading complete');
+        console.log(`${LOG_PREFIX}: Auth loading complete`);
         setIsAuthLoading(false);
       }
     };
@@ -419,7 +422,7 @@ const ChatPageClientContent: React.FC = () => {
   // Auto-search for partner when connected
   useEffect(() => {
     if (isConnected && !isAuthLoading && !isPartnerConnected && !isFindingPartner && !autoSearchDoneRef.current) {
-      console.log('Auto-searching for partner with interests:', interests);
+      console.log(`${LOG_PREFIX}: Auto-searching for partner with interests:`, interests);
       setIsFindingPartner(true);
       addSystemMessage(SYS_MSG_SEARCHING_PARTNER);
       setIsSelfDisconnectedRecently(false);
@@ -434,13 +437,14 @@ const ChatPageClientContent: React.FC = () => {
     }
   }, [isConnected, isAuthLoading, isPartnerConnected, isFindingPartner, interests, authId, emitFindPartner, setIsFindingPartner, addSystemMessage]);
 
-  // Favicon and system message effects
+  // Advanced favicon and system message effects
   useEffect(() => {
     if (successTransitionIntervalRef.current) clearInterval(successTransitionIntervalRef.current);
     if (successTransitionEndTimeoutRef.current) clearTimeout(successTransitionEndTimeoutRef.current);
     if (skippedFaviconTimeoutRef.current) clearTimeout(skippedFaviconTimeoutRef.current);
 
     let updatedMessages = [...messages];
+    
     const filterSystemMessagesFrom = (msgs: Message[], textPattern: string): Message[] => 
       msgs.filter(msg => !(msg.sender === 'system' && msg.text.toLowerCase().includes(textPattern.toLowerCase())));
     
@@ -535,7 +539,7 @@ const ChatPageClientContent: React.FC = () => {
   // Handle find/disconnect partner
   const handleFindOrDisconnect = useCallback(() => {
     if (isProcessingFindOrDisconnect.current) {
-      console.log('Find/disconnect action already in progress.');
+      console.log(`${LOG_PREFIX}: Find/disconnect action already in progress.`);
       return;
     }
 
@@ -552,7 +556,7 @@ const ChatPageClientContent: React.FC = () => {
 
     if (isPartnerConnected) {
       // Disconnect from current partner
-      console.log('User is skipping partner');
+      console.log(`${LOG_PREFIX}: User is skipping partner`);
       addSystemMessage(SYS_MSG_YOU_DISCONNECTED);
       
       setIsPartnerConnected(false);
@@ -563,7 +567,7 @@ const ChatPageClientContent: React.FC = () => {
       emitLeaveChat();
 
       // Start searching again
-      console.log('Re-emitting findPartner after skip');
+      console.log(`${LOG_PREFIX}: Re-emitting findPartner after skip`);
       setIsFindingPartner(true);
       setIsSelfDisconnectedRecently(true);
       setIsPartnerLeftRecently(false);
@@ -575,13 +579,13 @@ const ChatPageClientContent: React.FC = () => {
       });
     } else if (isFindingPartner) {
       // Stop searching
-      console.log('User stopping partner search');
+      console.log(`${LOG_PREFIX}: User stopping partner search`);
       setIsFindingPartner(false);
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
     } else {
       // Start searching
-      console.log('User starting partner search via button');
+      console.log(`${LOG_PREFIX}: User starting partner search via button`);
       setIsFindingPartner(true);
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
@@ -603,7 +607,7 @@ const ChatPageClientContent: React.FC = () => {
   const handleSendMessage = useCallback((message: string) => {
     if (!isPartnerConnected) return;
 
-    console.log('Sending message:', message);
+    console.log(`${LOG_PREFIX}: Sending message:`, message);
     
     // Add to local messages immediately
     addMessage({
@@ -650,6 +654,16 @@ const ChatPageClientContent: React.FC = () => {
     setIsScrollEnabled(true);
   }, []);
 
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (successTransitionIntervalRef.current) clearInterval(successTransitionIntervalRef.current);
+      if (successTransitionEndTimeoutRef.current) clearTimeout(successTransitionEndTimeoutRef.current);
+      if (skippedFaviconTimeoutRef.current) clearTimeout(skippedFaviconTimeoutRef.current);
+      changeFavicon(FAVICON_DEFAULT, true);
+    };
+  }, []);
+
   useEffect(() => { setIsMounted(true); }, []);
 
   if (!isMounted || isAuthLoading) {
@@ -694,29 +708,13 @@ const ChatPageClientContent: React.FC = () => {
                 {isMobile ? 'TinChat' : 'Text Chat'}
               </div>
               
-              {/* Partner info and status */}
-              <div className="flex items-center space-x-2">
-                {partnerInfo && isPartnerConnected && (
-                  <PartnerProfile
-                    username={partnerInfo.username}
-                    displayName={partnerInfo.displayName}
-                    avatarUrl={partnerInfo.avatarUrl}
-                    status={partnerInfo.status}
-                    displayNameColor={partnerInfo.displayNameColor}
-                    displayNameAnimation={partnerInfo.displayNameAnimation}
-                    badges={partnerInfo.badges}
-                    className="max-w-xs scale-75"
-                  />
-                )}
-                
-                <MatchStatus
-                  isSearching={isFindingPartner}
-                  isConnected={isPartnerConnected}
-                  onFindPartner={handleFindOrDisconnect}
-                  onDisconnect={handleFindOrDisconnect}
-                  disabled={!isConnected || !!connectionError}
-                  className="scale-75"
-                />
+              {/* Connection status indicator */}
+              <div className="flex items-center text-xs mr-2">
+                <div className={cn(
+                  "w-2 h-2 rounded-full mr-1",
+                  isConnected ? "bg-green-500" : "bg-red-500"
+                )} />
+                {isPartnerConnected ? 'Connected' : isFindingPartner ? 'Searching...' : 'Offline'}
               </div>
             </div>
           </div>
@@ -761,6 +759,15 @@ const ChatPageClientContent: React.FC = () => {
               onUsernameClick={handleUsernameClick}
               isMobile={isMobile}
               isScrollEnabled={isScrollEnabled}
+              onFindOrDisconnect={handleFindOrDisconnect}
+              findOrDisconnectDisabled={!isConnected || !!connectionError}
+              findOrDisconnectText={
+                isPartnerConnected 
+                  ? (isMobile ? 'Skip' : 'Skip') 
+                  : isFindingPartner 
+                    ? (isMobile ? 'Stop' : 'Stop') 
+                    : (isMobile ? 'Find' : 'Find')
+              }
             />
           </div>
 

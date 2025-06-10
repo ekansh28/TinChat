@@ -11,6 +11,9 @@ interface InputAreaProps {
   theme: string;
   isMobile: boolean;
   onScrollToBottom: () => void;
+  onFindOrDisconnect: () => void;
+  findOrDisconnectDisabled: boolean;
+  findOrDisconnectText: string;
 }
 
 // Emoji constants
@@ -30,7 +33,10 @@ const InputArea: React.FC<InputAreaProps> = ({
   disabled = false,
   theme,
   isMobile,
-  onScrollToBottom
+  onScrollToBottom,
+  onFindOrDisconnect,
+  findOrDisconnectDisabled,
+  findOrDisconnectText
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -127,6 +133,19 @@ const InputArea: React.FC<InputAreaProps> = ({
     }}>
       <form onSubmit={handleSubmit}>
         <div className="flex items-center w-full gap-1">
+          <Button 
+            onClick={onFindOrDisconnect} 
+            disabled={findOrDisconnectDisabled} 
+            className={cn(
+              theme === 'theme-7' ? 'glass-button-styled' : 'px-2 py-1',
+              isMobile ? 'text-xs px-2 py-1 min-w-0' : 'mr-1'
+            )} 
+            aria-label={findOrDisconnectText}
+            type="button"
+          >
+            {findOrDisconnectText}
+          </Button>
+          
           <Input 
             ref={inputRef}
             type="text" 

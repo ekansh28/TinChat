@@ -32,6 +32,9 @@ interface ChatWindowProps {
   onUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
   isMobile: boolean;
   isScrollEnabled: boolean;
+  onFindOrDisconnect: () => void;
+  findOrDisconnectDisabled: boolean;
+  findOrDisconnectText: string;
 }
 
 const INPUT_AREA_HEIGHT = 60; // px
@@ -52,6 +55,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onUsernameClick,
   isMobile,
   isScrollEnabled,
+  onFindOrDisconnect,
+  findOrDisconnectDisabled,
+  findOrDisconnectText,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -155,6 +161,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         theme={theme}
         isMobile={isMobile}
         onScrollToBottom={() => scrollToBottom(true)}
+        onFindOrDisconnect={onFindOrDisconnect}
+        findOrDisconnectDisabled={findOrDisconnectDisabled}
+        findOrDisconnectText={findOrDisconnectText}
       />
     </div>
   );
