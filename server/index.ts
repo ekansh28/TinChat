@@ -7,7 +7,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { User } from './types/User';
 import { Room } from './services/RoomManager';
 
-// Validation schemas
+// Validation schemas.
 const StringArraySchema = z.array(z.string().max(100)).max(10);
 const FindPartnerPayloadSchema = z.object({
   chatType: z.enum(['text', 'video']),
