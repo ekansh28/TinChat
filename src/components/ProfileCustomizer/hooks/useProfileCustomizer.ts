@@ -12,12 +12,12 @@ import type {
 } from '../types';
 
 export const useProfileCustomizer = () => {
-  // CSS and mode states - FIXED: Initialize with proper defaults
+  // CSS and mode states - Initialize with proper defaults
   const [customCSS, setCustomCSS] = useState(() => getDefaultProfileCSS());
   const [cssMode, setCSSMode] = useState<'custom' | 'easy'>('easy');
   const [positionMode, setPositionMode] = useState<'normal' | 'grid'>('normal');
   
-  // Easy customization state - FIXED: Ensure proper initialization
+  // Easy customization state - Ensure proper initialization
   const [easyCustomization, setEasyCustomization] = useState<EasyCustomization>(() => ({
     ...DEFAULT_EASY_CUSTOMIZATION
   }));
@@ -27,7 +27,7 @@ export const useProfileCustomizer = () => {
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [pronouns, setPronouns] = useState('');
-  const [status, setStatus] = useState<StatusType>('online'); // FIXED: Default to online
+  const [status, setStatus] = useState<StatusType>('online'); // Default to online
   const [displayNameColor, setDisplayNameColor] = useState('#ffffff');
   const [displayNameAnimation, setDisplayNameAnimation] = useState<DisplayNameAnimation>('none');
   const [rainbowSpeed, setRainbowSpeed] = useState(3);
@@ -68,12 +68,14 @@ export const useProfileCustomizer = () => {
     };
   }, []);
 
-  // FIXED: Update custom CSS when easy customization changes - with proper safety checks
+  // Update custom CSS when easy customization changes - with proper safety checks
   useEffect(() => {
     if (cssMode === 'easy' && easyCustomization && easyCustomization.elements) {
       try {
         const generatedCSS = generateEasyCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
-        setCustomCSS(generatedCSS);
+        if (generatedCSS) {
+          setCustomCSS(generatedCSS);
+        }
       } catch (error) {
         console.error('Error generating CSS from easy customization:', error);
         // Fallback to default CSS if generation fails
@@ -82,13 +84,58 @@ export const useProfileCustomizer = () => {
     }
   }, [easyCustomization, cssMode, displayNameAnimation, rainbowSpeed]);
 
-  // FIXED: Ensure CSS is never empty
+  // Ensure CSS is never empty
   useEffect(() => {
     if (!customCSS || customCSS.trim() === '') {
       console.log('Setting default CSS as customCSS was empty');
       setCustomCSS(getDefaultProfileCSS());
     }
   }, [customCSS]);
+
+  // Safe state update functions with validation
+  const safeSetCustomCSS = (css: string) => {
+    if (typeof css === 'string' && css.trim()) {
+      setCustomCSS(css);
+    } else {
+      setCustomCSS(getDefaultProfileCSS());
+    }
+  };
+
+  const safeSetEasyCustomization = (customization: EasyCustomization | ((prev: EasyCustomization) => EasyCustomization)) => {
+    if (typeof customization === 'function') {
+      setEasyCustomization(prev => {
+        try {
+          const result = customization(prev);
+          // Validate result structure
+          if (result && typeof result === 'object' && result.elements) {
+            return {
+              ...DEFAULT_EASY_CUSTOMIZATION,
+              ...result,
+              elements: {
+                ...DEFAULT_EASY_CUSTOMIZATION.elements,
+                ...result.elements
+              }
+            };
+          }
+          return prev;
+        } catch (error) {
+          console.error('Error in safeSetEasyCustomization:', error);
+          return prev;
+        }
+      });
+    } else if (customization && typeof customization === 'object' && customization.elements) {
+      setEasyCustomization({
+        ...DEFAULT_EASY_CUSTOMIZATION,
+        ...customization,
+        elements: {
+          ...DEFAULT_EASY_CUSTOMIZATION.elements,
+          ...customization.elements
+        }
+      });
+    } else {
+      setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+    }
+  };
 
   // Computed values
   const isTheme98 = currentTheme === 'theme-98';
@@ -97,7 +144,7 @@ export const useProfileCustomizer = () => {
   return {
     // CSS and mode states
     customCSS,
-    setCustomCSS,
+    setCustomCSS: safeSetCustomCSS,
     cssMode,
     setCSSMode,
     positionMode,
@@ -105,7 +152,7 @@ export const useProfileCustomizer = () => {
     
     // Easy customization
     easyCustomization,
-    setEasyCustomization,
+    setEasyCustomization: safeSetEasyCustomization,
     
     // Profile data
     bio,

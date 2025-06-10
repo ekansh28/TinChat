@@ -19,7 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Load 98.css and 7.css from CDN - bypasses bundler issues */}
+        {/* Load 98.css and 7.css from CDN */}
         <link 
           rel="stylesheet" 
           href="https://unpkg.com/98.css@0.1.21/dist/98.css"

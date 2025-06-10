@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 import { STATUS_OPTIONS } from './utils/constants';
 import type { Badge, StatusType, DisplayNameAnimation } from './types';
 
-
 interface EnhancedProfilePreviewProps {
   customCSS: string;
   bio: string;
@@ -30,221 +29,6 @@ interface EnhancedProfilePreviewProps {
   selectedElement?: string | null;
   selectedElements?: string[];
 }
-
-// Advanced interaction system
-class InteractionSystem {
-  private static instance: InteractionSystem;
-  private hoverTimeouts = new Map<string, NodeJS.Timeout>();
-  private animationFrames = new Map<string, number>();
-  private performanceMonitor = {
-    renderCount: 0,
-    lastRenderTime: 0,
-    avgFrameTime: 16.67 // Target 60fps
-  };
-
-  static getInstance(): InteractionSystem {
-    if (!InteractionSystem.instance) {
-      InteractionSystem.instance = new InteractionSystem();
-    }
-    return InteractionSystem.instance;
-  }
-
-  scheduleHoverEffect(elementId: string, callback: () => void, delay: number = 150) {
-    this.clearHoverEffect(elementId);
-    
-    const timeout = setTimeout(callback, delay);
-    this.hoverTimeouts.set(elementId, timeout);
-  }
-
-  clearHoverEffect(elementId: string) {
-    const timeout = this.hoverTimeouts.get(elementId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.hoverTimeouts.delete(elementId);
-    }
-  }
-
-  scheduleAnimation(elementId: string, callback: () => void) {
-    this.cancelAnimation(elementId);
-    
-    const frame = requestAnimationFrame(() => {
-      callback();
-      this.animationFrames.delete(elementId);
-      this.updatePerformanceMetrics();
-    });
-    
-    this.animationFrames.set(elementId, frame);
-  }
-
-  cancelAnimation(elementId: string) {
-    const frame = this.animationFrames.get(elementId);
-    if (frame) {
-      cancelAnimationFrame(frame);
-      this.animationFrames.delete(elementId);
-    }
-  }
-
-  private updatePerformanceMetrics() {
-    const now = performance.now();
-    if (this.performanceMonitor.lastRenderTime > 0) {
-      const frameTime = now - this.performanceMonitor.lastRenderTime;
-      this.performanceMonitor.avgFrameTime = 
-        this.performanceMonitor.avgFrameTime * 0.9 + frameTime * 0.1;
-    }
-    this.performanceMonitor.lastRenderTime = now;
-    this.performanceMonitor.renderCount++;
-  }
-
-  getPerformanceStats() {
-    return {
-      ...this.performanceMonitor,
-      fps: 1000 / this.performanceMonitor.avgFrameTime
-    };
-  }
-
-  cleanup() {
-    this.hoverTimeouts.forEach(timeout => clearTimeout(timeout));
-    this.animationFrames.forEach(frame => cancelAnimationFrame(frame));
-    this.hoverTimeouts.clear();
-    this.animationFrames.clear();
-  }
-}
-
-// Advanced visual effects
-const useVisualEffects = (cssMode: string, selectedElements: string[]) => {
-  const [hoveredElement, setHoveredElement] = useState<string | null>(null);
-  const [focusedElement, setFocusedElement] = useState<string | null>(null);
-  const [rippleEffects, setRippleEffects] = useState<Map<string, {x: number, y: number, timestamp: number}>>(new Map());
-
-  const interactionSystem = useMemo(() => InteractionSystem.getInstance(), []);
-
-  const createRippleEffect = useCallback((elementId: string, x: number, y: number) => {
-    if (cssMode !== 'easy') return;
-    
-    setRippleEffects(prev => {
-      const newMap = new Map(prev);
-      newMap.set(elementId, { x, y, timestamp: Date.now() });
-      
-      // Clean up old ripples
-      setTimeout(() => {
-        setRippleEffects(current => {
-          const updated = new Map(current);
-          updated.delete(elementId);
-          return updated;
-        });
-      }, 600);
-      
-      return newMap;
-    });
-  }, [cssMode]);
-
-  const handleElementHover = useCallback((elementId: string, isHovering: boolean) => {
-    if (cssMode !== 'easy') return;
-
-    if (isHovering) {
-      interactionSystem.scheduleHoverEffect(elementId, () => {
-        setHoveredElement(elementId);
-      });
-    } else {
-      interactionSystem.clearHoverEffect(elementId);
-      setHoveredElement(null);
-    }
-  }, [cssMode, interactionSystem]);
-
-  useEffect(() => {
-    return () => {
-      interactionSystem.cleanup();
-    };
-  }, [interactionSystem]);
-
-  return {
-    hoveredElement,
-    focusedElement,
-    rippleEffects,
-    createRippleEffect,
-    handleElementHover,
-    setFocusedElement
-  };
-};
-
-// Smart image loading with optimization
-const useImageOptimization = () => {
-  const [imageCache] = useState(new Map<string, { loaded: boolean, error: boolean, optimized?: string }>());
-  const [loadingStates, setLoadingStates] = useState(new Map<string, boolean>());
-
-  const optimizeImage = useCallback(async (url: string, maxWidth: number = 400): Promise<string> => {
-    if (imageCache.has(url)) {
-      const cached = imageCache.get(url);
-      return cached?.optimized || url;
-    }
-
-    try {
-      // Create a canvas to resize the image
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      return new Promise((resolve, reject) => {
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx) {
-            resolve(url);
-            return;
-          }
-
-          // Calculate optimal dimensions
-          const aspectRatio = img.width / img.height;
-          const newWidth = Math.min(img.width, maxWidth);
-          const newHeight = newWidth / aspectRatio;
-
-          canvas.width = newWidth;
-          canvas.height = newHeight;
-
-          // Draw and compress
-          ctx.drawImage(img, 0, 0, newWidth, newHeight);
-          const optimizedUrl = canvas.toDataURL('image/webp', 0.8);
-          
-          imageCache.set(url, { loaded: true, error: false, optimized: optimizedUrl });
-          resolve(optimizedUrl);
-        };
-
-        img.onerror = () => {
-          imageCache.set(url, { loaded: false, error: true });
-          reject(new Error('Failed to load image'));
-        };
-
-        img.src = url;
-      });
-    } catch (error) {
-      imageCache.set(url, { loaded: false, error: true });
-      return url;
-    }
-  }, [imageCache]);
-
-  const loadImage = useCallback(async (url: string, elementId: string) => {
-    setLoadingStates(prev => new Map(prev).set(elementId, true));
-    
-    try {
-      const optimizedUrl = await optimizeImage(url);
-      setLoadingStates(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(elementId);
-        return newMap;
-      });
-      return optimizedUrl;
-    } catch (error) {
-      setLoadingStates(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(elementId);
-        return newMap;
-      });
-      throw error;
-    }
-  }, [optimizeImage]);
-
-  return { loadImage, loadingStates, imageCache };
-};
 
 export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
   customCSS,
@@ -272,46 +56,12 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
   selectedElements = []
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [optimizedImages, setOptimizedImages] = useState<Map<string, string>>(new Map());
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const [imageLoading, setImageLoading] = useState<Set<string>>(new Set());
   
   const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
   const finalAvatarUrl = avatarPreview || avatarUrl;
   const finalBannerUrl = bannerPreview || bannerUrl;
-
-  const { loadImage, loadingStates } = useImageOptimization();
-  const {
-    hoveredElement,
-    rippleEffects,
-    createRippleEffect,
-    handleElementHover,
-    setFocusedElement
-  } = useVisualEffects(cssMode, selectedElements);
-
-  // Optimize images on load
-  useEffect(() => {
-    const optimizeImages = async () => {
-      const imagesToOptimize: Array<{url: string, id: string}> = [];
-      
-      if (finalAvatarUrl) imagesToOptimize.push({ url: finalAvatarUrl, id: 'avatar' });
-      if (finalBannerUrl) imagesToOptimize.push({ url: finalBannerUrl, id: 'banner' });
-      
-      badges.forEach((badge, index) => {
-        imagesToOptimize.push({ url: badge.url, id: `badge-${index}` });
-      });
-
-      for (const { url, id } of imagesToOptimize) {
-        try {
-          const optimizedUrl = await loadImage(url, id);
-          setOptimizedImages(prev => new Map(prev).set(id, optimizedUrl));
-        } catch (error) {
-          setImageErrors(prev => new Set(prev).add(id));
-        }
-      }
-    };
-
-    optimizeImages();
-  }, [finalAvatarUrl, finalBannerUrl, badges, loadImage]);
 
   const isElementSelected = useCallback((element: string) => {
     return selectedElements.includes(element) || selectedElement === element;
@@ -342,14 +92,13 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
               "resize-handle resize-handle-" + handle,
               "absolute transition-all duration-200 hover:scale-125",
               "bg-blue-500 border-2 border-white rounded-full shadow-lg",
-              "hover:bg-blue-600 hover:shadow-xl"
+              "hover:bg-blue-600 hover:shadow-xl z-50"
             )}
             data-handle={handle}
             style={{
               width: '10px',
               height: '10px',
               cursor: `${handle}-resize`,
-              zIndex: 1000,
               ...getHandlePosition(handle)
             }}
           />
@@ -387,8 +136,6 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
   // Enhanced element wrapper with advanced interactions
   const renderElement = useCallback((element: string, children: React.ReactNode) => {
     const isSelected = isElementSelected(element);
-    const isHovered = hoveredElement === element;
-    const ripple = rippleEffects.get(element);
     
     return (
       <div
@@ -396,16 +143,12 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           element,
           "relative transition-all duration-200",
           isSelected && cssMode === 'easy' && 'z-10',
-          isHovered && cssMode === 'easy' && 'transform hover:scale-105',
           cssMode === 'easy' && 'cursor-move'
         )}
         onMouseDown={onMouseDown ? (e) => {
           e.stopPropagation();
-          createRippleEffect(element, e.clientX, e.clientY);
           onMouseDown(e, element);
         } : undefined}
-        onMouseEnter={() => handleElementHover(element, true)}
-        onMouseLeave={() => handleElementHover(element, false)}
         onContextMenu={onContextMenu ? (e) => {
           e.stopPropagation();
           onContextMenu(e, element);
@@ -414,11 +157,6 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
           e.stopPropagation();
           onRightClick(e, element);
         } : undefined}
-        onFocus={() => setFocusedElement(element)}
-        onBlur={() => setFocusedElement(null)}
-        tabIndex={cssMode === 'easy' ? 0 : -1}
-        role={cssMode === 'easy' ? 'button' : undefined}
-        aria-label={cssMode === 'easy' ? `Edit ${element.replace('profile-', '')}` : undefined}
         style={{
           userSelect: cssMode === 'easy' ? 'none' : 'auto',
           outline: 'none'
@@ -427,40 +165,89 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
         {children}
         {renderResizeHandles(element)}
         
-        {/* Ripple effect */}
-        {ripple && (
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              left: ripple.x - 50,
-              top: ripple.y - 50,
-              width: 100,
-              height: 100,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%)',
-              transform: 'scale(0)',
-              animation: 'ripple 0.6s ease-out forwards'
-            }}
-          />
-        )}
-        
-        {/* Hover overlay for easy mode */}
-        {cssMode === 'easy' && isHovered && !isSelected && (
-          <div className="absolute inset-0 bg-blue-500 bg-opacity-10 rounded pointer-events-none transition-opacity duration-200" />
-        )}
-        
         {/* Loading overlay */}
-        {loadingStates.get(`${element}-image`) && (
+        {imageLoading.has(`${element}-image`) && (
           <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center rounded">
             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
         )}
       </div>
     );
-  }, [isElementSelected, hoveredElement, rippleEffects, cssMode, onMouseDown, onContextMenu, onRightClick, handleElementHover, setFocusedElement, createRippleEffect, renderResizeHandles, loadingStates]);
+  }, [isElementSelected, cssMode, onMouseDown, onContextMenu, onRightClick, renderResizeHandles, imageLoading]);
+
+  // Handle image errors and loading
+  const handleImageError = useCallback((imageId: string) => {
+    setImageErrors(prev => new Set(prev).add(imageId));
+    setImageLoading(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(imageId);
+      return newSet;
+    });
+  }, []);
+
+  const handleImageLoad = useCallback((imageId: string) => {
+    setImageLoading(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(imageId);
+      return newSet;
+    });
+    setImageErrors(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(imageId);
+      return newSet;
+    });
+  }, []);
+
+  const handleImageLoadStart = useCallback((imageId: string) => {
+    setImageLoading(prev => new Set(prev).add(imageId));
+  }, []);
+
+  // Smart image rendering with fallbacks
+  const renderOptimizedImage = useCallback((
+    src: string, 
+    alt: string, 
+    className: string,
+    imageId: string,
+    fallbackComponent?: React.ReactNode
+  ) => {
+    const hasError = imageErrors.has(imageId);
+    const isLoading = imageLoading.has(imageId);
+
+    if (hasError) {
+      return fallbackComponent || (
+        <div className={cn(className, "bg-gray-300 dark:bg-gray-600 flex items-center justify-center")}>
+          <span className="text-gray-500 text-lg">🖼️</span>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {isLoading && (
+          <div className={cn(className, "absolute inset-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center")}>
+            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        <img
+          src={src}
+          alt={alt}
+          className={cn(className, isLoading && "opacity-0")}
+          onError={() => handleImageError(imageId)}
+          onLoad={() => handleImageLoad(imageId)}
+          onLoadStart={() => handleImageLoadStart(imageId)}
+          draggable={false}
+          loading="lazy"
+        />
+      </>
+    );
+  }, [imageErrors, imageLoading, handleImageError, handleImageLoad, handleImageLoadStart]);
 
   // Memoized CSS with performance optimizations
   const optimizedCSS = useMemo(() => {
+    if (!customCSS || typeof customCSS !== 'string') {
+      return '';
+    }
+
     return `
       ${customCSS}
       
@@ -473,17 +260,6 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       }
       
       /* Enhanced animations */
-      @keyframes ripple {
-        0% {
-          transform: scale(0);
-          opacity: 1;
-        }
-        100% {
-          transform: scale(4);
-          opacity: 0;
-        }
-      }
-      
       @keyframes pulse {
         0%, 100% {
           opacity: 1;
@@ -514,52 +290,6 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
       }
     `;
   }, [customCSS]);
-
-  // Smart image rendering with fallbacks
-  const renderOptimizedImage = useCallback((
-    src: string, 
-    alt: string, 
-    className: string,
-    imageId: string,
-    fallbackComponent?: React.ReactNode
-  ) => {
-    const optimizedSrc = optimizedImages.get(imageId) || src;
-    const hasError = imageErrors.has(imageId);
-    const isLoading = loadingStates.get(imageId);
-
-    if (hasError) {
-      return fallbackComponent || (
-        <div className={cn(className, "bg-gray-300 dark:bg-gray-600 flex items-center justify-center")}>
-          <span className="text-gray-500 text-lg">🖼️</span>
-        </div>
-      );
-    }
-
-    return (
-      <>
-        {isLoading && (
-          <div className={cn(className, "absolute inset-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center")}>
-            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-        <img
-          src={optimizedSrc}
-          alt={alt}
-          className={cn(className, isLoading && "opacity-0")}
-          onError={() => setImageErrors(prev => new Set(prev).add(imageId))}
-          onLoad={() => {
-            setImageErrors(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(imageId);
-              return newSet;
-            });
-          }}
-          draggable={false}
-          loading="lazy"
-        />
-      </>
-    );
-  }, [optimizedImages, imageErrors, loadingStates]);
 
   return (
     <div className="flex justify-center items-center min-h-full p-4">
@@ -718,13 +448,6 @@ export const EnhancedProfilePreview: React.FC<EnhancedProfilePreviewProps> = ({
             </div>
           ))}
         </div>
-
-        {/* Performance indicator for easy mode */}
-        {cssMode === 'easy' && process.env.NODE_ENV === 'development' && (
-          <div className="absolute top-2 right-2 text-xs bg-black bg-opacity-50 text-white px-2 py-1 rounded">
-            FPS: {Math.round(InteractionSystem.getInstance().getPerformanceStats().fps)}
-          </div>
-        )}
       </div>
     </div>
   );

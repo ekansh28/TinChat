@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
 import { cn } from '@/lib/utils';
 import { useBadgeManager } from '../hooks/useBadgeManager';
+import { useToast } from '@/hooks/use-toast';
 import type { Badge } from '../types';
 
 interface BadgeManagerProps {
@@ -16,59 +17,39 @@ interface BadgeManagerProps {
   isTheme98: boolean;
 }
 
-// Advanced image validation and optimization
-class ImageValidator {
-  static async validateImage(url: string): Promise<{valid: boolean, dimensions?: {width: number, height: number}, size?: number, error?: string}> {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const startTime = Date.now();
-      
-      img.onload = () => {
-        const loadTime = Date.now() - startTime;
-        resolve({
-          valid: true,
-          dimensions: { width: img.width, height: img.height },
-          size: loadTime // Approximate size indicator
-        });
-      };
-      
-      img.onerror = () => {
-        resolve({
-          valid: false,
-          error: 'Failed to load image'
-        });
-      };
-      
-      // Set timeout for slow loading images
-      setTimeout(() => {
-        resolve({
-          valid: false,
-          error: 'Image load timeout'
-        });
-      }, 10000);
-      
-      img.src = url;
-    });
+// Simplified image validation
+const validateImageUrl = async (url: string): Promise<{valid: boolean, error?: string}> => {
+  if (!url.trim()) {
+    return { valid: false, error: 'URL cannot be empty' };
   }
 
-  static getOptimalSize(width: number, height: number, maxSize: number = 64): {width: number, height: number} {
-    const aspectRatio = width / height;
+  try {
+    new URL(url);
+  } catch {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timeout = setTimeout(() => {
+      resolve({ valid: false, error: 'Image load timeout' });
+    }, 10000);
     
-    if (width > height) {
-      return {
-        width: maxSize,
-        height: Math.round(maxSize / aspectRatio)
-      };
-    } else {
-      return {
-        width: Math.round(maxSize * aspectRatio),
-        height: maxSize
-      };
-    }
-  }
-}
+    img.onload = () => {
+      clearTimeout(timeout);
+      resolve({ valid: true });
+    };
+    
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve({ valid: false, error: 'Failed to load image' });
+    };
+    
+    img.src = url;
+  });
+};
 
-// Drag and drop functionality for badge reordering
+// Simplified drag and drop hook
 const useDragAndDrop = (badges: Badge[], setBadges: React.Dispatch<React.SetStateAction<Badge[]>>) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -78,7 +59,7 @@ const useDragAndDrop = (badges: Badge[], setBadges: React.Dispatch<React.SetStat
     e.dataTransfer.effectAllowed = 'move';
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+  const handleBadgeDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     setDragOverIndex(index);
   }, []);
@@ -86,15 +67,8 @@ const useDragAndDrop = (badges: Badge[], setBadges: React.Dispatch<React.SetStat
   const handleDragEnd = useCallback(() => {
     if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
       const newBadges = [...badges];
-      const draggedBadge = newBadges[draggedIndex];
-      
-      // Remove dragged item
-      newBadges.splice(draggedIndex, 1);
-      
-      // Insert at new position
-      const insertIndex = draggedIndex < dragOverIndex ? dragOverIndex - 1 : dragOverIndex;
-      newBadges.splice(insertIndex, 0, draggedBadge);
-      
+      const [draggedBadge] = newBadges.splice(draggedIndex, 1);
+      newBadges.splice(dragOverIndex, 0, draggedBadge);
       setBadges(newBadges);
     }
     
@@ -110,7 +84,7 @@ const useDragAndDrop = (badges: Badge[], setBadges: React.Dispatch<React.SetStat
     draggedIndex,
     dragOverIndex,
     handleDragStart,
-    handleDragOver,
+    handleBadgeDragOver,
     handleDragEnd,
     handleDragLeave
   };
@@ -126,7 +100,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
 }) => {
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [imageLoading, setImageLoading] = useState<Set<string>>(new Set());
-  const [validationResults, setValidationResults] = useState<Map<string, any>>(new Map());
+  const [validationResults, setValidationResults] = useState<Map<string, {valid: boolean, error?: string}>>(new Map());
   const [previewMode, setPreviewMode] = useState<'grid' | 'list'>('grid');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(new Set());
@@ -134,6 +108,8 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDropRef = useRef<HTMLDivElement>(null);
+
+  const { toast } = useToast();
 
   const {
     newBadgeUrl,
@@ -149,7 +125,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     draggedIndex,
     dragOverIndex,
     handleDragStart,
-    handleDragOver,
+    handleBadgeDragOver,
     handleDragEnd,
     handleDragLeave
   } = useDragAndDrop(badges, setBadges);
@@ -161,21 +137,12 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     setImageLoading(prev => new Set(prev).add('new-badge'));
     
     try {
-      const result = await ImageValidator.validateImage(url);
+      const result = await validateImageUrl(url);
       setValidationResults(prev => new Map(prev).set('new-badge', result));
-      
-      if (result.valid && result.dimensions) {
-        const { width, height } = result.dimensions;
-        const isSquare = Math.abs(width - height) / Math.max(width, height) < 0.1;
-        
-        if (!isSquare) {
-          console.warn('Badge image is not square - may not display optimally');
-        }
-      }
-      
       return result.valid;
     } catch (error) {
       console.error('Badge validation error:', error);
+      setValidationResults(prev => new Map(prev).set('new-badge', { valid: false, error: 'Validation failed' }));
       return false;
     } finally {
       setImageLoading(prev => {
@@ -191,8 +158,21 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     const isValid = await validateNewBadge(newBadgeUrl);
     if (isValid) {
       addBadge();
+      // Clear validation results after successful add
+      setValidationResults(prev => {
+        const newMap = new Map(prev);
+        newMap.delete('new-badge');
+        return newMap;
+      });
+    } else {
+      const result = validationResults.get('new-badge');
+      toast({
+        title: "Invalid Badge",
+        description: result?.error || "Please check the image URL",
+        variant: "destructive"
+      });
     }
-  }, [newBadgeUrl, validateNewBadge, addBadge]);
+  }, [newBadgeUrl, validateNewBadge, addBadge, validationResults, toast]);
 
   // File upload handling
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,12 +180,20 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file",
+        variant: "destructive"
+      });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      alert('Image file is too large. Please choose a file under 5MB.');
+      toast({
+        title: "File Too Large",
+        description: "Please choose a file under 5MB",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -214,16 +202,23 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       const dataUrl = event.target?.result as string;
       setNewBadgeUrl(dataUrl);
     };
+    reader.onerror = () => {
+      toast({
+        title: "Error",
+        description: "Failed to read file",
+        variant: "destructive"
+      });
+    };
     reader.readAsDataURL(file);
-  }, [setNewBadgeUrl]);
+  }, [setNewBadgeUrl, toast]);
 
   // Drag and drop for file uploads
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleFileDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -231,15 +226,38 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     const imageFile = files.find(file => file.type.startsWith('image/'));
 
     if (imageFile) {
+      if (imageFile.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Please choose a file under 5MB",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         setNewBadgeUrl(dataUrl);
       };
+      reader.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to read file",
+          variant: "destructive"
+        });
+      };
       reader.readAsDataURL(imageFile);
+    } else {
+      toast({
+        title: "Invalid File",
+        description: "Please drop an image file",
+        variant: "destructive"
+      });
     }
-  }, [setNewBadgeUrl]);
+  }, [setNewBadgeUrl, toast]);
 
+  // Image event handlers
   const handleImageError = useCallback((badgeId: string) => {
     setImageErrors(prev => new Set(prev).add(badgeId));
     setImageLoading(prev => {
@@ -290,7 +308,12 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
   const deleteSelectedBadges = useCallback(() => {
     selectedBadges.forEach(badgeId => removeBadge(badgeId));
     clearSelection();
-  }, [selectedBadges, removeBadge, clearSelection]);
+    toast({
+      title: "Badges Deleted",
+      description: `${selectedBadges.size} badge(s) removed`,
+      variant: "success"
+    });
+  }, [selectedBadges, removeBadge, clearSelection, toast]);
 
   // Filter badges based on search
   const filteredBadges = badges.filter(badge =>
@@ -390,7 +413,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
             <div className="text-sm font-medium">Badge Preview</div>
             <div className="flex gap-1">
               <Button
-                variant={previewMode === 'grid' ? 'default' : 'outline'}
+                variant={previewMode === 'grid' ? 'primary' : 'outline'}
                 size="sm"
                 onClick={() => setPreviewMode('grid')}
                 className="text-xs px-2 py-1"
@@ -398,7 +421,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
                 Grid
               </Button>
               <Button
-                variant={previewMode === 'list' ? 'default' : 'outline'}
+                variant={previewMode === 'list' ? 'primary' : 'outline'}
                 size="sm"
                 onClick={() => setPreviewMode('list')}
                 className="text-xs px-2 py-1"
@@ -416,7 +439,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
                 key={badge.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
+                onDragOver={(e) => handleBadgeDragOver(e, index)}
                 onDragEnd={handleDragEnd}
                 onDragLeave={handleDragLeave}
                 onClick={() => toggleBadgeSelection(badge.id)}
@@ -551,10 +574,10 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
               {/* Validation feedback */}
               {validationResults.has('new-badge') && (
                 <div className="mt-1 text-xs">
-                  {validationResults.get('new-badge').valid ? (
+                  {validationResults.get('new-badge')?.valid ? (
                     <span className="text-green-600">✓ Valid image</span>
                   ) : (
-                    <span className="text-red-600">✗ {validationResults.get('new-badge').error}</span>
+                    <span className="text-red-600">✗ {validationResults.get('new-badge')?.error}</span>
                   )}
                 </div>
               )}
@@ -563,8 +586,8 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
             {/* File Upload Zone */}
             <div
               ref={dragDropRef}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+              onDragOver={handleFileDragOver}
+              onDrop={handleFileDrop}
               className={cn(
                 "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors",
                 "hover:bg-gray-50 dark:hover:bg-gray-600",

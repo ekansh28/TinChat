@@ -32,6 +32,14 @@ export const useBadgeManager = ({ badges, setBadges }: UseBadgeManagerProps) => 
       return;
     }
 
+    if (badges.length >= 10) {
+      toast({
+        title: "Maximum badges reached",
+        description: "You can only have up to 10 badges"
+      });
+      return;
+    }
+
     const validation = validateImageUrl(newBadgeUrl);
     if (!validation.valid) {
       toast({

@@ -26,7 +26,7 @@ const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
 export function ThemeProvider({
   children,
   defaultTheme = 'theme-98',
-  storageKey = 'vite-ui-theme',
+  storageKey = 'tinchat-theme',
 }: ThemeProviderProps) {
   const pathname = usePathname();
 
@@ -48,7 +48,7 @@ export function ThemeProvider({
     return pathname === '/' ? 'theme-98' : userSelectedTheme;
   }, [pathname, userSelectedTheme]);
 
-  // Apply theme classes (CSS is loaded from layout.tsx)
+  // Apply theme classes (CSS is loaded from CDN via layout.tsx)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 

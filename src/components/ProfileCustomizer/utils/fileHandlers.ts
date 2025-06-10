@@ -1,10 +1,18 @@
 // src/components/ProfileCustomizer/utils/fileHandlers.ts
 import { supabase } from '@/lib/supabase';
-import { v4 as uuidv4 } from 'uuid';
+
+// Simple UUID generator for compatibility
+const generateId = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return 'file-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+};
 
 export const uploadFile = async (file: File, bucket: string, userId: string): Promise<string | null> => {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${uuidv4()}.${fileExt}`;
+  const fileName = `${generateId()}.${fileExt}`;
   const storagePath = `public/${userId}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage

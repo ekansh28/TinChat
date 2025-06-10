@@ -114,7 +114,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
       console.log('ProfileCustomizer: Profile loaded callback', { user, profile });
       setCurrentUser(user);
       if (profile) {
-        // FIXED: Always set default CSS first to prevent undefined states
+        // Always set default CSS first to prevent undefined states
         const profileCSS = profile.profile_card_css || getDefaultProfileCSS();
         setCustomCSS(profileCSS);
         
@@ -135,7 +135,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         if (profile.avatar_url) setAvatarPreview(profile.avatar_url);
         if (profile.banner_url) setBannerPreview(profile.banner_url);
         
-        // FIXED: Safe parsing with comprehensive error handling
+        // Safe parsing with comprehensive error handling
         try {
           if (profile.easy_customization_data && typeof profile.easy_customization_data === 'string') {
             const parsedData = JSON.parse(profile.easy_customization_data);
@@ -163,15 +163,15 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         } catch (e) {
           console.error('Failed to parse easy customization data:', e);
           console.log('Raw easy_customization_data:', profile.easy_customization_data);
-          // FIXED: Always fallback to defaults instead of leaving undefined
+          // Always fallback to defaults instead of leaving undefined
           setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
         }
       } else {
-        // FIXED: Initialize with proper defaults for new profile
+        // Initialize with proper defaults for new profile
         console.log('No profile found, initializing with defaults');
         setCustomCSS(getDefaultProfileCSS());
         setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-        setStatus('online'); // FIXED: Set default status to prevent "Offline" showing
+        setStatus('online'); // Set default status to prevent "Offline" showing
         setDisplayNameColor('#ffffff');
         setDisplayNameAnimation('none');
         setRainbowSpeed(3);
@@ -208,7 +208,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     }
   }, [isOpen, loadCurrentProfile]);
 
-  // FIXED: Ensure default CSS is set when CSS mode changes
+  // Ensure default CSS is set when CSS mode changes
   useEffect(() => {
     if (cssMode === 'custom' && !customCSS) {
       console.log('Setting default CSS for custom mode');
@@ -216,17 +216,17 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     }
   }, [cssMode, customCSS, setCustomCSS]);
 
-  // FIXED: Initialize CSS properly when component mounts
+  // Initialize CSS properly when component mounts
   useEffect(() => {
     if (!customCSS && cssMode === 'custom') {
       setCustomCSS(getDefaultProfileCSS());
     }
-  }, []);
+  }, [customCSS, cssMode, setCustomCSS]);
 
   // Handle save
   const handleSave = async () => {
     const success = await saveProfile({
-      customCSS: customCSS || getDefaultProfileCSS(), // FIXED: Ensure CSS is never empty
+      customCSS: customCSS || getDefaultProfileCSS(), // Ensure CSS is never empty
       bio,
       displayName,
       username,
