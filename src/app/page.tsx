@@ -16,6 +16,7 @@ import Footer from '@/components/home/Footer';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { useTheme } from '@/components/theme-provider';
 
 // Declare global types for TypeScript
 declare global {
@@ -46,36 +47,7 @@ export default function SelectionLobby() {
   // Custom hooks
   const usersOnline = useOnlineUsers();
   const isMobile = useMobileDetection();
-
-  // Load 98.css and apply theme-98 class on mount
-  useEffect(() => {
-    // Apply theme-98 class to html element
-    document.documentElement.classList.add('theme-98');
-    
-    // Check if 98.css is already loaded
-    const existing98CSS = document.getElementById('css-98-home');
-    
-    if (!existing98CSS) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/98.css';
-      link.id = 'css-98-home';
-      link.crossOrigin = 'anonymous';
-      document.head.appendChild(link);
-      
-      console.log('98.css loaded for home page');
-    }
-
-    // Cleanup function to remove the CSS when component unmounts (when navigating away)
-    return () => {
-      const existingLink = document.getElementById('css-98-home');
-      if (existingLink && pathname !== '/') {
-        document.head.removeChild(existingLink);
-        console.log('98.css removed when leaving home page');
-      }
-      // Keep theme-98 class since it's used by globals.css
-    };
-  }, [pathname]);
+  const { currentTheme } = useTheme();
 
   // Reset navigation state when pathname changes
   useEffect(() => {
@@ -86,6 +58,7 @@ export default function SelectionLobby() {
     if (!router) {
       console.error("SelectionLobby: Router is not available in handleStartChat.");
       toast({ 
+        variant: "destructive",
         title: "Navigation Error", 
         description: "Could not initiate chat. Router not available."
       });
@@ -105,15 +78,17 @@ export default function SelectionLobby() {
       ? `/video-chat${queryString ? `?${queryString}` : ''}` 
       : `/chat${queryString ? `?${queryString}` : ''}`;
     
-    try {
-      router.push(path);
-    } catch (err) {
-      console.error("Navigation failed:", err);
-      toast({ 
-        title: "Navigation Error", 
-        description: "Could not start chat session."
+    const navigationPromise = router.push(path);
+    if (navigationPromise && typeof navigationPromise.catch === 'function') {
+      navigationPromise.catch((err) => {
+        console.error("Navigation failed:", err);
+        toast({ 
+          variant: "destructive",
+          title: "Navigation Error", 
+          description: "Could not start chat session."
+        });
+        setIsNavigating(false);
       });
-      setIsNavigating(false);
     }
   };
 
@@ -149,14 +124,14 @@ export default function SelectionLobby() {
         />
       </div>
 
-      {/* Main content area - centered */}
+      {/* Main content area - centered like old design */}
       <div className={styles.homeMainContent}>
         <div className={styles.homeCardWrapper}>
           <div className={styles.sideLinksContainer}>
-            {/* Side Links positioned relative to the card */}
+            {/* Side Links positioned relative to the card like old design */}
             <SideLinks isMobile={isMobile} />
 
-            {/* Main Card using 98.css window */}
+            {/* Main Card using old design components but modular structure */}
             <div ref={cardWrapperRef} className={styles.cardZIndex}>
               <MainCard
                 currentInterest={currentInterest}
@@ -176,14 +151,14 @@ export default function SelectionLobby() {
         </div>
       </div>
 
-      {/* Settings Panel - using 98.css window styling */}
+      {/* Settings Panel - using current theme */}
       <SettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         position={panelPosition}
         setPanelPosition={setPanelPosition}
         cardWrapperRef={cardWrapperRef}
-        currentTheme="theme-98" // Force Windows 98 theme
+        currentTheme={currentTheme}
         isNavigating={isNavigating}
         isMobile={isMobile}
       />

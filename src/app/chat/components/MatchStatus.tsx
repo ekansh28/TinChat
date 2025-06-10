@@ -1,6 +1,7 @@
 // src/app/chat/components/MatchStatus.tsx
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button-themed';
 
 interface MatchStatusProps {
   isSearching: boolean;
@@ -28,9 +29,9 @@ const MatchStatus: React.FC<MatchStatusProps> = ({
   };
 
   const getButtonText = () => {
-    if (isConnected) return 'Disconnect';
-    if (isSearching) return 'Stop Search';
-    return 'Find Partner';
+    if (isConnected) return 'Skip';
+    if (isSearching) return 'Stop';
+    return 'Find';
   };
 
   const handleButtonClick = () => {
@@ -42,32 +43,23 @@ const MatchStatus: React.FC<MatchStatusProps> = ({
   };
 
   return (
-    <div className={cn("window-body", className)} style={{ padding: '8px' }}>
-      <div className="field-row" style={{ marginBottom: '8px' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px' }}>
-            {getStatusText()}
-          </div>
-          {partnerCount > 0 && (
-            <div style={{ fontSize: '10px', color: '#666' }}>
-              {partnerCount} users online
-            </div>
-          )}
-        </div>
+    <div className={cn("flex items-center space-x-2", className)}>
+      <div className="text-xs">
+        <div className="font-bold">{getStatusText()}</div>
+        {partnerCount > 0 && (
+          <div className="text-gray-500">{partnerCount} online</div>
+        )}
       </div>
       
-      <div className="field-row" style={{ textAlign: 'center' }}>
-        <button
-          onClick={handleButtonClick}
-          disabled={disabled}
-          style={{ 
-            minWidth: '80px',
-            fontSize: '11px'
-          }}
-        >
-          {getButtonText()}
-        </button>
-      </div>
+      <Button
+        onClick={handleButtonClick}
+        disabled={disabled}
+        size="sm"
+        variant={isConnected ? "destructive" : "default"}
+        className="text-xs px-2 py-1"
+      >
+        {getButtonText()}
+      </Button>
     </div>
   );
 };

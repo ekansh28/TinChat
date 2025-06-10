@@ -13,8 +13,8 @@ interface HeaderProps {
 export default function Header({ version, isMobile, onOpenProfileCustomizer }: HeaderProps) {
   return (
     <div className={cn(
-      "absolute top-0 right-0 flex items-center space-x-2 z-50",
-      isMobile ? "top-2 right-2 space-x-1 p-2" : "top-3 right-3 p-3"
+      "absolute top-3 right-3 flex items-center space-x-2 z-20",
+      isMobile && "top-2 right-2 space-x-1"
     )}>
       <p className={cn(
         "text-gray-500",
@@ -23,14 +23,14 @@ export default function Header({ version, isMobile, onOpenProfileCustomizer }: H
         v{version}
       </p>
       
-      {/* Profile Customizer Button */}
+      {/* Profile Customizer Button - Only show on desktop or as icon on mobile */}
       <Button
         onClick={onOpenProfileCustomizer}
         variant="outline"
         size={isMobile ? "sm" : "default"}
         className={cn(
           "flex items-center gap-1",
-          isMobile && "px-2 py-1 text-xs"
+          isMobile && "px-2 py-1 text-xs scale-90"
         )}
       >
         <span className="text-sm">🎨</span>

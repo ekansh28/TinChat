@@ -123,19 +123,6 @@ export const changeFavicon = (newFaviconHref: string, removeOld: boolean = false
   existingLink.href = newFaviconHref;
 };
 
-// Sound utility
-export const playSound = (filename: string): void => {
-  try {
-    const audio = new Audio(`/sounds/${filename}`);
-    audio.volume = 0.5;
-    audio.play().catch(err => {
-      console.warn('Could not play sound:', err);
-    });
-  } catch (err) {
-    console.warn('Error creating audio:', err);
-  }
-};
-
 // Message validation
 export const validateMessage = (message: string): { valid: boolean; error?: string } => {
   const trimmed = message.trim();
@@ -171,6 +158,7 @@ export const showChatToast = {
     toast({
       title: "Connection Error",
       description: error,
+      variant: "destructive"
     });
   },
   
@@ -192,6 +180,7 @@ export const showChatToast = {
     toast({
       title: "Message Error",
       description: error,
+      variant: "destructive"
     });
   },
   
@@ -263,4 +252,101 @@ export const setupMobileInputHandling = (inputRef: React.RefObject<HTMLInputElem
     input.removeEventListener('focus', handleFocus);
     input.removeEventListener('blur', handleBlur);
   };
+};
+
+// Status configuration for partner status display
+export const STATUS_CONFIG = {
+  online: { icon: '/icons/online.png', color: '#43b581', text: 'Online' },
+  idle: { icon: '/icons/idle.png', color: '#faa61a', text: 'Idle' },
+  dnd: { icon: '/icons/dnd.png', color: '#f04747', text: 'Do Not Disturb' },
+  offline: { icon: '/icons/offline.png', color: '#747f8d', text: 'Offline' }
+} as const;
+
+// Utility to filter system messages for advanced message management
+export const filterSystemMessagesFrom = (msgs: Message[], textPattern: string): Message[] => 
+  msgs.filter(msg => !(msg.sender === 'system' && msg.text.toLowerCase().includes(textPattern.toLowerCase())));
+
+// Utility to add system message if not already present
+export const addSystemMessageIfNotPresentIn = (msgs: Message[], text: string, idSuffix: string): Message[] => {
+  const lowerText = text.toLowerCase();
+  if (!msgs.some(msg => msg.sender === 'system' && msg.text.toLowerCase().includes(lowerText))) {
+    return [...msgs, { 
+      id: `${Date.now()}-${idSuffix}`, 
+      text, 
+      sender: 'system', 
+      timestamp: new Date() 
+    }];
+  }
+  return msgs;
+};
+
+// Sound utility with error handling
+export const playSound = (filename: string, volume: number = 0.5): void => {
+  try {
+    const audio = new Audio(`/sounds/${filename}`);
+    audio.volume = volume;
+    audio.play().catch(err => {
+      console.warn('Could not play sound:', err);
+    });
+  } catch (err) {
+    console.warn('Error creating audio:', err);
+  }
+};
+
+// Typing indicator utilities
+export const createTypingTimeout = (callback: () => void, delay: number = 2000): NodeJS.Timeout => {
+  return setTimeout(callback, delay);
+};
+
+export const clearTypingTimeout = (timeout: NodeJS.Timeout | null): void => {
+  if (timeout) {
+    clearTimeout(timeout);
+  }
+};
+
+// Mobile viewport utilities
+export const getMobileViewportHeight = (): number => {
+  if (typeof window !== 'undefined') {
+    return window.visualViewport?.height || window.innerHeight;
+  }
+  return 0;
+};
+
+export const isMobileDevice = (): boolean => {
+  if (typeof window !== 'undefined') {
+    return window.innerWidth < 768;
+  }
+  return false;
+};
+
+// Scroll utilities
+export const scrollToBottom = (container: HTMLElement | null, force: boolean = false): void => {
+  if (!container) return;
+  
+  const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+  
+  if (force || isAtBottom) {
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }
+};
+
+// Emoji utilities
+export const getRandomEmoji = (emojiFilenames: string[], baseUrl: string): string => {
+  if (emojiFilenames.length === 0) return '';
+  const randomIndex = Math.floor(Math.random() * emojiFilenames.length);
+  return `${baseUrl}${emojiFilenames[randomIndex]}`;
+};
+
+export const createEmojiCycleInterval = (
+  emojiFilenames: string[], 
+  baseUrl: string, 
+  callback: (url: string) => void,
+  intervalMs: number = 300
+): NodeJS.Timeout => {
+  return setInterval(() => {
+    const randomUrl = getRandomEmoji(emojiFilenames, baseUrl);
+    if (randomUrl) callback(randomUrl);
+  }, intervalMs);
 };

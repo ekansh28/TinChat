@@ -1,30 +1,82 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { useChatSocket, useChatState } from './hooks/useChatSocket';
-import { playSound } from '@/lib/utils';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 import { useTheme } from '@/components/theme-provider';
-import { cn } from '@/lib/utils';
+import { cn, playSound } from '@/lib/utils';
+import { ConditionalGoldfishImage } from '@/components/ConditionalGoldfishImage';
 import HomeButton from '@/components/HomeButton';
+import { supabase } from '@/lib/supabase';
+import { ProfileCard } from '@/components/ProfileCard';
 
-// Import your modular components
+// Import modular components
 import ChatWindow from './components/ChatWindow';
 import PartnerProfile from './components/PartnerProfile';
 import MatchStatus from './components/MatchStatus';
-import { PartnerInfo } from './utils/ChatHelpers';
+
+// Import hooks and utilities
+import { useChatSocket, useChatState } from './hooks/useChatSocket';
+import { PartnerInfo, Message, changeFavicon, getDisplayNameClass } from './utils/ChatHelpers';
+
+// Constants
+const FAVICON_IDLE = '/Idle.ico';
+const FAVICON_SEARCHING = '/Searching.ico';
+const FAVICON_SUCCESS = '/Success.ico';
+const FAVICON_SKIPPED = '/Skipped.ico';
+const FAVICON_DEFAULT = '/favicon.ico';
+
+const SYS_MSG_SEARCHING_PARTNER = 'Searching for a partner...';
+const SYS_MSG_STOPPED_SEARCHING = 'Stopped searching for a partner.';
+const SYS_MSG_CONNECTED_PARTNER = 'Connected with a partner. You can start chatting!';
+const SYS_MSG_YOU_DISCONNECTED = 'You have disconnected.';
+const SYS_MSG_PARTNER_DISCONNECTED = 'Your partner has disconnected.';
+const SYS_MSG_COMMON_INTERESTS_PREFIX = 'You both like ';
 
 const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const { toast } = useToast();
   const { currentTheme } = useTheme();
+  const [isMounted, setIsMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  
+  // Auth state
   const [authId, setAuthId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
+  const [ownDisplayNameColor, setOwnDisplayNameColor] = useState('#0066cc');
+  const [ownDisplayNameAnimation, setOwnDisplayNameAnimation] = useState('none');
 
+  // Profile card state
+  const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
+  const [profileCardUserId, setProfileCardUserId] = useState<string | null>(null);
+  const [profileCardPosition, setProfileCardPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isScrollEnabled, setIsScrollEnabled] = useState(true);
+
+  // Connection tracking refs
+  const autoSearchDoneRef = useRef(false);
+  const isProcessingFindOrDisconnect = useRef(false);
+  const successTransitionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const successTransitionEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const skippedFaviconTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Previous state tracking for favicon logic
+  const prevIsFindingPartnerRef = useRef(false);
+  const prevIsPartnerConnectedRef = useRef(false);
+  const prevIsSelfDisconnectedRecentlyRef = useRef(false);
+  const prevIsPartnerLeftRecentlyRef = useRef(false);
+
+  // Additional state for advanced logic
+  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
+  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
+  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
+
+  // Use the chat state hook
   const {
     messages,
+    setMessages,
     isPartnerConnected,
     setIsPartnerConnected,
     isFindingPartner,
@@ -40,8 +92,149 @@ const ChatPageClientContent: React.FC = () => {
     resetChatState
   } = useChatState();
 
+  const interests = useMemo(() => 
+    searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], 
+    [searchParams]
+  );
+
+  const effectivePageTheme = useMemo(() => 
+    (isMounted ? currentTheme : 'theme-98'), 
+    [isMounted, currentTheme]
+  );
+
+  const ownDisplayUsername = useMemo(() => {
+    return username || "You";
+  }, [username]);
+
+  // Chat window style
+  const chatWindowStyle = useMemo(() => {
+    if (isMobile) {
+      return { 
+        width: '100vw', 
+        height: '100vh',
+        maxWidth: '100vw',
+        maxHeight: '100vh'
+      };
+    }
+    return { width: '600px', height: '600px' };
+  }, [isMobile]);
+
+  // CSS for display name animations
+  const displayNameAnimationCSS = `
+    .display-name-rainbow {
+      background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
+      background-size: 400% 400%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: rainbow 3s ease-in-out infinite;
+    }
+
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .display-name-gradient {
+      background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
+      background-size: 300% 300%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gradientShift 4s ease-in-out infinite;
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .display-name-pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+
+    .display-name-glow {
+      text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+      animation: glow 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes glow {
+      from { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
+      to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
+    }
+  `;
+
+  // Navigation cleanup effect
+  useEffect(() => {
+    if (pathname === '/chat') {
+      console.log('Navigation to chat page detected, resetting states');
+      setIsFindingPartner(false);
+      setIsPartnerConnected(false);
+      setMessages([]);
+      setPartnerInfo(null);
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
+      autoSearchDoneRef.current = false;
+    }
+  }, [pathname, setIsFindingPartner, setIsPartnerConnected, setMessages, setPartnerInfo]);
+
+  // Handle mobile detection and viewport changes
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      if (mobile) {
+        const height = window.visualViewport?.height || window.innerHeight;
+        setViewportHeight(height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+
+    const handleResize = () => checkMobile();
+
+    const handleVisualViewportChange = () => {
+      if (isMobile && window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', handleResize);
+    
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+      }
+    };
+  }, [isMobile]);
+
   // Socket event handlers
   const handleMessage = useCallback((data: any) => {
+    console.log('Message received:', data);
+    
+    // Update partner info if we have new styling information
+    if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
+      setPartnerInfo(prev => prev ? {
+        ...prev,
+        displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
+        displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
+        rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
+      } : null);
+    }
+    
     addMessage({
       text: data.message,
       sender: 'partner',
@@ -52,7 +245,7 @@ const ChatPageClientContent: React.FC = () => {
       senderRainbowSpeed: data.senderRainbowSpeed
     });
     setIsPartnerTyping(false);
-  }, [addMessage, setIsPartnerTyping]);
+  }, [addMessage, setIsPartnerTyping, setPartnerInfo]);
 
   const handlePartnerFound = useCallback((data: any) => {
     console.log('Partner found:', data);
@@ -73,19 +266,14 @@ const ChatPageClientContent: React.FC = () => {
       badges: data.partnerBadges || []
     });
     
+    setPartnerInterests(data.interests || []);
     setIsFindingPartner(false);
     setIsPartnerConnected(true);
-    addSystemMessage('Connected with a partner. You can start chatting!');
+    setIsSelfDisconnectedRecently(false);
+    setIsPartnerLeftRecently(false);
+    setMessages([]); // Clear messages for new chat
     
-    // Add common interests message if any
-    const interests = searchParams.get('interests')?.split(',').filter(i => i.trim()) || [];
-    if (interests.length > 0 && data.interests && data.interests.length > 0) {
-      const common = interests.filter(i => data.interests.includes(i));
-      if (common.length > 0) {
-        addSystemMessage(`You both like ${common.join(', ')}.`);
-      }
-    }
-  }, [setPartnerInfo, setIsFindingPartner, setIsPartnerConnected, addSystemMessage, searchParams]);
+  }, [setPartnerInfo, setPartnerInterests, setIsFindingPartner, setIsPartnerConnected, setMessages]);
 
   const handlePartnerLeft = useCallback(() => {
     console.log('Partner left');
@@ -93,19 +281,20 @@ const ChatPageClientContent: React.FC = () => {
     setIsFindingPartner(false);
     setPartnerInfo(null);
     setIsPartnerTyping(false);
-    addSystemMessage('Your partner has disconnected.');
-  }, [setIsPartnerConnected, setIsFindingPartner, setPartnerInfo, setIsPartnerTyping, addSystemMessage]);
+    setPartnerInterests([]);
+    setIsPartnerLeftRecently(true);
+    setIsSelfDisconnectedRecently(false);
+  }, [setIsPartnerConnected, setIsFindingPartner, setPartnerInfo, setIsPartnerTyping, setPartnerInterests]);
 
-  // Then fix the callback
-const handleStatusChange = useCallback((status: string) => {
-  const validStatuses: Array<'online' | 'idle' | 'dnd' | 'offline'> = ['online', 'idle', 'dnd', 'offline'];
-  const validStatus = validStatuses.includes(status as any) ? status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline';
-  
-  setPartnerInfo(prev => {
-    if (!prev) return null;
-    return { ...prev, status: validStatus };
-  });
-}, [setPartnerInfo]);
+  const handleStatusChange = useCallback((status: string) => {
+    const validStatuses: Array<'online' | 'idle' | 'dnd' | 'offline'> = ['online', 'idle', 'dnd', 'offline'];
+    const validStatus = validStatuses.includes(status as any) ? status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline';
+    
+    setPartnerInfo(prev => {
+      if (!prev) return null;
+      return { ...prev, status: validStatus };
+    });
+  }, [setPartnerInfo]);
 
   const handleTypingStart = useCallback(() => {
     setIsPartnerTyping(true);
@@ -121,17 +310,31 @@ const handleStatusChange = useCallback((status: string) => {
 
   const handleCooldown = useCallback(() => {
     setIsFindingPartner(false);
-  }, [setIsFindingPartner]);
+    toast({ 
+      title: "Slow down!", 
+      description: "Please wait before finding a new partner.", 
+      variant: "default" 
+    });
+  }, [setIsFindingPartner, toast]);
 
   const handleDisconnect = useCallback((reason: string) => {
     console.log('Disconnected:', reason);
-    resetChatState();
-  }, [resetChatState]);
+    setIsPartnerConnected(false);
+    setIsFindingPartner(false);
+    setIsPartnerTyping(false);
+    setPartnerInfo(null);
+    autoSearchDoneRef.current = false;
+  }, [setIsPartnerConnected, setIsFindingPartner, setIsPartnerTyping, setPartnerInfo]);
 
   const handleConnectError = useCallback((err: Error) => {
     console.error('Connection error:', err);
     setIsFindingPartner(false);
-  }, [setIsFindingPartner]);
+    toast({ 
+      title: "Connection Error", 
+      description: `Could not connect to chat: ${String(err)}`, 
+      variant: "destructive" 
+    });
+  }, [setIsFindingPartner, toast]);
 
   // Initialize socket
   const {
@@ -156,87 +359,233 @@ const handleStatusChange = useCallback((status: string) => {
     authId
   });
 
-  // Check mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
   // Initialize auth
   useEffect(() => {
     const initAuth = async () => {
       try {
+        console.log('Starting auth check...');
         const { data: { user } } = await supabase.auth.getUser();
         setAuthId(user?.id || null);
+        console.log('Auth check complete. User ID:', user?.id || 'anonymous');
         
         if (user) {
-          const { data: profile } = await supabase
+          console.log('Fetching profile for authenticated user:', user.id);
+          const { data: profile, error } = await supabase
             .from('user_profiles')
-            .select('username, display_name')
+            .select('username, display_name, display_name_color, display_name_animation')
             .eq('id', user.id)
             .single();
             
-          setUsername(profile?.display_name || profile?.username || null);
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching profile:', error);
+            setUsername(null);
+            setOwnDisplayNameColor('#0066cc');
+            setOwnDisplayNameAnimation('none');
+          } else if (profile) {
+            console.log('Fetched profile:', profile);
+            const displayUsername = profile.display_name || profile.username;
+            setUsername(displayUsername);
+            setOwnDisplayNameColor(profile.display_name_color || '#0066cc');
+            setOwnDisplayNameAnimation(profile.display_name_animation || 'none');
+          } else {
+            console.log('No profile found for user');
+            setUsername(null);
+            setOwnDisplayNameColor('#0066cc');
+            setOwnDisplayNameAnimation('none');
+          }
+        } else {
+          console.log('No authenticated user found - proceeding as anonymous');
+          setUsername(null);
+          setOwnDisplayNameColor('#0066cc');
+          setOwnDisplayNameAnimation('none');
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
+        setAuthId(null);
+        setUsername(null);
+        setOwnDisplayNameColor('#0066cc');
+        setOwnDisplayNameAnimation('none');
       } finally {
+        console.log('Auth loading complete');
         setIsAuthLoading(false);
       }
     };
     
-    initAuth();
-  }, []);
+    if (isMounted) {
+      initAuth();
+    }
+  }, [isMounted]);
 
   // Auto-search for partner when connected
   useEffect(() => {
-    if (isConnected && !isAuthLoading && !isPartnerConnected && !isFindingPartner) {
-      const interests = searchParams.get('interests')?.split(',').filter(i => i.trim()) || [];
-      
+    if (isConnected && !isAuthLoading && !isPartnerConnected && !isFindingPartner && !autoSearchDoneRef.current) {
       console.log('Auto-searching for partner with interests:', interests);
       setIsFindingPartner(true);
-      addSystemMessage('Searching for a partner...');
+      addSystemMessage(SYS_MSG_SEARCHING_PARTNER);
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
       
       emitFindPartner({
         chatType: 'text',
         interests,
         authId
       });
+      autoSearchDoneRef.current = true;
     }
-  }, [isConnected, isAuthLoading, isPartnerConnected, isFindingPartner, searchParams, authId, emitFindPartner, setIsFindingPartner, addSystemMessage]);
+  }, [isConnected, isAuthLoading, isPartnerConnected, isFindingPartner, interests, authId, emitFindPartner, setIsFindingPartner, addSystemMessage]);
+
+  // Favicon and system message effects
+  useEffect(() => {
+    if (successTransitionIntervalRef.current) clearInterval(successTransitionIntervalRef.current);
+    if (successTransitionEndTimeoutRef.current) clearTimeout(successTransitionEndTimeoutRef.current);
+    if (skippedFaviconTimeoutRef.current) clearTimeout(skippedFaviconTimeoutRef.current);
+
+    let updatedMessages = [...messages];
+    const filterSystemMessagesFrom = (msgs: Message[], textPattern: string): Message[] => 
+      msgs.filter(msg => !(msg.sender === 'system' && msg.text.toLowerCase().includes(textPattern.toLowerCase())));
+    
+    const addSystemMessageIfNotPresentIn = (msgs: Message[], text: string, idSuffix: string): Message[] => {
+      const lowerText = text.toLowerCase();
+      if (!msgs.some(msg => msg.sender === 'system' && msg.text.toLowerCase().includes(lowerText))) {
+        return [...msgs, { 
+          id: `${Date.now()}-${idSuffix}`, 
+          text, 
+          sender: 'system', 
+          timestamp: new Date() 
+        }];
+      }
+      return msgs;
+    };
+
+    if (connectionError) {
+      changeFavicon(FAVICON_SKIPPED);
+    } else if (isSelfDisconnectedRecently) { 
+      changeFavicon(FAVICON_SKIPPED);
+      skippedFaviconTimeoutRef.current = setTimeout(() => {
+          if (isFindingPartner) changeFavicon(FAVICON_SEARCHING); 
+      }, 500);
+       if (isFindingPartner) { 
+           updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+           updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+           updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_SEARCHING_PARTNER, 'search-after-skip');
+       }
+    } else if (isPartnerLeftRecently) { 
+      changeFavicon(FAVICON_SKIPPED);
+      skippedFaviconTimeoutRef.current = setTimeout(() => {
+          if (!isFindingPartner && !isPartnerConnected) changeFavicon(FAVICON_IDLE); 
+      }, 1000);
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+      updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED, 'partner-left');
+    } else if (isFindingPartner) { 
+      changeFavicon(FAVICON_SEARCHING);
+      if (!prevIsFindingPartnerRef.current || prevIsSelfDisconnectedRecentlyRef.current || prevIsPartnerLeftRecentlyRef.current) {
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_SEARCHING_PARTNER, 'search');
+      }
+    } else if (isPartnerConnected) { 
+      if (!prevIsPartnerConnectedRef.current) { 
+        let count = 0; 
+        changeFavicon(FAVICON_SUCCESS);
+        successTransitionIntervalRef.current = setInterval(() => { 
+          changeFavicon(count % 2 === 0 ? FAVICON_IDLE : FAVICON_SUCCESS); 
+          count++; 
+        }, 750);
+        successTransitionEndTimeoutRef.current = setTimeout(() => { 
+          if (successTransitionIntervalRef.current) clearInterval(successTransitionIntervalRef.current); 
+          if (isPartnerConnected) changeFavicon(FAVICON_SUCCESS); 
+        }, 3000);
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_CONNECTED_PARTNER, 'connect');
+        if (interests.length > 0 && partnerInterests.length > 0) {
+          const common = interests.filter(i => partnerInterests.includes(i));
+          if (common.length > 0) {
+            updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, `${SYS_MSG_COMMON_INTERESTS_PREFIX}${common.join(', ')}.`, 'common');
+          }
+        }
+      } else if (!successTransitionIntervalRef.current && !successTransitionEndTimeoutRef.current) {
+        changeFavicon(FAVICON_SUCCESS);
+      }
+    } else { 
+      changeFavicon(FAVICON_IDLE);
+      if (prevIsFindingPartnerRef.current && !isFindingPartner && !isPartnerConnected && !connectionError && !isPartnerLeftRecently && !isSelfDisconnectedRecently) {
+        if (updatedMessages.some(msg => msg.sender === 'system' && msg.text.toLowerCase().includes(SYS_MSG_SEARCHING_PARTNER.toLowerCase()))) {
+          updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+          updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_STOPPED_SEARCHING, 'stopsearch');
+        }
+      }
+    }
+
+    if (updatedMessages.length !== messages.length || !updatedMessages.every((v, i) => v.id === messages[i]?.id && v.text === messages[i]?.text)) {
+      setMessages(updatedMessages);
+    }
+
+    prevIsFindingPartnerRef.current = isFindingPartner;
+    prevIsPartnerConnectedRef.current = isPartnerConnected;
+    prevIsSelfDisconnectedRecentlyRef.current = isSelfDisconnectedRecently;
+    prevIsPartnerLeftRecentlyRef.current = isPartnerLeftRecently;
+  }, [isPartnerConnected, isFindingPartner, connectionError, isSelfDisconnectedRecently, isPartnerLeftRecently, partnerInterests, interests, messages, setMessages]);
 
   // Handle find/disconnect partner
   const handleFindOrDisconnect = useCallback(() => {
+    if (isProcessingFindOrDisconnect.current) {
+      console.log('Find/disconnect action already in progress.');
+      return;
+    }
+
+    if (!isConnected) {
+      toast({ 
+        title: "Not Connected", 
+        description: "Chat server connection not yet established.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    isProcessingFindOrDisconnect.current = true;
+
     if (isPartnerConnected) {
       // Disconnect from current partner
-      emitLeaveChat();
-      addSystemMessage('You have disconnected.');
+      console.log('User is skipping partner');
+      addSystemMessage(SYS_MSG_YOU_DISCONNECTED);
       
+      setIsPartnerConnected(false);
+      setPartnerInfo(null);
+      setIsPartnerTyping(false);
+      setPartnerInterests([]);
+
+      emitLeaveChat();
+
       // Start searching again
-      setTimeout(() => {
-        const interests = searchParams.get('interests')?.split(',').filter(i => i.trim()) || [];
-        setIsFindingPartner(true);
-        addSystemMessage('Searching for a partner...');
-        
-        emitFindPartner({
-          chatType: 'text',
-          interests,
-          authId
-        });
-      }, 500);
+      console.log('Re-emitting findPartner after skip');
+      setIsFindingPartner(true);
+      setIsSelfDisconnectedRecently(true);
+      setIsPartnerLeftRecently(false);
+
+      emitFindPartner({
+        chatType: 'text',
+        interests,
+        authId
+      });
     } else if (isFindingPartner) {
       // Stop searching
+      console.log('User stopping partner search');
       setIsFindingPartner(false);
-      addSystemMessage('Stopped searching for a partner.');
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
     } else {
       // Start searching
-      const interests = searchParams.get('interests')?.split(',').filter(i => i.trim()) || [];
+      console.log('User starting partner search via button');
       setIsFindingPartner(true);
-      addSystemMessage('Searching for a partner...');
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
+      addSystemMessage(SYS_MSG_SEARCHING_PARTNER);
       
       emitFindPartner({
         chatType: 'text',
@@ -244,12 +593,18 @@ const handleStatusChange = useCallback((status: string) => {
         authId
       });
     }
-  }, [isPartnerConnected, isFindingPartner, emitLeaveChat, emitFindPartner, addSystemMessage, searchParams, authId, setIsFindingPartner]);
+    
+    setTimeout(() => {
+      isProcessingFindOrDisconnect.current = false;
+    }, 200);
+  }, [isPartnerConnected, isFindingPartner, isConnected, emitLeaveChat, emitFindPartner, addSystemMessage, interests, authId, toast, setIsPartnerConnected, setPartnerInfo, setIsPartnerTyping, setPartnerInterests, setIsFindingPartner]);
 
   // Handle send message
   const handleSendMessage = useCallback((message: string) => {
     if (!isPartnerConnected) return;
 
+    console.log('Sending message:', message);
+    
     // Add to local messages immediately
     addMessage({
       text: message,
@@ -278,7 +633,26 @@ const handleStatusChange = useCallback((status: string) => {
     }
   }, [setCurrentMessage, isPartnerConnected, emitTypingStart, emitTypingStop]);
 
-  if (isAuthLoading) {
+  // Handle profile card functionality
+  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
+    if (authId && authId !== 'anonymous') {
+      setProfileCardUserId(authId);
+      setProfileCardPosition(clickPosition);
+      setIsProfileCardOpen(true);
+      setIsScrollEnabled(false);
+    }
+  }, []);
+
+  const handleProfileCardClose = useCallback(() => {
+    setIsProfileCardOpen(false);
+    setProfileCardUserId(null);
+    setProfileCardPosition(null);
+    setIsScrollEnabled(true);
+  }, []);
+
+  useEffect(() => { setIsMounted(true); }, []);
+
+  if (!isMounted || isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -289,96 +663,127 @@ const handleStatusChange = useCallback((status: string) => {
     );
   }
 
-  // Chat window style
-  const chatWindowStyle = {
-    width: isMobile ? '100vw' : '600px',
-    height: isMobile ? '100vh' : '600px',
-    maxWidth: isMobile ? '100vw' : undefined,
-    maxHeight: isMobile ? '100vh' : undefined
-  };
-
   return (
-    <div className={cn(
-      "flex flex-col items-center justify-center",
-      isMobile ? "h-screen w-screen p-0" : "h-full p-4"
-    )}>
+    <>
+      {/* Inject display name animation CSS */}
+      <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
+      
+      {/* Hide HomeButton on mobile to save space */}
       {!isMobile && <HomeButton />}
       
       <div className={cn(
-        'window flex flex-col relative',
-        currentTheme === 'theme-7' ? 'glass' : '',
-        isMobile ? 'h-full w-full' : ''
-      )} style={chatWindowStyle}>
-        
-        {/* Header */}
+        "flex flex-col items-center justify-center",
+        isMobile ? "h-screen w-screen p-0" : "h-full p-4"
+      )}>
         <div className={cn(
-          "title-bar",
-          currentTheme === 'theme-7' ? 'text-black' : '',
-          isMobile && "text-sm h-8 min-h-8"
-        )}>
-          <div className="flex items-center justify-between w-full">
-            <div className="title-bar-text">
-              {isMobile ? 'TinChat' : 'Text Chat'}
-            </div>
-            
-            {/* Partner info and status */}
-            <div className="flex items-center space-x-2">
-              {partnerInfo && isPartnerConnected && (
-                <PartnerProfile
-                  username={partnerInfo.username}
-                  displayName={partnerInfo.displayName}
-                  avatarUrl={partnerInfo.avatarUrl}
-                  status={partnerInfo.status}
-                  displayNameColor={partnerInfo.displayNameColor}
-                  displayNameAnimation={partnerInfo.displayNameAnimation}
-                  badges={partnerInfo.badges}
-                  className="max-w-xs scale-75"
-                />
-              )}
+          'window flex flex-col relative',
+          effectivePageTheme === 'theme-7' ? 'glass' : '',
+          isMobile ? 'h-full w-full' : ''
+        )} style={chatWindowStyle}>
+          
+          {effectivePageTheme === 'theme-7' && !isMobile && <ConditionalGoldfishImage />}
+          
+          {/* Header */}
+          <div className={cn(
+            "title-bar",
+            effectivePageTheme === 'theme-7' ? 'text-black' : '',
+            isMobile && "text-sm h-8 min-h-8"
+          )}>
+            <div className="flex items-center justify-between w-full">
+              <div className="title-bar-text">
+                {isMobile ? 'TinChat' : 'Text Chat'}
+              </div>
               
-              <MatchStatus
-                isSearching={isFindingPartner}
-                isConnected={isPartnerConnected}
-                onFindPartner={handleFindOrDisconnect}
-                onDisconnect={handleFindOrDisconnect}
-                disabled={!isConnected || !!connectionError}
-                className="scale-75"
-              />
+              {/* Partner info and status */}
+              <div className="flex items-center space-x-2">
+                {partnerInfo && isPartnerConnected && (
+                  <PartnerProfile
+                    username={partnerInfo.username}
+                    displayName={partnerInfo.displayName}
+                    avatarUrl={partnerInfo.avatarUrl}
+                    status={partnerInfo.status}
+                    displayNameColor={partnerInfo.displayNameColor}
+                    displayNameAnimation={partnerInfo.displayNameAnimation}
+                    badges={partnerInfo.badges}
+                    className="max-w-xs scale-75"
+                  />
+                )}
+                
+                <MatchStatus
+                  isSearching={isFindingPartner}
+                  isConnected={isPartnerConnected}
+                  onFindPartner={handleFindOrDisconnect}
+                  onDisconnect={handleFindOrDisconnect}
+                  disabled={!isConnected || !!connectionError}
+                  className="scale-75"
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Chat Window */}
-        <div className="flex-1 flex flex-col">
-          <ChatWindow
-            messages={messages.map(msg => ({
-              id: msg.id,
-              content: msg.text,
-              sender: msg.sender === 'me' ? 'self' : msg.sender,
-              timestamp: msg.timestamp?.getTime()
-            }))}
-            onSendMessage={handleSendMessage}
-            inputValue={currentMessage}
-            onInputChange={handleInputChange}
-            isPartnerTyping={isPartnerTyping}
-            partnerStatus={partnerInfo?.status || 'offline'}
-            partnerInfo={partnerInfo ? {
-              username: partnerInfo.username,
-              avatar: partnerInfo.avatarUrl || '/default-avatar.png'
-            } : undefined}
-            isConnected={isConnected}
-            isPartnerConnected={isPartnerConnected}
-          />
-        </div>
-
-        {/* Connection status */}
-        {connectionError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm">
-            Connection Error: {connectionError}
+          {/* Chat Window */}
+          <div className="flex-1 flex flex-col">
+            <ChatWindow
+              messages={messages.map(msg => ({
+                id: msg.id,
+                content: msg.text,
+                sender: msg.sender === 'me' ? 'self' : msg.sender,
+                timestamp: msg.timestamp?.getTime(),
+                senderUsername: msg.senderUsername,
+                senderAuthId: msg.senderAuthId,
+                senderDisplayNameColor: msg.senderDisplayNameColor,
+                senderDisplayNameAnimation: msg.senderDisplayNameAnimation,
+                senderRainbowSpeed: msg.senderRainbowSpeed
+              }))}
+              onSendMessage={handleSendMessage}
+              inputValue={currentMessage}
+              onInputChange={handleInputChange}
+              isPartnerTyping={isPartnerTyping}
+              partnerStatus={partnerInfo?.status || 'offline'}
+              partnerInfo={partnerInfo ? {
+                username: partnerInfo.username,
+                displayName: partnerInfo.displayName,
+                avatar: partnerInfo.avatarUrl || '/default-avatar.png',
+                displayNameColor: partnerInfo.displayNameColor,
+                displayNameAnimation: partnerInfo.displayNameAnimation,
+                rainbowSpeed: partnerInfo.rainbowSpeed,
+                authId: partnerInfo.authId
+              } : undefined}
+              ownInfo={{
+                username: ownDisplayUsername,
+                authId: authId,
+                displayNameColor: ownDisplayNameColor,
+                displayNameAnimation: ownDisplayNameAnimation
+              }}
+              isConnected={isConnected}
+              isPartnerConnected={isPartnerConnected}
+              theme={effectivePageTheme}
+              onUsernameClick={handleUsernameClick}
+              isMobile={isMobile}
+              isScrollEnabled={isScrollEnabled}
+            />
           </div>
-        )}
+
+          {/* Connection status */}
+          {connectionError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm">
+              Connection Error: {connectionError}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Profile Card Modal */}
+      {profileCardUserId && (
+        <ProfileCard
+          userId={profileCardUserId}
+          isOpen={isProfileCardOpen}
+          onClose={handleProfileCardClose}
+          onScrollToggle={setIsScrollEnabled}
+          clickPosition={profileCardPosition}
+        />
+      )}
+    </>
   );
 };
 
