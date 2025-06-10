@@ -264,26 +264,33 @@ export const updateGlobalStats = (updates: Partial<typeof globalStats>) => {
 };
 
 // Middleware for performance tracking
+
+
 export const performanceMiddleware = (req: IncomingMessage, res: ServerResponse, next?: () => void) => {
   const startTime = Date.now();
-  
+
   const originalEnd = res.end;
-  res.end = function(...args: any[]) {
+
+  // Override the 'end' method
+  res.end = function(this: ServerResponse, ...args: any[]): ServerResponse {
     const duration = Date.now() - startTime;
-    
+
     // Update performance stats
-    globalStats.performance.avgResponseTime = 
+    globalStats.performance.avgResponseTime =
       (globalStats.performance.avgResponseTime + duration) / 2;
-    
+
     logger.debug('Request completed', {
       url: req.url,
       method: req.method,
       duration: `${duration}ms`,
       statusCode: res.statusCode
     });
-    
-    originalEnd.apply(res, args);
-  };
-  
+
+    // Call the original end method, explicitly casting 'args' to 'any'
+    // for the 'apply' method to satisfy TypeScript's strictness with overloads.
+    // The `as ServerResponse` is still important for the return type.
+    return originalEnd.apply(this, args as any) as ServerResponse; // <-- Corrected line
+  } as typeof res.end; // This assertion remains important for the assignment
+
   if (next) next();
 };

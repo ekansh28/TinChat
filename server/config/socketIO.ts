@@ -8,8 +8,7 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
   const io = new SocketIOServer(server, {
     // Connection options
     connectionStateRecovery: {
-      // Enable connection state recovery for reliability
-      maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+      maxDisconnectionDuration: 2 * 60 * 1000,
       skipMiddlewares: true,
     },
     
@@ -18,10 +17,10 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     pingTimeout: 60000,
     pingInterval: 25000,
     upgradeTimeout: 10000,
-    maxHttpBufferSize: 1e6, // 1MB
+    maxHttpBufferSize: 1e6,
     
-    // Enable compression for better performance
-    compression: true,
+    // Remove compression from here - it's not a valid Socket.IO option
+    // compression: true, // REMOVE THIS LINE
     
     // CORS configuration
     cors: {
@@ -37,12 +36,8 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
       credentials: true,
     },
     
-    // Advanced options for production
-    allowEIO3: false, // Only allow Engine.IO v4+
-    serveClient: false, // Don't serve client files
-    
-    // Adapter configuration for clustering (if needed)
-    // adapter: require('socket.io-redis')({ host: 'localhost', port: 6379 })
+    allowEIO3: false,
+    serveClient: false,
   });
 
   // Performance monitoring

@@ -376,7 +376,6 @@ export class SocketManager {
     const currentSocket = this.io.sockets.sockets.get(currentUser.id);
     if (currentSocket) currentSocket.join(roomId);
     partnerSocket.join(roomId);
-
     // Prepare partner info for both users
     const currentUserDisplayName = currentUser.displayName || currentUser.username || "Stranger";
     const partnerDisplayName = matchedPartner.displayName || matchedPartner.username || "Stranger";
@@ -416,7 +415,8 @@ export class SocketManager {
       partnerBadges: currentUser.badges || [],
     });
 
-    this.performanceMonitor.recordMatch();
+    // Fix the performance monitor call - provide required userId parameter
+    this.performanceMonitor.recordMatch(currentUser.id, true);
     logger.info(`🎯 Match created: ${currentUser.id} ↔ ${matchedPartner.id} in room ${roomId}`);
   }
 

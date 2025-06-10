@@ -20,6 +20,7 @@ interface BatchStats {
 export class MessageBatcher {
   private queue: QueuedMessage[] = [];
   private batchInterval: NodeJS.Timeout | null = null;
+  private io: any = null; // Add io instance property
   private readonly BATCH_SIZE = 50;
   private readonly FLUSH_INTERVAL = 16; // ~60fps for smooth UI
   private readonly MAX_QUEUE_SIZE = 1000;
@@ -34,9 +35,16 @@ export class MessageBatcher {
     queueSize: 0
   };
 
-  constructor() {
+  constructor(io?: any) {
+    this.io = io; // Accept io instance in constructor
     this.startBatching();
   }
+
+    // Add method to set io instance
+  setSocketIOInstance(io: any): void {
+    this.io = io;
+  }
+
 
   queueMessage(socketId: string, event: string, data: any, priority: 'low' | 'normal' | 'high' = 'normal'): void {
     // Check queue size limit
@@ -156,18 +164,15 @@ export class MessageBatcher {
     }
   }
 
-  private getSocketIOInstance(): any {
-    // This would be injected or accessed via singleton
-    // For now, we'll assume it's available globally or via injection
-    try {
-      // This is a placeholder - in practice, you'd inject the IO instance
-      return global.io || require('../index').io;
-    } catch (error) {
-      logger.error('Failed to get Socket.IO instance for batching');
-      return null;
+    private getSocketIOInstance(): any {
+    // Return the injected io instance
+    if (this.io) {
+      return this.io;
     }
+    
+    logger.error('Socket.IO instance not available for message batching');
+    return null;
   }
-
   // Queue management
   clearQueue(): number {
     const clearedCount = this.queue.length;

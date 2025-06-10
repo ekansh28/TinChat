@@ -45,12 +45,11 @@ export class ProfileManager {
   }
 
   async fetchUserProfile(authId: string): Promise<UserProfile | null> {
-    if (!this.supabase || !authId) return null;
-    
+    if (!this.supabase || !authId) return null;  
     // Check cache first
     const cached = this.profileCache.get(authId);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      return cached.data;
+    if (cached) {
+      return cached; // LRUCache already returns the data directly
     }
     
     try {
