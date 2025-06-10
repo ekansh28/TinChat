@@ -1,842 +1,199 @@
-// src/components/ProfileCard.tsx
-'use client';
-
-import React, { useEffect, useState, useRef } from 'react';
-import Image from 'next/image';
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button-themed';
-import { useTheme } from '@/components/theme-provider';
+// ===== src/components/ProfileCard.tsx =====
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { sanitizeCSS } from '@/lib/SafeCSS';
 import { cn } from '@/lib/utils';
-
-interface ProfileData {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  banner_url?: string;
-  bio?: string;
-  pronouns?: string;
-  status?: 'online' | 'idle' | 'dnd' | 'offline';
-  display_name_color?: string;
-  display_name_animation?: string;
-  profile_card_css?: string;
-  badges?: string;
-}
-
-interface Badge {
-  id: string;
-  url: string;
-  name?: string;
-}
 
 interface ProfileCardProps {
   userId: string;
   isOpen: boolean;
   onClose: () => void;
   onScrollToggle: (enabled: boolean) => void;
-  clickPosition?: { x: number; y: number } | null;
+  clickPosition: { x: number; y: number } | null;
 }
 
-const STATUS_CONFIG = {
-  online: { icon: '/icons/online.png', label: 'Online', color: '#43b581' },
-  idle: { icon: '/icons/idle.png', label: 'Idle', color: '#faa61a' },
-  dnd: { icon: '/icons/dnd.png', label: 'Do Not Disturb', color: '#f04747' },
-  offline: { icon: '/icons/offline.png', label: 'Offline', color: '#747f8d' }
-} as const;
-
-const DEFAULT_PROFILE_CSS = `
-/* Enhanced Profile Card Styles */
-.profile-card-container {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 0;
-  color: white;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  width: 350px;
-  min-height: 500px;
-  position: relative;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+interface UserProfile {
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+  banner_url?: string;
+  pronouns?: string;
+  status?: 'online' | 'idle' | 'dnd' | 'offline';
+  display_name_color?: string;
+  display_name_animation?: string;
+  badges?: any[];
+  bio?: string;
 }
 
-.profile-card-container:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-}
-
-.profile-banner {
-  width: 100%;
-  height: 140px;
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
-  background-size: 400% 400%;
-  animation: gradientShift 8s ease-in-out infinite;
-  position: relative;
-  overflow: hidden;
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-.profile-banner img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.profile-content {
-  padding: 24px;
-  position: relative;
-  margin-top: -50px;
-  z-index: 2;
-}
-
-.profile-avatar-container {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 16px;
-}
-
-.profile-avatar {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  border: 6px solid white;
-  object-fit: cover;
-  background: #ffffff;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s ease;
-}
-
-.profile-avatar:hover {
-  transform: scale(1.05);
-}
-
-.profile-status {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border: 4px solid white;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  z-index: 3;
-}
-
-.profile-badges {
-  position: absolute;
-  top: 140px;
-  right: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  z-index: 3;
-}
-
-.profile-badge {
-  width: 28px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  padding: 2px;
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.profile-badge:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-.profile-badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 4px;
-}
-
-.profile-display-name {
-  font-size: 26px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  word-wrap: break-word;
-  line-height: 1.2;
-}
-
-.profile-username {
-  font-size: 16px;
-  opacity: 0.9;
-  margin-bottom: 8px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-
-.profile-pronouns {
-  font-size: 14px;
-  opacity: 0.8;
-  margin-bottom: 16px;
-  font-style: italic;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
-  border-radius: 12px;
-  display: inline-block;
-}
-
-.profile-status-text {
-  font-size: 14px;
-  opacity: 0.9;
-  margin-bottom: 16px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.profile-bio {
-  font-size: 14px;
-  line-height: 1.6;
-  opacity: 0.95;
-  margin-top: 16px;
-  word-wrap: break-word;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 12px;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-}
-
-.profile-divider {
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  margin: 20px 0;
-}
-
-/* Display name animations */
-.display-name-rainbow {
-  background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
-  background-size: 400% 400%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: rainbow 3s ease-in-out infinite;
-}
-
-@keyframes rainbow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-.display-name-gradient {
-  background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
-  background-size: 300% 300%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradientShift 4s ease-in-out infinite;
-}
-
-.display-name-pulse {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
-}
-
-.display-name-glow {
-  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
-  animation: glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes glow {
-  from { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
-  to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
-}
-
-/* Theme 98 specific styles */
-.theme-98 .profile-card-container {
-  border: 2px outset #c0c0c0;
-  border-radius: 0;
-  box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #dfdfdf, inset -2px -2px grey, inset 2px 2px #fff;
-  background: #c0c0c0;
-  color: black;
-}
-
-.theme-98 .profile-banner {
-  border-bottom: 1px solid #808080;
-}
-
-.theme-98 .profile-avatar {
-  border: 2px inset #c0c0c0;
-  box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #dfdfdf;
-}
-
-.theme-98 .profile-status {
-  border: 2px outset #c0c0c0;
-}
-
-.theme-98 .profile-badge {
-  background: #dfdfdf;
-  border: 1px inset #c0c0c0;
-}
-
-.theme-98 .profile-pronouns {
-  background: #dfdfdf;
-  border: 1px inset #c0c0c0;
-  color: black;
-}
-
-.theme-98 .profile-bio {
-  background: #dfdfdf;
-  border: 1px inset #c0c0c0;
-  color: black;
-}
-
-/* Popup specific styles */
-.profile-popup-container {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: auto;
-  transform-origin: center;
-  animation: popupFadeIn 0.2s ease-out forwards;
-}
-
-@keyframes popupFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.profile-popup-backdrop {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 9998;
-  pointer-events: auto;
-}
-`;
-
-export const ProfileCard: React.FC<ProfileCardProps> = ({ 
-  userId, 
-  isOpen, 
-  onClose, 
+export const ProfileCard: React.FC<ProfileCardProps> = ({
+  userId,
+  isOpen,
+  onClose,
   onScrollToggle,
   clickPosition
 }) => {
-  const [profileData, setProfileData] = useState<ProfileData | null>(null);
-  const [badges, setBadges] = useState<Badge[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const { currentTheme } = useTheme();
 
   useEffect(() => {
-    if (isOpen) {
-      onScrollToggle(false); // Disable scroll when modal opens
-      fetchProfile();
-    } else {
-      onScrollToggle(true); // Enable scroll when modal closes
-    }
+    if (!isOpen || !userId) return;
 
-    return () => {
-      onScrollToggle(true); // Ensure scroll is enabled on cleanup
-    };
-  }, [isOpen, userId, onScrollToggle]);
+    const fetchProfile = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-  // Handle click outside to close
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-    const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscapeKey);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [isOpen, onClose]);
-
-  // Calculate popup position based on click position
-  const getPopupStyle = () => {
-    if (!clickPosition) {
-      // Default center position if no click position provided
-      return {
-        position: 'fixed' as const,
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: 9999
-      };
-    }
-    
-    const maxWidth = 350;
-    const maxHeight = 500;
-    const padding = 20;
-    
-    let left = clickPosition.x - maxWidth / 2;
-    let top = clickPosition.y + 10;
-    
-    // Adjust if popup would go off screen horizontally
-    if (left < padding) {
-      left = padding;
-    } else if (left + maxWidth > window.innerWidth - padding) {
-      left = window.innerWidth - maxWidth - padding;
-    }
-    
-    // Adjust if popup would go off screen vertically
-    if (top + maxHeight > window.innerHeight - padding) {
-      top = clickPosition.y - maxHeight - 10; // Show above click point
-    }
-    
-    // Final check - ensure it's not off the top of the screen
-    if (top < padding) {
-      top = padding;
-    }
-    
-    return {
-      position: 'fixed' as const,
-      left: `${left}px`,
-      top: `${top}px`,
-      zIndex: 9999
-    };
-  };
-
-  const fetchProfile = async () => {
-    if (!userId) return;
-    
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log('Fetching enhanced profile for userId:', userId);
-      
-      // Fetch all profile data including badges
-      const { data, error: fetchError } = await supabase
-        .from('user_profiles')
-        .select(`
-          id, 
-          username, 
-          display_name, 
-          avatar_url, 
-          banner_url,
-          bio, 
-          pronouns,
-          status,
-          display_name_color,
-          display_name_animation,
-          profile_card_css,
-          badges
-        `)
-        .eq('id', userId);
-
-      if (fetchError) {
-        console.error('Profile fetch error:', fetchError);
-        throw fetchError;
-      }
-
-      console.log('Enhanced profile query result:', data);
-
-      // Check if we got any results
-      if (!data || data.length === 0) {
-        console.log('No profile found for user:', userId);
-        // Create a basic profile with just the user ID
-        setProfileData({
-          id: userId,
-          username: 'Unknown User',
-          display_name: 'Unknown User',
-          status: 'offline'
-        });
-        setBadges([]);
-      } else {
-        console.log('Enhanced profile data fetched:', data[0]);
-        const profile = data[0];
-        setProfileData(profile);
-        
-        // Parse badges if they exist
-        if (profile.badges) {
-          try {
-            const parsedBadges = JSON.parse(profile.badges);
-            setBadges(Array.isArray(parsedBadges) ? parsedBadges : []);
-            console.log('Parsed badges:', parsedBadges);
-          } catch (e) {
-            console.warn('Failed to parse badges JSON:', e);
-            setBadges([]);
-          }
-        } else {
-          setBadges([]);
+        if (error) {
+          setError('Profile not found');
+          return;
         }
+
+        setProfile(data);
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+        setError('Failed to load profile');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Error fetching enhanced profile:', err);
-      setError('Failed to load profile');
-      setBadges([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const getDisplayNameClass = (animation?: string) => {
-    switch (animation) {
-      case 'rainbow':
-        return 'display-name-rainbow';
-      case 'gradient':
-        return 'display-name-gradient';
-      case 'pulse':
-        return 'display-name-pulse';
-      case 'glow':
-        return 'display-name-glow';
-      default:
-        return '';
-    }
-  };
+    fetchProfile();
+  }, [isOpen, userId]);
 
-  const getStatusConfig = (status?: string) => {
-    return STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.offline;
-  };
+  useEffect(() => {
+    onScrollToggle(!isOpen);
+    return () => onScrollToggle(true);
+  }, [isOpen, onScrollToggle]);
 
   if (!isOpen) return null;
 
-  const isTheme98 = currentTheme === 'theme-98';
-
-  const renderProfileContent = () => {
-    if (loading) {
-      return (
-        <div className={cn(
-          "flex items-center justify-center",
-          isTheme98 ? "window-body p-4" : "h-64"
-        )}>
-          <div className={cn(
-            "flex flex-col items-center gap-4",
-            isTheme98 ? "" : "text-white"
-          )}>
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current"></div>
-            <div>Loading profile...</div>
-          </div>
-        </div>
-      );
-    }
-
-    if (error || !profileData) {
-      return (
-        <div className={cn(
-          "flex items-center justify-center",
-          isTheme98 ? "window-body p-4" : "h-64"
-        )}>
-          <div className={cn(
-            "text-center",
-            isTheme98 ? "" : "text-white"
-          )}>
-            <div className="text-lg mb-2">😔</div>
-            <div>{error || 'Profile not found'}</div>
-            <Button
-              onClick={onClose}
-              className="mt-4"
-              variant="outline"
-              size="sm"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    // Combine default CSS with user's custom CSS
-    const customCSS = profileData.profile_card_css || '';
-    const sanitizedCSS = sanitizeCSS(customCSS);
-    const finalCSS = DEFAULT_PROFILE_CSS + '\n' + sanitizedCSS;
-
-    const statusConfig = getStatusConfig(profileData.status);
-    const displayNameClass = getDisplayNameClass(profileData.display_name_animation);
-
-    if (isTheme98) {
-      return (
-        <div className="window max-w-md">
-          <div className="title-bar">
-            <div className="title-bar-text">Profile - @{profileData.username}</div>
-            <div className="title-bar-controls">
-              <Button
-                onClick={onClose}
-                className="title-bar-control"
-                aria-label="Close profile"
-              >
-                <X size={12} />
-              </Button>
-            </div>
-          </div>
-          <div className="window-body p-0">
-            <style dangerouslySetInnerHTML={{ __html: finalCSS }} />
-            <div className={cn("profile-card-container theme-98", isTheme98 && "theme-98")}>
-              {/* Banner */}
-              <div className="profile-banner">
-                {profileData.banner_url ? (
-                  <img 
-                    src={profileData.banner_url} 
-                    alt="Profile Banner"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-                )}
-              </div>
-              
-              {/* Badges */}
-              {badges.length > 0 && (
-                <div className="profile-badges">
-                  {badges.map((badge) => (
-                    <div key={badge.id} className="profile-badge" title={badge.name || 'Badge'}>
-                      <img
-                        src={badge.url}
-                        alt={badge.name || 'Badge'}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNCAxMFYxOE0xMCAxNEgxOCIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4=';
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {/* Content */}
-              <div className="profile-content">
-                <div className="profile-avatar-container">
-                  {profileData.avatar_url ? (
-                    <img 
-                      src={profileData.avatar_url} 
-                      alt="Profile Avatar"
-                      className="profile-avatar"
-                    />
-                  ) : (
-                    <div className="profile-avatar bg-gray-300 flex items-center justify-center">
-                      <svg className="w-12 h-12 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    </div>
-                  )}
-                  
-                  <Image
-                    src={statusConfig.icon}
-                    alt={statusConfig.label}
-                    width={24}
-                    height={24}
-                    className="profile-status"
-                    style={{ backgroundColor: statusConfig.color }}
-                  />
-                </div>
-                
-                {profileData.display_name && (
-                  <div 
-                    className={cn("profile-display-name", displayNameClass)}
-                    style={{ 
-                      color: profileData.display_name_animation === 'rainbow' || profileData.display_name_animation === 'gradient'
-                        ? undefined 
-                        : (profileData.display_name_color || '#000000')
-                    }}
-                  >
-                    {profileData.display_name}
-                  </div>
-                )}
-                
-                <div className="profile-username">
-                  @{profileData.username}
-                </div>
-                
-                {profileData.pronouns && (
-                  <div className="profile-pronouns">
-                    {profileData.pronouns}
-                  </div>
-                )}
-                
-                <div className="profile-status-text">
-                  <Image
-                    src={statusConfig.icon}
-                    alt={statusConfig.label}
-                    width={16}
-                    height={16}
-                  />
-                  {statusConfig.label}
-                </div>
-                
-                {profileData.bio && (
-                  <>
-                    <div className="profile-divider"></div>
-                    <div className="profile-bio">
-                      {profileData.bio}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <style dangerouslySetInnerHTML={{ __html: finalCSS }} />
-        <div className="profile-card-container">
-          {/* Banner */}
-          <div className="profile-banner">
-            {profileData.banner_url ? (
-              <img 
-                src={profileData.banner_url} 
-                alt="Profile Banner"
-              />
-            ) : (
-              <div className="w-full h-full" />
-            )}
-          </div>
-          
-          {/* Badges */}
-          {badges.length > 0 && (
-            <div className="profile-badges">
-              {badges.map((badge) => (
-                <div key={badge.id} className="profile-badge" title={badge.name || 'Badge'}>
-                  <img
-                    src={badge.url}
-                    alt={badge.name || 'Badge'}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNCAxMFYxOE0xMCAxNEgxOCIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4=';
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {/* Content */}
-          <div className="profile-content">
-            <div className="profile-avatar-container">
-              {profileData.avatar_url ? (
-                <img 
-                  src={profileData.avatar_url} 
-                  alt="Profile Avatar"
-                  className="profile-avatar"
-                />
-              ) : (
-                <div className="profile-avatar bg-gray-300 flex items-center justify-center">
-                  <svg className="w-12 h-12 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </div>
-              )}
-              
-              <Image
-                src={statusConfig.icon}
-                alt={statusConfig.label}
-                width={24}
-                height={24}
-                className="profile-status"
-                style={{ backgroundColor: statusConfig.color }}
-              />
-            </div>
-            
-            {profileData.display_name && (
-              <div 
-                className={cn("profile-display-name", displayNameClass)}
-                style={{ 
-                  color: profileData.display_name_animation === 'rainbow' || profileData.display_name_animation === 'gradient'
-                    ? undefined 
-                    : (profileData.display_name_color || '#ffffff')
-                }}
-              >
-                {profileData.display_name}
-              </div>
-            )}
-            
-            <div className="profile-username">
-              @{profileData.username}
-            </div>
-            
-            {profileData.pronouns && (
-              <div className="profile-pronouns">
-                {profileData.pronouns}
-              </div>
-            )}
-            
-            <div className="profile-status-text">
-              <Image
-                src={statusConfig.icon}
-                alt={statusConfig.label}
-                width={16}
-                height={16}
-              />
-              {statusConfig.label}
-            </div>
-            
-            {profileData.bio && (
-              <>
-                <div className="profile-divider"></div>
-                <div className="profile-bio">
-                  {profileData.bio}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </>
-    );
+  const cardStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: clickPosition ? clickPosition.y : '50%',
+    left: clickPosition ? clickPosition.x : '50%',
+    transform: clickPosition ? 'translateX(-50%)' : 'translate(-50%, -50%)',
+    zIndex: 1000,
   };
 
   return (
     <>
-      {/* Invisible backdrop for click-to-close */}
+      {/* Backdrop */}
       <div 
-        className="profile-popup-backdrop"
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
         onClick={onClose}
       />
       
-      {/* Profile card popup */}
+      {/* Profile Card */}
       <div 
-        ref={modalRef}
-        className="profile-popup-container"
-        style={getPopupStyle()}
-        onClick={(e) => e.stopPropagation()}
+        className="window bg-white dark:bg-gray-800 p-4 rounded shadow-lg max-w-sm w-80 z-50"
+        style={cardStyle}
       >
-        {/* Close button for non-theme98 */}
-        {!isTheme98 && (
-          <Button
+        <div className="title-bar mb-3">
+          <div className="title-bar-text">User Profile</div>
+          <button 
+            className="title-bar-controls"
             onClick={onClose}
-            className="absolute -top-3 -right-3 z-20 w-10 h-10 p-0 rounded-full bg-gray-800 hover:bg-gray-700 text-white shadow-lg transition-all duration-200 hover:scale-110"
-            aria-label="Close profile"
+            aria-label="Close"
           >
-            <X size={20} />
-          </Button>
-        )}
-        
-        {/* Profile content */}
-        <div className="transform transition-all duration-300 hover:scale-[1.02]">
-          {renderProfileContent()}
+            ×
+          </button>
+        </div>
+
+        <div className="window-body">
+          {loading && (
+            <div className="text-center py-4">
+              <p>Loading profile...</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-center py-4 text-red-500">
+              <p>{error}</p>
+            </div>
+          )}
+
+          {profile && (
+            <div className="space-y-3">
+              {/* Avatar */}
+              {profile.avatar_url && (
+                <div className="text-center">
+                  <img 
+                    src={profile.avatar_url} 
+                    alt="Avatar" 
+                    className="w-16 h-16 rounded-full mx-auto"
+                  />
+                </div>
+              )}
+
+              {/* Name */}
+              <div className="text-center">
+                <h3 
+                  className={cn(
+                    "font-bold text-lg",
+                    profile.display_name_animation === 'rainbow' && 'animate-pulse'
+                  )}
+                  style={{ 
+                    color: profile.display_name_color || '#000000' 
+                  }}
+                >
+                  {profile.display_name || profile.username}
+                </h3>
+                {profile.pronouns && (
+                  <p className="text-sm text-gray-500">({profile.pronouns})</p>
+                )}
+              </div>
+
+              {/* Status */}
+              {profile.status && (
+                <div className="flex items-center justify-center gap-2">
+                  <div 
+                    className={cn(
+                      "w-3 h-3 rounded-full",
+                      profile.status === 'online' && 'bg-green-500',
+                      profile.status === 'idle' && 'bg-yellow-500',
+                      profile.status === 'dnd' && 'bg-red-500',
+                      profile.status === 'offline' && 'bg-gray-500'
+                    )}
+                  />
+                  <span className="text-sm capitalize">{profile.status}</span>
+                </div>
+              )}
+
+              {/* Bio */}
+              {profile.bio && (
+                <div>
+                  <h4 className="font-semibold text-sm">About</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {profile.bio}
+                  </p>
+                </div>
+              )}
+
+              {/* Badges */}
+              {profile.badges && profile.badges.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Badges</h4>
+                  <div className="flex flex-wrap gap-1">
+                    {profile.badges.map((badge, index) => (
+                      <img 
+                        key={index}
+                        src={badge.url || badge.icon}
+                        alt={badge.name || 'Badge'}
+                        title={badge.name}
+                        className="w-6 h-6 rounded"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>

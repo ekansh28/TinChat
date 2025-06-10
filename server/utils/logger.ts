@@ -1,283 +1,254 @@
-// server/utils/logger.ts
-import { performance } from 'perf_hooks';
-
+// ===== server/utils/logger.ts =====
 export interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
   meta?: any;
   duration?: number;
-  requestId?: string;
-  userId?: string;
-  socketId?: string;
 }
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
-
-export interface LoggerConfig {
-  level: LogLevel;
-  enableColors: boolean;
-  enableTimestamps: boolean;
-  enableMetadata: boolean;
-  enablePerformance: boolean;
-  maxLogSize: number;
-  rotateInterval: number;
-}
-
-const DEFAULT_CONFIG: LoggerConfig = {
-  level: (process.env.LOG_LEVEL as LogLevel) || 'info',
-  enableColors: process.env.NODE_ENV !== 'production',
-  enableTimestamps: true,
-  enableMetadata: true,
-  enablePerformance: true,
-  maxLogSize: 1000,
-  rotateInterval: 24 * 60 * 60 * 1000 // 24 hours
-};
-
-const LOG_LEVELS: Record<LogLevel, number> = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  debug: 3,
-  trace: 4
-};
-
-const COLORS = {
-  error: '\x1b[31m',   // Red
-  warn: '\x1b[33m',    // Yellow
-  info: '\x1b[36m',    // Cyan
-  debug: '\x1b[35m',   // Magenta
-  trace: '\x1b[37m',   // White
-  reset: '\x1b[0m',    // Reset
-  timestamp: '\x1b[90m', // Gray
-  metadata: '\x1b[32m'   // Green
-};
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 class Logger {
-  private config: LoggerConfig;
   private logHistory: LogEntry[] = [];
-  private performanceMarks: Map<string, number> = new Map();
-
-  constructor(config: Partial<LoggerConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
-  }
 
   private shouldLog(level: LogLevel): boolean {
-    return LOG_LEVELS[level] <= LOG_LEVELS[this.config.level];
+    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+    const currentLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
+    return levels[level] <= levels[currentLevel];
   }
 
-  private formatMessage(level: LogLevel, message: string, meta?: any, duration?: number): string {
-    const timestamp = new Date().toISOString();
-    const levelUpper = level.toUpperCase().padEnd(5);
-    
-    let formattedMessage = '';
-    
-    if (this.config.enableColors) {
-      const color = COLORS[level];
-      const resetColor = COLORS.reset;
-      
-      if (this.config.enableTimestamps) {
-        formattedMessage += `${COLORS.timestamp}[${timestamp}]${resetColor} `;
-      }
-      
-      formattedMessage += `${color}${levelUpper}${resetColor} ${message}`;
-      
-      if (duration !== undefined && this.config.enablePerformance) {
-        formattedMessage += ` ${COLORS.metadata}(${duration.toFixed(2)}ms)${resetColor}`;
-      }
-      
-      if (meta && this.config.enableMetadata) {
-        formattedMessage += `\n${COLORS.metadata}${JSON.stringify(meta, null, 2)}${resetColor}`;
-      }
-    } else {
-      if (this.config.enableTimestamps) {
-        formattedMessage += `[${timestamp}] `;
-      }
-      
-      formattedMessage += `${levelUpper} ${message}`;
-      
-      if (duration !== undefined && this.config.enablePerformance) {
-        formattedMessage += ` (${duration.toFixed(2)}ms)`;
-      }
-      
-      if (meta && this.config.enableMetadata) {
-        formattedMessage += `\n${JSON.stringify(meta, null, 2)}`;
-      }
-    }
-    
-    return formattedMessage;
-  }
-
-  private addToHistory(entry: LogEntry): void {
-    this.logHistory.push(entry);
-    
-    if (this.logHistory.length > this.config.maxLogSize) {
-      this.logHistory = this.logHistory.slice(-this.config.maxLogSize);
-    }
-  }
-
-  private log(level: LogLevel, message: string, meta?: any, duration?: number): void {
+  private log(level: LogLevel, message: string, meta?: any): void {
     if (!this.shouldLog(level)) return;
 
     const timestamp = new Date().toISOString();
-    const formattedMessage = this.formatMessage(level, message, meta, duration);
+    const entry = { timestamp, level, message, meta };
     
-    // Add to history
-    this.addToHistory({
-      timestamp,
-      level,
-      message,
-      meta,
-      duration
-    });
-
-    // Output to console
-    const consoleMethod = level === 'error' ? 'error' : 
-                         level === 'warn' ? 'warn' : 
-                         level === 'debug' ? 'debug' : 'log';
-    
-    console[consoleMethod](formattedMessage);
-  }
-
-  // Public logging methods
-  error(message: string, meta?: any): void {
-    this.log('error', message, meta);
-  }
-
-  warn(message: string, meta?: any): void {
-    this.log('warn', message, meta);
-  }
-
-  info(message: string, meta?: any): void {
-    this.log('info', message, meta);
-  }
-
-  debug(message: string, meta?: any): void {
-    this.log('debug', message, meta);
-  }
-
-  trace(message: string, meta?: any): void {
-    this.log('trace', message, meta);
-  }
-
-  // Performance timing methods
-  time(label: string): void {
-    this.performanceMarks.set(label, performance.now());
-  }
-
-  timeEnd(label: string, message?: string): number {
-    const startTime = this.performanceMarks.get(label);
-    if (startTime === undefined) {
-      this.warn(`Timer '${label}' not found`);
-      return 0;
+    this.logHistory.push(entry);
+    if (this.logHistory.length > 1000) {
+      this.logHistory = this.logHistory.slice(-500);
     }
 
-    const duration = performance.now() - startTime;
-    this.performanceMarks.delete(label);
-    
-    const logMessage = message || `Timer '${label}' completed`;
-    this.log('debug', logMessage, undefined, duration);
-    
-    return duration;
+    const consoleMethod = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
+    console[consoleMethod](`[${timestamp}] ${level.toUpperCase()}: ${message}`, meta || '');
   }
 
-  // Context-aware logging
-  withContext(context: Partial<Pick<LogEntry, 'requestId' | 'userId' | 'socketId'>>) {
-    return {
-      error: (message: string, meta?: any) => this.log('error', message, { ...meta, ...context }),
-      warn: (message: string, meta?: any) => this.log('warn', message, { ...meta, ...context }),
-      info: (message: string, meta?: any) => this.log('info', message, { ...meta, ...context }),
-      debug: (message: string, meta?: any) => this.log('debug', message, { ...meta, ...context }),
-      trace: (message: string, meta?: any) => this.log('trace', message, { ...meta, ...context })
-    };
-  }
-
-  // Utility methods
-  getHistory(): LogEntry[] {
-    return [...this.logHistory];
-  }
+  error(message: string, meta?: any): void { this.log('error', message, meta); }
+  warn(message: string, meta?: any): void { this.log('warn', message, meta); }
+  info(message: string, meta?: any): void { this.log('info', message, meta); }
+  debug(message: string, meta?: any): void { this.log('debug', message, meta); }
 
   getRecentLogs(count: number = 100): LogEntry[] {
     return this.logHistory.slice(-count);
   }
 
-  clearHistory(): void {
-    this.logHistory = [];
-  }
-
   getStats() {
-    const levels = this.logHistory.reduce((acc, log) => {
-      acc[log.level] = (acc[log.level] || 0) + 1;
-      return acc;
-    }, {} as Record<LogLevel, number>);
-
-    const avgDuration = this.logHistory
-      .filter(log => log.duration !== undefined)
-      .reduce((sum, log, _, arr) => sum + (log.duration! / arr.length), 0);
-
-    return {
-      totalLogs: this.logHistory.length,
-      levelBreakdown: levels,
-      averageDuration: avgDuration,
-      activeTimers: this.performanceMarks.size
-    };
-  }
-
-  // JSON output for structured logging
-  json(level: LogLevel, message: string, meta?: any): void {
-    if (!this.shouldLog(level)) return;
-
-    const logEntry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-      meta
-    };
-
-    console.log(JSON.stringify(logEntry));
-    this.addToHistory(logEntry);
+    return { totalLogs: this.logHistory.length };
   }
 }
 
-// Create default logger instance
 export const logger = new Logger();
 
-// Export Logger class for custom instances
-export { Logger };
+// ===== server/utils/LRUCache.ts =====
+interface CacheNode<T> {
+  key: string;
+  data: T;
+  timestamp: number;
+  prev: CacheNode<T> | null;
+  next: CacheNode<T> | null;
+}
 
-// Utility functions for common logging patterns
-export const createRequestLogger = (requestId: string) => {
-  return logger.withContext({ requestId });
-};
+export class LRUCache<T> {
+  private capacity: number;
+  private cache: Map<string, CacheNode<T>>;
+  private head: CacheNode<T> | null = null;
+  private tail: CacheNode<T> | null = null;
+  private hits = 0;
+  private misses = 0;
 
-export const createSocketLogger = (socketId: string, userId?: string) => {
-  return logger.withContext({ socketId, userId });
-};
+  constructor(capacity: number = 100) {
+    this.capacity = capacity;
+    this.cache = new Map();
+  }
 
-export const createUserLogger = (userId: string) => {
-  return logger.withContext({ userId });
-};
+  get(key: string): T | null {
+    const node = this.cache.get(key);
+    if (node) {
+      this.moveToFront(node);
+      this.hits++;
+      return node.data;
+    }
+    this.misses++;
+    return null;
+  }
 
-// Express middleware for request logging
-export const requestLoggingMiddleware = (req: any, res: any, next: any) => {
-  const requestId = Math.random().toString(36).substr(2, 9);
-  const startTime = performance.now();
-  
-  req.logger = createRequestLogger(requestId);
-  req.logger.info(`${req.method} ${req.url}`, {
-    userAgent: req.get('User-Agent'),
-    ip: req.ip
-  });
+  set(key: string, data: T): void {
+    const existingNode = this.cache.get(key);
+    if (existingNode) {
+      existingNode.data = data;
+      existingNode.timestamp = Date.now();
+      this.moveToFront(existingNode);
+      return;
+    }
 
-  const originalEnd = res.end;
-  res.end = function(...args: any[]) {
-    const duration = performance.now() - startTime;
-    req.logger.info(`${req.method} ${req.url} - ${res.statusCode}`, {
-      duration: duration.toFixed(2) + 'ms',
-      statusCode: res.statusCode
+    const newNode: CacheNode<T> = {
+      key, data, timestamp: Date.now(), prev: null, next: null
+    };
+
+    this.cache.set(key, newNode);
+    this.addToFront(newNode);
+
+    if (this.cache.size > this.capacity) {
+      this.evictLRU();
+    }
+  }
+
+  delete(key: string): boolean {
+    const node = this.cache.get(key);
+    if (node) {
+      this.cache.delete(key);
+      this.removeNode(node);
+      return true;
+    }
+    return false;
+  }
+
+  private moveToFront(node: CacheNode<T>): void {
+    if (node === this.head) return;
+    this.removeNode(node);
+    this.addToFront(node);
+  }
+
+  private addToFront(node: CacheNode<T>): void {
+    node.prev = null;
+    node.next = this.head;
+    if (this.head) this.head.prev = node;
+    this.head = node;
+    if (!this.tail) this.tail = node;
+  }
+
+  private removeNode(node: CacheNode<T>): void {
+    if (node.prev) node.prev.next = node.next;
+    else this.head = node.next;
+    if (node.next) node.next.prev = node.prev;
+    else this.tail = node.prev;
+  }
+
+  private evictLRU(): void {
+    if (this.tail) {
+      this.cache.delete(this.tail.key);
+      this.removeNode(this.tail);
+    }
+  }
+
+  size(): number { return this.cache.size; }
+  clear(): void { this.cache.clear(); this.head = null; this.tail = null; }
+  getHitRate(): number {
+    const total = this.hits + this.misses;
+    return total > 0 ? (this.hits / total) * 100 : 0;
+  }
+}
+
+// ===== server/utils/MessageBatcher.ts =====
+interface QueuedMessage {
+  socketId: string;
+  event: string;
+  data: any;
+  timestamp: number;
+}
+
+export class MessageBatcher {
+  private queue: QueuedMessage[] = [];
+  private batchInterval: NodeJS.Timeout | null = null;
+  private io: any = null;
+  private readonly BATCH_SIZE = 50;
+  private readonly FLUSH_INTERVAL = 16;
+
+  constructor(io?: any) {
+    this.io = io;
+    this.startBatching();
+  }
+
+  setSocketIOInstance(io: any): void {
+    this.io = io;
+  }
+
+  queueMessage(socketId: string, event: string, data: any): void {
+    this.queue.push({
+      socketId, event, data, timestamp: Date.now()
     });
-    originalEnd.apply(res, args);
+
+    if (this.queue.length >= this.BATCH_SIZE) {
+      this.flushQueue();
+    }
+  }
+
+  private startBatching(): void {
+    this.batchInterval = setInterval(() => {
+      this.flushQueue();
+    }, this.FLUSH_INTERVAL);
+  }
+
+  private flushQueue(): void {
+    if (this.queue.length === 0 || !this.io) return;
+
+    const batch = this.queue.splice(0, this.BATCH_SIZE);
+    batch.forEach(({ socketId, event, data }) => {
+      this.io.to(socketId).emit(event, data);
+    });
+  }
+
+  destroy(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.batchInterval) {
+        clearInterval(this.batchInterval);
+        this.batchInterval = null;
+      }
+      this.flushQueue();
+      resolve();
+    });
+  }
+}
+
+// ===== server/utils/PerformanceMonitor.ts =====
+export class PerformanceMonitor {
+  private metrics = {
+    totalConnections: 0,
+    totalDisconnections: 0,
+    currentConnections: 0,
+    totalMessages: 0,
+    totalMatches: 0,
+    successfulMatches: 0,
+    failedMatches: 0,
   };
 
-  next();
-};
+  public readonly isEnabled = process.env.PERFORMANCE_MONITORING !== 'false';
+
+  recordConnection(): void {
+    if (!this.isEnabled) return;
+    this.metrics.totalConnections++;
+    this.metrics.currentConnections++;
+  }
+
+  recordDisconnection(): void {
+    if (!this.isEnabled) return;
+    this.metrics.totalDisconnections++;
+    this.metrics.currentConnections = Math.max(0, this.metrics.currentConnections - 1);
+  }
+
+  recordMessage(): void {
+    if (!this.isEnabled) return;
+    this.metrics.totalMessages++;
+  }
+
+  recordMatch(userId: string, successful: boolean = true): void {
+    if (!this.isEnabled) return;
+    this.metrics.totalMatches++;
+    if (successful) this.metrics.successfulMatches++;
+    else this.metrics.failedMatches++;
+  }
+
+  getStats() {
+    return { ...this.metrics };
+  }
+}

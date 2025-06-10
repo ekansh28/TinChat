@@ -1,30 +1,22 @@
-
-'use client';
-
+// ===== src/components/ConditionalGoldfishImage.tsx =====
 import React from 'react';
-import { useTheme } from '@/components/theme-provider';
+import Image from 'next/image';
 
-export function ConditionalGoldfishImage() {
-  const { currentTheme } = useTheme();
-
-  if (currentTheme !== 'theme-7') {
-    return null;
-  }
-
-  const imageStyles: React.CSSProperties = {
-    top: '-60px',
-    right: '-34px',
-    width: '150px',
-    height: '150px',
-  };
-
+export const ConditionalGoldfishImage: React.FC = () => {
   return (
-    <img
-      src="icons/goldfish.png"
-      alt="Decorative Goldfish"
-      className="absolute object-contain pointer-events-none select-none z-50" // Standard Tailwind classes
-      style={imageStyles} // Styles with arbitrary values moved here
-      data-ai-hint="goldfish decoration"
-    />
+    <div className="absolute bottom-2 right-2 opacity-50 pointer-events-none">
+      <Image
+        src="/images/goldfish.png"
+        alt="Goldfish decoration"
+        width={48}
+        height={48}
+        className="animate-pulse"
+        onError={() => {
+          // Hide image if it fails to load
+          const img = document.querySelector('[alt="Goldfish decoration"]') as HTMLElement;
+          if (img) img.style.display = 'none';
+        }}
+      />
+    </div>
   );
-}
+};
