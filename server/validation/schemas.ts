@@ -1,10 +1,14 @@
 // server/validation/schemas.ts
 import { z } from 'zod';
+import { UserStatus } from '../types/User';
 
 // Common validation helpers
 const StringArraySchema = z.array(z.string().max(100)).max(10);
 const RoomIdSchema = z.string().regex(/^[a-zA-Z0-9#-_]+$/).max(100);
 const AuthIdSchema = z.string().uuid().nullable().optional().default(null);
+
+// Create a Zod enum from the UserStatus type
+const UserStatusSchema = z.enum(['online', 'idle', 'dnd', 'offline'] as const);
 
 export const ValidationSchemas = {
   // Find partner payload validation
@@ -18,6 +22,7 @@ export const ValidationSchemas = {
   RoomIdPayloadSchema: z.object({
     roomId: RoomIdSchema,
   }),
+
 
   // Message sending validation
   SendMessagePayloadSchema: z.object({
@@ -33,9 +38,9 @@ export const ValidationSchemas = {
     signalData: z.any(),
   }),
 
-  // Status update validation
+  // Status update validation - now uses the proper enum
   UpdateStatusPayloadSchema: z.object({
-    status: z.enum(['online', 'idle', 'dnd', 'offline']),
+    status: UserStatusSchema,
   }),
 
   // Typing indicator validation
@@ -43,7 +48,7 @@ export const ValidationSchemas = {
     roomId: RoomIdSchema,
   }),
 
-  // User profile validation
+  // User profile validation - now uses the proper enum
   UserProfileSchema: z.object({
     id: z.string().uuid(),
     username: z.string().min(3).max(20),
@@ -51,7 +56,7 @@ export const ValidationSchemas = {
     avatar_url: z.string().url().optional(),
     banner_url: z.string().url().optional(),
     pronouns: z.string().max(20).optional(),
-    status: z.enum(['online', 'idle', 'dnd', 'offline']).optional(),
+    status: UserStatusSchema.optional(),
     display_name_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
     display_name_animation: z.enum(['none', 'rainbow', 'gradient', 'pulse', 'glow']).optional(),
     rainbow_speed: z.number().min(1).max(10).optional(),

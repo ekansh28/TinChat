@@ -2,7 +2,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/LRUCache';
-
+import { UserStatus } from '../types/User';
 export interface UserProfile {
   id: string;
   username: string;
@@ -22,7 +22,7 @@ export interface UserProfile {
 
 export interface StatusUpdate {
   authId: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
+  status: UserStatus; // Use the shared UserStatus type
   lastSeen?: string;
 }
 
@@ -110,7 +110,7 @@ export class ProfileManager {
     }
   }
 
-  async updateUserStatus(authId: string, status: 'online' | 'idle' | 'dnd' | 'offline'): Promise<boolean> {
+  async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
     if (!this.supabase || !authId) return false;
     
     const statusUpdate: StatusUpdate = {

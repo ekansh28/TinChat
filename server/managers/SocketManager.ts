@@ -420,18 +420,19 @@ export class SocketManager {
     logger.info(`🎯 Match created: ${currentUser.id} ↔ ${matchedPartner.id} in room ${roomId}`);
   }
 
-  private enhanceUserWithProfile(user: User, profile: any): void {
+  private enhanceUserWithProfile(user: User, profile: UserProfile): void {
     user.username = profile.username;
     user.displayName = profile.display_name;
     user.avatarUrl = profile.avatar_url;
     user.bannerUrl = profile.banner_url;
     user.pronouns = profile.pronouns;
-    user.status = profile.status || 'online';
+    user.status = profile.status || 'online'; // This now properly types to UserStatus
     user.displayNameColor = profile.display_name_color || '#ffffff';
     user.displayNameAnimation = profile.display_name_animation || 'none';
     user.rainbowSpeed = profile.rainbow_speed || 3;
     user.badges = profile.badges || [];
   }
+
 
   private setDefaultUserProperties(user: User): void {
     user.status = 'online';
@@ -440,6 +441,7 @@ export class SocketManager {
     user.rainbowSpeed = 3;
     user.badges = [];
   }
+
 
   private broadcastStatusToPartner(socketId: string, status: string): void {
     const room = this.roomManager.getRoomByUserId(socketId);

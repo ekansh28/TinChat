@@ -1,19 +1,6 @@
 // ===== server/services/MatchmakingEngine.ts =====
 import { logger } from '../utils/logger';
-
-export interface User {
-  id: string;
-  interests: string[];
-  chatType: 'text' | 'video';
-  authId: string | null;
-  username?: string;
-  displayName?: string;
-  status?: string;
-  displayNameColor?: string;
-  displayNameAnimation?: string;
-  rainbowSpeed?: number;
-  badges?: any[];
-}
+import { User } from '../types/User';
 
 export class MatchmakingEngine {
   private waitingUsers: { [key in 'text' | 'video']: User[] } = {
@@ -50,6 +37,7 @@ export class MatchmakingEngine {
     return null;
   }
 
+
   private findInterestBasedMatch(currentUser: User, candidates: User[]): User | null {
     if (currentUser.interests.length === 0) return null;
 
@@ -80,6 +68,7 @@ export class MatchmakingEngine {
     });
   }
 
+
   getQueueStats() {
     return {
       text: this.waitingUsers.text.length,
@@ -103,3 +92,15 @@ export class MatchmakingEngine {
     });
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
