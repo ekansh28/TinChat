@@ -2,10 +2,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-
-// Import theme CSS files here instead
-import '98.css';
-import '7.css';
+import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,7 +18,29 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <head>
+        {/* Load 98.css and 7.css from CDN - bypasses bundler issues */}
+        <link 
+          rel="stylesheet" 
+          href="https://unpkg.com/98.css@0.1.21/dist/98.css"
+          crossOrigin="anonymous"
+        />
+        <link 
+          rel="stylesheet" 
+          href="https://unpkg.com/7.css@0.1.2/dist/7.css"
+          crossOrigin="anonymous"
+        />
+      </head>
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="theme-98"
+          enableSystem={false}
+          storageKey="tinchat-theme"
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
