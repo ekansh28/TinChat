@@ -2,9 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
-// Import CSS files statically
-import '98.css';
-import '7.css';
 
 type Theme = 'theme-98' | 'theme-7';
 
@@ -51,7 +48,7 @@ export function ThemeProvider({
     return pathname === '/' ? 'theme-98' : userSelectedTheme;
   }, [pathname, userSelectedTheme]);
 
-  // Apply theme classes (CSS is already loaded statically)
+  // Apply theme classes (CSS is loaded from layout.tsx)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
