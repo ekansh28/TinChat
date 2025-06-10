@@ -211,18 +211,13 @@ export function TopBar() {
   }, [isCustomizerOpen]);
 
   if (!mounted) {
-    const defaultInitialTheme: Theme = 'theme-98'; 
     return (
-      <div className={cn(
-        "flex justify-end items-center p-2 space-x-2",
-        defaultInitialTheme === 'theme-7' ? 'top-bar-main-body' : ''
-      )}>
+      <div className="flex justify-end items-center p-2 space-x-2">
         <Label htmlFor="theme-select-dropdown" className="mr-2" suppressHydrationWarning>Theme:</Label>
         <select
           id="theme-select-dropdown"
-          value={defaultInitialTheme} 
+          value="theme-98" 
           disabled
-          readOnly
           className="w-[120px] field-row"
           style={{ height: '21px' }}
           onChange={() => {}} 

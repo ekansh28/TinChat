@@ -1,8 +1,6 @@
-
 // src/app/chat/components/MatchStatus.tsx
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button-themed';
 
 interface MatchStatusProps {
   isSearching: boolean;
@@ -44,24 +42,32 @@ const MatchStatus: React.FC<MatchStatusProps> = ({
   };
 
   return (
-    <div className={cn("flex flex-col items-center space-y-2", className)}>
-      <div className="text-center">
-        <div className="text-sm font-medium">{getStatusText()}</div>
-        {partnerCount > 0 && (
-          <div className="text-xs text-gray-500">
-            {partnerCount} users online
+    <div className={cn("window-body", className)} style={{ padding: '8px' }}>
+      <div className="field-row" style={{ marginBottom: '8px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px' }}>
+            {getStatusText()}
           </div>
-        )}
+          {partnerCount > 0 && (
+            <div style={{ fontSize: '10px', color: '#666' }}>
+              {partnerCount} users online
+            </div>
+          )}
+        </div>
       </div>
       
-      <Button
-        onClick={handleButtonClick}
-        disabled={disabled}
-        variant={isConnected ? "destructive" : "default"}
-        size="sm"
-      >
-        {getButtonText()}
-      </Button>
+      <div className="field-row" style={{ textAlign: 'center' }}>
+        <button
+          onClick={handleButtonClick}
+          disabled={disabled}
+          style={{ 
+            minWidth: '80px',
+            fontSize: '11px'
+          }}
+        >
+          {getButtonText()}
+        </button>
+      </div>
     </div>
   );
 };

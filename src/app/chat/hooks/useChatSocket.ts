@@ -1,7 +1,7 @@
 // src/app/chat/hooks/useChatSocket.ts
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { showChatToast } from '../utils/chatHelpers';
+import { showChatToast, PartnerInfo, Message } from '../utils/ChatHelpers'; // Import the types
 
 interface UseChatSocketParams {
   onMessage: (msg: any) => void;
@@ -269,20 +269,23 @@ export function useChatSocket({
 }
 
 // Additional hook for chat state management
+// Updated useChatState function with proper typing
 export function useChatState() {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isPartnerConnected, setIsPartnerConnected] = useState(false);
-  const [isFindingPartner, setIsFindingPartner] = useState(false);
-  const [partnerInfo, setPartnerInfo] = useState<any>(null);
-  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [currentMessage, setCurrentMessage] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isPartnerConnected, setIsPartnerConnected] = useState<boolean>(false);
+  const [isFindingPartner, setIsFindingPartner] = useState<boolean>(false);
+  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null); // ✅ This fixes the typing issue
+  const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
+  const [currentMessage, setCurrentMessage] = useState<string>('');
 
-  const addMessage = useCallback((message: any) => {
+  const addMessage = useCallback((message: Partial<Message>) => {
     setMessages(prev => [...prev, {
       id: `${Date.now()}-${Math.random()}`,
       timestamp: new Date(),
+      sender: 'system',
+      text: '',
       ...message
-    }]);
+    } as Message]);
   }, []);
 
   const addSystemMessage = useCallback((text: string) => {
@@ -312,7 +315,7 @@ export function useChatState() {
     isFindingPartner,
     setIsFindingPartner,
     partnerInfo,
-    setPartnerInfo,
+    setPartnerInfo, // ✅ Now properly typed as React.Dispatch<React.SetStateAction<PartnerInfo | null>>
     isPartnerTyping,
     setIsPartnerTyping,
     currentMessage,

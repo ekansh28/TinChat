@@ -1,4 +1,4 @@
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
 
 const NEXT_PUBLIC_SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'https://chat.tinchat.online/';
 const socketServerHostname = new URL(NEXT_PUBLIC_SOCKET_SERVER_URL).hostname;
@@ -35,6 +35,9 @@ const nextConfig: NextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  experimental: {
+    optimizePackageImports: ['98.css', '7.css']
   },
   images: {
     remotePatterns: [

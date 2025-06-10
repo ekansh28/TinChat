@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -8,7 +7,12 @@ export function ConditionalTopBar() {
   const pathname = usePathname();
 
   if (pathname === '/') {
-    return null; // Don't render TopBar on the home page
+    // Render hidden TopBar for cleanup effects, but don't display it
+    return (
+      <div style={{ display: 'none' }}>
+        <TopBar />
+      </div>
+    );
   }
 
   return <TopBar />;

@@ -1,8 +1,10 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+// Import CSS files statically
+import '98.css';
+import '7.css';
 
 type Theme = 'theme-98' | 'theme-7';
 
@@ -22,10 +24,7 @@ interface ThemeProviderContextState {
 
 const ThemeProviderContext = createContext<ThemeProviderContextState | undefined>(undefined);
 
-const STYLESHEET_98_ID = 'theme-98-css';
-const STYLESHEET_7_ID = 'theme-7-css';
-const URL_98 = 'https://unpkg.com/98.css';
-const URL_7 = 'https://unpkg.com/7.css';
+const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
 
 export function ThemeProvider({
   children,
@@ -48,13 +47,11 @@ export function ThemeProvider({
     return defaultTheme;
   });
 
-  // The useEffect that was here, which forced userSelectedTheme to 'theme-98' on the homepage, has been removed.
-  // This was the change made in the previous step to simplify theme state management for the homepage.
-
   const currentAppliedTheme = useMemo(() => {
     return pathname === '/' ? 'theme-98' : userSelectedTheme;
   }, [pathname, userSelectedTheme]);
 
+  // Apply theme classes (CSS is already loaded statically)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -62,37 +59,13 @@ export function ThemeProvider({
     
     root.classList.add('theme-transitioning');
     
+    // Remove existing theme classes
     root.classList.remove('theme-98', 'theme-7');
     
+    // Add current theme class
     root.classList.add(currentAppliedTheme);
 
-    const theme98Link = document.getElementById(STYLESHEET_98_ID) as HTMLLinkElement | null;
-    const theme7Link = document.getElementById(STYLESHEET_7_ID) as HTMLLinkElement | null;
-
-    if (currentAppliedTheme === 'theme-98') {
-        if (!theme98Link) {
-            const link = document.createElement('link');
-            link.id = STYLESHEET_98_ID;
-            link.rel = 'stylesheet';
-            link.href = URL_98;
-            document.head.appendChild(link);
-        }
-        if (theme7Link) {
-            theme7Link.remove();
-        }
-    } else if (currentAppliedTheme === 'theme-7') {
-        if (!theme7Link) {
-            const link = document.createElement('link');
-            link.id = STYLESHEET_7_ID;
-            link.rel = 'stylesheet';
-            link.href = URL_7;
-            document.head.appendChild(link);
-        }
-        if (theme98Link) {
-            theme98Link.remove();
-        }
-    }
-    
+    // Save user preference to localStorage
     try {
       localStorage.setItem(storageKey, userSelectedTheme);
     } catch (e) {
@@ -106,6 +79,38 @@ export function ThemeProvider({
     return () => clearTimeout(timer);
   }, [currentAppliedTheme, userSelectedTheme, storageKey]);
 
+  // Force clear sub-themes when on home page
+  useEffect(() => {
+    if (pathname === '/' && typeof window !== 'undefined') {
+      console.log("ThemeProvider: On home page, clearing any sub-themes");
+      
+      const htmlElement = document.documentElement;
+      
+      // Remove any existing subtheme classes
+      const availableStamps = [
+        { cssFile: 'pink-theme.css' },
+        { cssFile: 'starpattern-theme.css' },
+        { cssFile: 'dark-theme.css' }
+      ];
+      
+      availableStamps.forEach(stamp => {
+        if (stamp.cssFile) {
+          const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
+          if (htmlElement.classList.contains(existingSubThemeClass)) {
+            htmlElement.classList.remove(existingSubThemeClass);
+            console.log("ThemeProvider: Removed sub-theme class:", existingSubThemeClass);
+          }
+        }
+      });
+      
+      // Remove sub-theme CSS link
+      const link = document.getElementById(DYNAMIC_THEME_STYLE_ID);
+      if (link) {
+        link.remove();
+        console.log("ThemeProvider: Removed sub-theme CSS link");
+      }
+    }
+  }, [pathname]);
 
   const setThemeCallback = useCallback((newTheme: Theme) => {
     if (newTheme === 'theme-98' || newTheme === 'theme-7') {

@@ -1,4 +1,5 @@
 // src/app/chat/utils/chatHelpers.ts
+import React from 'react';
 import { toast } from '@/hooks/use-toast';
 
 export interface Message {
@@ -39,12 +40,12 @@ export const renderMessageWithEmojis = (
   text: string, 
   emojiFilenames: string[], 
   baseUrl: string
-): (string | JSX.Element)[] => {
+): (string | React.ReactElement)[] => {
   if (!emojiFilenames || emojiFilenames.length === 0) {
     return [text];
   }
 
-  const parts: (string | JSX.Element)[] = [];
+  const parts: (string | React.ReactElement)[] = [];
   let lastIndex = 0;
   const regex = /:([a-zA-Z0-9_.-]+?):/g;
   let match;
@@ -61,13 +62,13 @@ export const renderMessageWithEmojis = (
 
     if (matchedFilename) {
       parts.push(
-        <img
-          key={`${match.index}-${shortcodeName}`}
-          src={`${baseUrl}${matchedFilename}`}
-          alt={shortcodeName}
-          className="inline max-h-5 w-auto mx-0.5 align-middle"
-          data-ai-hint="chat emoji"
-        />
+        React.createElement('img', {
+          key: `${match.index}-${shortcodeName}`,
+          src: `${baseUrl}${matchedFilename}`,
+          alt: shortcodeName,
+          className: "inline max-h-5 w-auto mx-0.5 align-middle",
+          'data-ai-hint': "chat emoji"
+        })
       );
     } else {
       parts.push(match[0]);
@@ -83,7 +84,7 @@ export const renderMessageWithEmojis = (
 };
 
 // Get display name CSS class for animations
-export const getDisplayNameClass = (animation?: string) => {
+export const getDisplayNameClass = (animation?: string): string => {
   switch (animation) {
     case 'rainbow':
       return 'display-name-rainbow';
@@ -99,7 +100,7 @@ export const getDisplayNameClass = (animation?: string) => {
 };
 
 // Favicon management
-export const changeFavicon = (newFaviconHref: string, removeOld: boolean = false) => {
+export const changeFavicon = (newFaviconHref: string, removeOld: boolean = false): void => {
   if (typeof window === 'undefined' || !document.head) {
     console.warn('Cannot change favicon, window or document.head not available.');
     return;
@@ -123,7 +124,7 @@ export const changeFavicon = (newFaviconHref: string, removeOld: boolean = false
 };
 
 // Sound utility
-export const playSound = (filename: string) => {
+export const playSound = (filename: string): void => {
   try {
     const audio = new Audio(`/sounds/${filename}`);
     audio.volume = 0.5;
@@ -170,7 +171,6 @@ export const showChatToast = {
     toast({
       title: "Connection Error",
       description: error,
-      variant: "destructive"
     });
   },
   
@@ -178,7 +178,6 @@ export const showChatToast = {
     toast({
       title: "Partner Found!",
       description: "You can now start chatting",
-      variant: "default"
     });
   },
   
@@ -186,7 +185,6 @@ export const showChatToast = {
     toast({
       title: "Partner Disconnected",
       description: "Your chat partner has left",
-      variant: "default"
     });
   },
   
@@ -194,7 +192,6 @@ export const showChatToast = {
     toast({
       title: "Message Error",
       description: error,
-      variant: "destructive"
     });
   },
   
@@ -202,14 +199,13 @@ export const showChatToast = {
     toast({
       title: "Please Wait",
       description: "You're searching too fast. Please wait a moment.",
-      variant: "default"
     });
   }
 };
 
 // Local storage helpers for chat preferences
 export const ChatPreferences = {
-  save: (preferences: any) => {
+  save: (preferences: any): void => {
     try {
       localStorage.setItem('tinchat-preferences', JSON.stringify(preferences));
     } catch (err) {
@@ -217,7 +213,7 @@ export const ChatPreferences = {
     }
   },
   
-  load: () => {
+  load: (): any => {
     try {
       const saved = localStorage.getItem('tinchat-preferences');
       return saved ? JSON.parse(saved) : {};
@@ -227,7 +223,7 @@ export const ChatPreferences = {
     }
   },
   
-  clear: () => {
+  clear: (): void => {
     try {
       localStorage.removeItem('tinchat-preferences');
     } catch (err) {
@@ -237,7 +233,7 @@ export const ChatPreferences = {
 };
 
 // Enhanced input handling for mobile
-export const setupMobileInputHandling = (inputRef: React.RefObject<HTMLInputElement>) => {
+export const setupMobileInputHandling = (inputRef: React.RefObject<HTMLInputElement>): (() => void) | undefined => {
   if (!inputRef.current || typeof window === 'undefined') return;
   
   const input = inputRef.current;

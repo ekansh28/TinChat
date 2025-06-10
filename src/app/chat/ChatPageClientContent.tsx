@@ -13,6 +13,7 @@ import HomeButton from '@/components/HomeButton';
 import ChatWindow from './components/ChatWindow';
 import PartnerProfile from './components/PartnerProfile';
 import MatchStatus from './components/MatchStatus';
+import { PartnerInfo } from './utils/ChatHelpers';
 
 const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
@@ -95,11 +96,16 @@ const ChatPageClientContent: React.FC = () => {
     addSystemMessage('Your partner has disconnected.');
   }, [setIsPartnerConnected, setIsFindingPartner, setPartnerInfo, setIsPartnerTyping, addSystemMessage]);
 
-  const handleStatusChange = useCallback((status: string) => {
-    if (partnerInfo) {
-      setPartnerInfo(prev => prev ? { ...prev, status } : null);
-    }
-  }, [partnerInfo, setPartnerInfo]);
+  // Then fix the callback
+const handleStatusChange = useCallback((status: string) => {
+  const validStatuses: Array<'online' | 'idle' | 'dnd' | 'offline'> = ['online', 'idle', 'dnd', 'offline'];
+  const validStatus = validStatuses.includes(status as any) ? status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline';
+  
+  setPartnerInfo(prev => {
+    if (!prev) return null;
+    return { ...prev, status: validStatus };
+  });
+}, [setPartnerInfo]);
 
   const handleTypingStart = useCallback(() => {
     setIsPartnerTyping(true);

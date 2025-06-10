@@ -1,3 +1,4 @@
+// src/app/chat/components/MessageRow.tsx
 import React from 'react';
 
 interface MessageRowProps {
@@ -15,22 +16,34 @@ const MessageRow: React.FC<MessageRowProps> = ({ message }) => {
 
   if (isSystem) {
     return (
-      <div className="text-center text-gray-500 text-sm my-2">
+      <div style={{ 
+        textAlign: 'center', 
+        color: '#666', 
+        fontSize: '11px', 
+        margin: '4px 0',
+        fontStyle: 'italic'
+      }}>
         {message.content}
       </div>
     );
   }
 
   return (
-    <div
-      className={`flex ${isSelf ? 'justify-end' : 'justify-start'} my-1`}
-    >
-      <div
-        className={`px-3 py-2 rounded-lg max-w-xs break-words text-sm shadow-md ${
-          isSelf
-            ? 'bg-green-500 text-white'
-            : 'bg-gray-200 text-gray-800'
-        }`}
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: isSelf ? 'flex-end' : 'flex-start',
+      margin: '4px 0'
+    }}>
+      <div 
+        className="window-body"
+        style={{
+          maxWidth: '70%',
+          padding: '4px 8px',
+          fontSize: '11px',
+          backgroundColor: isSelf ? '#c0c0c0' : '#ffffff',
+          border: isSelf ? '1px inset #c0c0c0' : '1px outset #c0c0c0',
+          wordWrap: 'break-word'
+        }}
       >
         {message.content}
       </div>

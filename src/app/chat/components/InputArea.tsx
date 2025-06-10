@@ -1,3 +1,4 @@
+// src/app/chat/components/InputArea.tsx
 import React, { useState } from 'react';
 
 interface InputAreaProps {
@@ -19,26 +20,30 @@ const InputArea: React.FC<InputAreaProps> = ({ value, onChange, onSend }) => {
   };
 
   return (
-    <form
-      className="flex items-center border-t border-gray-300 px-4 py-2"
-      onSubmit={handleSubmit}
-    >
-      <input
-        type="text"
-        className="flex-1 px-3 py-2 border rounded-lg focus:outline-none"
-        placeholder="Type a message..."
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setIsTyping(true)}
-        onBlur={() => setIsTyping(false)}
-      />
-      <button
-        type="submit"
-        className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-      >
-        Send
-      </button>
-    </form>
+    <div className="window-body" style={{ padding: '8px', borderTop: '1px solid #c0c0c0' }}>
+      <form onSubmit={handleSubmit}>
+        <div className="field-row" style={{ marginBottom: '8px' }}>
+          <input
+            type="text"
+            className="field-row"
+            style={{ width: '100%', marginRight: '8px' }}
+            placeholder="Type a message..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setIsTyping(true)}
+            onBlur={() => setIsTyping(false)}
+          />
+        </div>
+        <div className="field-row" style={{ textAlign: 'right' }}>
+          <button
+            type="submit"
+            style={{ minWidth: '60px' }}
+          >
+            Send
+          </button>
+        </div>
+      </form>
+    </div>
   );
 };
 
