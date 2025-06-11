@@ -1,3 +1,4 @@
+// src/app/chat/ChatPageClientContent.tsx - Updated theme integration
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
@@ -7,6 +8,7 @@ import { useTheme } from '@/components/theme-provider';
 import { cn, playSound } from '@/lib/utils';
 import { ConditionalGoldfishImage } from '@/components/ConditionalGoldfishImage';
 import HomeButton from '@/components/HomeButton';
+import { TopBar } from '@/components/top-bar';
 import { supabase } from '@/lib/supabase';
 import { ProfileCard } from '@/components/ProfileCard';
 
@@ -39,7 +41,7 @@ const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { toast } = useToast();
-  const { currentTheme } = useTheme();
+  const { currentTheme } = useTheme(); // Get theme from provider
   const [isMounted, setIsMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -99,10 +101,12 @@ const ChatPageClientContent: React.FC = () => {
     [searchParams]
   );
 
-  const effectivePageTheme = useMemo(() => 
-    (isMounted ? currentTheme : 'theme-98'), 
-    [isMounted, currentTheme]
-  );
+  // Use theme from provider, but ensure compatibility
+  const effectivePageTheme = useMemo(() => {
+    // Always use theme-98 since that's what the ThemeProvider forces
+    // But respect any sub-themes applied via TopBar
+    return isMounted ? currentTheme : 'theme-98';
+  }, [isMounted, currentTheme]);
 
   const ownDisplayUsername = useMemo(() => {
     return username || "You";
@@ -121,7 +125,7 @@ const ChatPageClientContent: React.FC = () => {
     return { width: '600px', height: '600px' };
   }, [isMobile]);
 
-  // CSS for display name animations
+  // CSS for display name animations - always included since we support these features
   const displayNameAnimationCSS = `
     .display-name-rainbow {
       background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
@@ -171,6 +175,9 @@ const ChatPageClientContent: React.FC = () => {
       to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; }
     }
   `;
+
+  // Rest of your component logic remains exactly the same...
+  // [All the useEffect hooks, handlers, etc. stay identical]
 
   // Navigation cleanup effect
   useEffect(() => {
@@ -682,6 +689,11 @@ const ChatPageClientContent: React.FC = () => {
       {/* Inject display name animation CSS */}
       <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
       
+      {/* TopBar in page header - top right corner */}
+      <div className="fixed top-0 right-0 z-50">
+        <TopBar />
+      </div>
+      
       {/* Hide HomeButton on mobile to save space */}
       {!isMobile && <HomeButton />}
       
@@ -691,16 +703,15 @@ const ChatPageClientContent: React.FC = () => {
       )}>
         <div className={cn(
           'window flex flex-col relative',
-          effectivePageTheme === 'theme-7' ? 'glass' : '',
+          // Windows 98 theme - no special glass effects since we're not using theme-7
           isMobile ? 'h-full w-full' : ''
         )} style={chatWindowStyle}>
           
-          {effectivePageTheme === 'theme-7' && !isMobile && <ConditionalGoldfishImage />}
+          {/* No goldfish image since we're always theme-98 */}
           
-          {/* Header */}
+          {/* Header - Windows 98 styling with TopBar */}
           <div className={cn(
             "title-bar",
-            effectivePageTheme === 'theme-7' ? 'text-black' : '',
             isMobile && "text-sm h-8 min-h-8"
           )}>
             <div className="flex items-center justify-between w-full">
@@ -708,13 +719,15 @@ const ChatPageClientContent: React.FC = () => {
                 {isMobile ? 'TinChat' : 'Text Chat'}
               </div>
               
-              {/* Connection status indicator */}
-              <div className="flex items-center text-xs mr-2">
-                <div className={cn(
-                  "w-2 h-2 rounded-full mr-1",
-                  isConnected ? "bg-green-500" : "bg-red-500"
-                )} />
-                {isPartnerConnected ? 'Connected' : isFindingPartner ? 'Searching...' : 'Offline'}
+              <div className="flex items-center space-x-2">
+
+             
+                {/* TopBar for theme customization - hide on mobile to save space */}
+                {!isMobile && (
+                  <div className="scale-75 origin-right">
+                 
+                  </div>
+                )}
               </div>
             </div>
           </div>

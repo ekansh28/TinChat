@@ -187,7 +187,7 @@ export function TopBar() {
   if (!mounted) {
     return (
       <div className="flex justify-end items-center p-2 space-x-2">
-        <span className="mr-2 text-sm">Theme: Windows 98</span>
+        <span className="mr-2 text-sm"></span>
         {/* Don't show customize icon during loading */}
       </div>
     );
@@ -195,7 +195,7 @@ export function TopBar() {
 
   return (
     <div className="flex justify-end items-center p-2 space-x-2">
-      <span className="mr-2 text-sm">Theme: Windows 98</span>
+      <span className="mr-2 text-sm"></span>
 
       {/* Only show customize icon if NOT on home page */}
       {pathname !== '/' && (
