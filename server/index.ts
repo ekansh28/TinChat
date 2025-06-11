@@ -439,7 +439,7 @@ io.on('connection', (socket) => {
       }
 
       let senderUsername = 'Stranger';
-      let senderDisplayNameColor = '#ffffff';
+      let senderDisplayNameColor = '#ff0000';
       let senderDisplayNameAnimation = 'none';
       let senderRainbowSpeed = 3;
 
@@ -450,7 +450,7 @@ io.on('connection', (socket) => {
           const profile = await fetchUserProfile(authId);
           if (profile) {
             senderUsername = profile.display_name || profile.username || 'Stranger';
-            senderDisplayNameColor = profile.display_name_color || '#ffffff';
+            senderDisplayNameColor = profile.display_name_color || '#ff0000';
             senderDisplayNameAnimation = profile.display_name_animation || 'none';
             senderRainbowSpeed = profile.rainbow_speed || 3;
           }
