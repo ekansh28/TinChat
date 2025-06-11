@@ -79,6 +79,7 @@ export class SocketManager {
     this.setupChatEventHandlers(socket);
     this.setupStatusEventHandlers(socket);
     this.setupCleanupEventHandlers(socket);
+    this.setupOnlineUsersEventHandlers(socket); // NEW: Add online users handlers
   }
 
   private setupUserEventHandlers(socket: Socket): void {
@@ -125,6 +126,64 @@ export class SocketManager {
     });
   }
 
+  // NEW: Setup online users event handlers
+  private setupOnlineUsersEventHandlers(socket: Socket): void {
+    socket.on('getOnlineUsersList', async () => {
+      await this.handleGetOnlineUsersList(socket);
+    });
+  }
+
+  // NEW: Helper function to get online usernames
+  private async getOnlineUsernames(): Promise<string[]> {
+    const onlineUsernames: string[] = [];
+    
+    for (const [socketId, authId] of Object.entries(this.socketToAuthId)) {
+      try {
+        // Check if socket is still connected
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (!socket?.connected) {
+          continue;
+        }
+
+        if (authId) {
+          // Fetch username from database
+          const profile = await this.profileManager.fetchUserProfile(authId);
+          if (profile && profile.username) {
+            onlineUsernames.push(profile.username);
+          }
+        }
+        // Note: We skip anonymous users (no authId) from the list
+      } catch (error) {
+        logger.warn(`Failed to fetch username for ${authId}:`, error);
+      }
+    }
+    
+    return onlineUsernames;
+  }
+
+  // NEW: Helper function to broadcast online users list to all clients
+  private async broadcastOnlineUsersList(): Promise<void> {
+    try {
+      const onlineUsernames = await this.getOnlineUsernames();
+      this.io.emit('onlineUsersList', onlineUsernames);
+      logger.debug(`📡 Broadcasted online users list: ${onlineUsernames.length} users - [${onlineUsernames.join(', ')}]`);
+    } catch (error) {
+      logger.error('Failed to broadcast online users list:', error);
+    }
+  }
+
+  // NEW: Handle getOnlineUsersList request
+  private async handleGetOnlineUsersList(socket: Socket): Promise<void> {
+    try {
+      const onlineUsernames = await this.getOnlineUsernames();
+      socket.emit('onlineUsersList', onlineUsernames);
+      logger.debug(`📋 Sent online users list to ${socket.id}: ${onlineUsernames.length} users`);
+    } catch (error) {
+      logger.error('Failed to get online users list:', error);
+      socket.emit('onlineUsersList', []);
+    }
+  }
+
   private async handleFindPartner(socket: Socket, payload: unknown): Promise<void> {
     try {
       const validatedPayload = ValidationSchemas.FindPartnerPayloadSchema.parse(payload);
@@ -146,6 +205,9 @@ export class SocketManager {
         this.socketToAuthId[socket.id] = authId;
         this.authIdToSocketId[authId] = socket.id;
         await this.profileManager.updateUserStatus(authId, 'online');
+        
+        // NEW: Broadcast updated online users list when someone authenticates
+        setTimeout(() => this.broadcastOnlineUsersList(), 500);
       }
 
       // Remove user from any existing waiting lists
@@ -343,6 +405,9 @@ export class SocketManager {
       await this.profileManager.updateUserStatus(authId, 'offline');
       delete this.socketToAuthId[socketId];
       delete this.authIdToSocketId[authId];
+      
+      // NEW: Broadcast updated online users list when someone disconnects
+      setTimeout(() => this.broadcastOnlineUsersList(), 500);
     }
     
     // Clean up rooms
@@ -433,7 +498,6 @@ export class SocketManager {
     user.badges = profile.badges || [];
   }
 
-
   private setDefaultUserProperties(user: User): void {
     user.status = 'online';
     user.displayNameColor = '#ffffff';
@@ -441,7 +505,6 @@ export class SocketManager {
     user.rainbowSpeed = 3;
     user.badges = [];
   }
-
 
   private broadcastStatusToPartner(socketId: string, status: string): void {
     const room = this.roomManager.getRoomByUserId(socketId);

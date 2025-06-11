@@ -13,8 +13,10 @@ import MainCard from '@/components/home/MainCard';
 import SideLinks from '@/components/home/SideLinks';
 import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
+import OnlineUsersWindow from '@/components/home/OnlineUsersWindow';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
+import { useOnlineUsersListMock } from '@/hooks/useOnlineUsersList'; // Use mock for now
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useTheme } from '@/components/theme-provider';
 
@@ -46,6 +48,7 @@ export default function SelectionLobby() {
 
   // Custom hooks
   const usersOnline = useOnlineUsers();
+  const onlineUsersList = useOnlineUsersListMock(); // Use mock for testing
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
 
@@ -123,6 +126,12 @@ export default function SelectionLobby() {
 
   return (
     <div className={styles.homePageContainer}>
+      {/* Online Users Window - Left side */}
+      <OnlineUsersWindow 
+        onlineUsers={onlineUsersList}
+        isMobile={isMobile}
+      />
+
       {/* Header with AuthButtons that now handles Profile Customizer button */}
       <div className={styles.homeHeader}>
         <Header 
@@ -136,7 +145,6 @@ export default function SelectionLobby() {
       <div className={styles.homeMainContent}>
         <div className={styles.homeCardWrapper}>
           <div className={styles.sideLinksContainer}>
-
 
             {/* Main Card using old design components but modular structure */}
             <div ref={cardWrapperRef} className={styles.cardZIndex}>
@@ -154,9 +162,9 @@ export default function SelectionLobby() {
                 toast={toast}
               />
             </div>
-                      <div className="mt-4">
-            <SideLinks isMobile={isMobile} />
-          </div>
+            <div className="mt-4">
+              <SideLinks isMobile={isMobile} />
+            </div>
           </div>
         </div>
       </div>
