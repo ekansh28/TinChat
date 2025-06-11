@@ -62,7 +62,6 @@ export default function SelectionLobby() {
         title: "Navigation Error", 
         description: "Could not initiate chat. Router not available."
       });
-      setIsNavigating(false);
       return;
     }
 
@@ -78,17 +77,18 @@ export default function SelectionLobby() {
       ? `/video-chat${queryString ? `?${queryString}` : ''}` 
       : `/chat${queryString ? `?${queryString}` : ''}`;
     
-    const navigationPromise = router.push(path);
-    if (navigationPromise && typeof navigationPromise.catch === 'function') {
-      navigationPromise.catch((err) => {
-        console.error("Navigation failed:", err);
-        toast({ 
-          variant: "destructive",
-          title: "Navigation Error", 
-          description: "Could not start chat session."
-        });
-        setIsNavigating(false);
+    // Fixed: Handle router.push properly since it returns void in App Router
+    try {
+      router.push(path);
+      // Navigation state will be reset by the useEffect when pathname changes
+    } catch (err) {
+      console.error("Navigation failed:", err);
+      toast({ 
+        variant: "destructive",
+        title: "Navigation Error", 
+        description: "Could not start chat session."
       });
+      setIsNavigating(false);
     }
   };
 
@@ -113,14 +113,22 @@ export default function SelectionLobby() {
     }
   };
 
+  const handleOpenProfileCustomizer = () => {
+    setIsProfileCustomizerOpen(true);
+  };
+
+  const handleCloseProfileCustomizer = () => {
+    setIsProfileCustomizerOpen(false);
+  };
+
   return (
     <div className={styles.homePageContainer}>
-      {/* Header with AuthButtons and Profile Customizer in top-right */}
+      {/* Header with AuthButtons that now handles Profile Customizer button */}
       <div className={styles.homeHeader}>
         <Header 
           version={version} 
           isMobile={isMobile}
-          onOpenProfileCustomizer={() => setIsProfileCustomizerOpen(true)}
+          onOpenProfileCustomizer={handleOpenProfileCustomizer}
         />
       </div>
 
@@ -166,10 +174,10 @@ export default function SelectionLobby() {
       {/* Footer */}
       <Footer isMobile={isMobile} />
 
-      {/* Profile Customizer Modal */}
+      {/* Profile Customizer Modal - Only opens when user is authenticated */}
       <ProfileCustomizer
         isOpen={isProfileCustomizerOpen}
-        onClose={() => setIsProfileCustomizerOpen(false)}
+        onClose={handleCloseProfileCustomizer}
       />
     </div>
   );

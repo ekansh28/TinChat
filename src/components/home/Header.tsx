@@ -23,23 +23,12 @@ export default function Header({ version, isMobile, onOpenProfileCustomizer }: H
         v{version}
       </p>
       
-      {/* Profile Customizer Button - Only show on desktop or as icon on mobile */}
-      <Button
-        onClick={onOpenProfileCustomizer}
-        variant="outline"
-        size={isMobile ? "sm" : "default"}
-        className={cn(
-          "flex items-center gap-1",
-          isMobile && "px-2 py-1 text-xs scale-90"
-        )}
-      >
-        <span className="text-sm">🎨</span>
-        {!isMobile && <span>Profile</span>}
-      </Button>
-      
-      {/* Auth Buttons */}
+      {/* Auth Buttons - now includes Profile Customizer button when authenticated */}
       <div className={cn(isMobile && "scale-90")}>
-        <AuthButtons />
+        <AuthButtons 
+          onOpenProfileCustomizer={onOpenProfileCustomizer}
+          isMobile={isMobile}
+        />
       </div>
     </div>
   );

@@ -6,9 +6,15 @@ import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button-themed';
 import { usePathname, useRouter } from 'next/navigation';
 import { Settings } from 'lucide-react';
-import  ProfileCustomizer from '@/components/ProfileCustomizer';
+import ProfileCustomizer from '@/components/ProfileCustomizer';
+import { cn } from '@/lib/utils';
 
-export default function AuthButtons() {
+interface AuthButtonsProps {
+  onOpenProfileCustomizer?: () => void;
+  isMobile?: boolean;
+}
+
+export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false }: AuthButtonsProps) {
   const [user, setUser] = useState<User | null>(null);
   const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -241,9 +247,13 @@ export default function AuthButtons() {
 
   const handleOpenCustomizer = useCallback(() => {
     if (mountedRef.current) {
-      setIsCustomizerOpen(true);
+      if (onOpenProfileCustomizer) {
+        onOpenProfileCustomizer();
+      } else {
+        setIsCustomizerOpen(true);
+      }
     }
-  }, []);
+  }, [onOpenProfileCustomizer]);
 
   const handleCloseCustomizer = useCallback(() => {
     if (mountedRef.current) {
@@ -262,22 +272,42 @@ export default function AuthButtons() {
     return (
       <>
         <div className="flex items-center space-x-2">
+          {/* Profile Customizer Button - Only shown when authenticated */}
+          <Button 
+            onClick={handleOpenCustomizer}
+            variant="outline"
+            size={isMobile ? "sm" : "default"}
+            disabled={signingOut}
+            className={cn(
+              "flex items-center gap-1",
+              isMobile && "px-2 py-1 text-xs scale-90"
+            )}
+            title="Customize Profile"
+            aria-label="Customize Profile"
+          >
+            <span className="text-sm">🎨</span>
+            {!isMobile && <span>Profile</span>}
+          </Button>
+
+          {/* Settings Button */}
           <Button 
             onClick={handleOpenCustomizer}
             className="text-xs p-1 w-8 h-8" 
             variant="outline"
             disabled={signingOut}
-            title="Customize Profile"
-            aria-label="Customize Profile"
+            title="Profile Settings"
+            aria-label="Profile Settings"
           >
             <Settings size={14} />
           </Button>
+
           <span 
             className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" 
             title={displayName ?? undefined}
           >
             {displayName}
           </span>
+
           <Button 
             onClick={handleSignOut} 
             className="text-xs p-1" 
@@ -288,11 +318,13 @@ export default function AuthButtons() {
           </Button>
         </div>
 
-        {/* Profile Customizer Modal */}
-        <ProfileCustomizer 
-          isOpen={isCustomizerOpen} 
-          onClose={handleCloseCustomizer} 
-        />
+        {/* Profile Customizer Modal - only if not using parent's handler */}
+        {!onOpenProfileCustomizer && (
+          <ProfileCustomizer 
+            isOpen={isCustomizerOpen} 
+            onClose={handleCloseCustomizer} 
+          />
+        )}
       </>
     );
   }
