@@ -10,48 +10,41 @@ interface SideLinksProps {
 
 export default function SideLinks({ isMobile }: SideLinksProps) {
   return (
-    <>
-      {/* Discord Link - Left side of card */}
+    <div className={cn(
+      "flex justify-center items-center gap-8",
+      isMobile ? "gap-6" : "gap-8"
+    )}>
+      {/* Discord Link */}
       <Link 
         href="https://discord.gg/gayporn" 
         target="_blank" 
         rel="noopener noreferrer"
-        className={cn(
-          "absolute z-10 transition-transform hover:scale-110",
-          isMobile 
-            ? "left-2 top-1/2 transform -translate-y-1/2" 
-            : "left-0 top-1/2 transform -translate-y-1/2 -translate-x-16"
-        )}
+        className="transition-transform hover:scale-110"
       >
         <Image
           src="/icons/discord.gif"
           alt="discord"
-          width={isMobile ? 32 : 40}
-          height={isMobile ? 32 : 40}
+          width={isMobile ? 32 : 88}
+          height={isMobile ? 32 : 31}
           className="transition-opacity hover:opacity-80"
         />
       </Link>
 
-      {/* Donate Link - Right side of card */}
+      {/* Donate Link */}
       <Link 
         href="https://paypal.me/ekansh32" 
         target="_blank" 
         rel="noopener noreferrer"
-        className={cn(
-          "absolute z-10 transition-transform hover:scale-110",
-          isMobile 
-            ? "right-2 top-1/2 transform -translate-y-1/2" 
-            : "right-0 top-1/2 transform -translate-y-1/2 translate-x-16"
-        )}
+        className="transition-transform hover:scale-110"
       >
         <Image
           src="/icons/donate.png"
           alt="donate"
-          width={isMobile ? 32 : 40}
-          height={isMobile ? 32 : 40}
+          width={isMobile ? 32 : 80}
+          height={isMobile ? 32 : 15}
           className="transition-opacity hover:opacity-80"
         />
       </Link>
-    </>
+    </div>
   );
 }

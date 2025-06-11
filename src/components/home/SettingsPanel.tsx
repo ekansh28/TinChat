@@ -15,7 +15,7 @@ interface SettingsPanelProps {
   isMobile: boolean;
 }
 
-// Declare global functions
+// Declare global functions (removed non-existent oneko functions)
 declare global {
   interface Window {
     startAnimatedGifCursor?: (url: string) => boolean;
@@ -26,8 +26,6 @@ declare global {
     startCursor?: (url: string, options?: { hotspotX?: number; hotspotY?: number; forceStatic?: boolean }) => boolean;
     resetCursor?: () => boolean;
     getCurrentCursor?: () => { type: string | null; url: string | null; isActive: boolean; isHidden: boolean };
-    startOriginalOneko?: () => void;
-    stopOriginalOneko?: () => void;
   }
 }
 
@@ -190,7 +188,6 @@ export default function SettingsPanel({
         'hkanicursor.gif',
         'kitty1.gif',
         'neko.gif',
-        'oneko.gif',
         'partygirl.gif',
         'pianoani.gif',
         'pointer3.gif',
@@ -273,7 +270,6 @@ export default function SettingsPanel({
 
     // Always stop any existing cursor effects first
     try {
-      window.stopOriginalOneko?.();
       window.resetCursor?.();
       removeOnekoScript();
     } catch (error) {
@@ -286,18 +282,16 @@ export default function SettingsPanel({
     localStorage.removeItem('selectedCursorUrl');
 
     try {
-      if (cursorUrl.toLowerCase().includes('oneko.gif') || cursorUrl.toLowerCase().includes('neko.gif')) {
-        // Special handling for both oneko.gif and neko.gif - load and start oneko.js
+      if (cursorUrl.toLowerCase().includes('neko.gif')) {
+        // Special handling for oneko.gif and neko.gif - load oneko.js
         console.log('🐱 Loading oneko cursor script...');
         await loadOnekoScript();
         
-        if (window.startOriginalOneko) {
-          window.startOriginalOneko();
-          localStorage.setItem('nekoActive', 'true');
-          console.log('✨ Oneko cursor started successfully');
-        } else {
-          throw new Error('oneko.js loaded but startOriginalOneko function not available');
-        }
+        // oneko.js is self-executing, so no need to call any function
+        // Just set the localStorage flag to indicate oneko is active
+        localStorage.setItem('nekoActive', 'true');
+        console.log('✨ Oneko cursor started successfully');
+        
       } else if (scriptLoaded && window.startCursor) {
         // Use the ultimate cursor system for all other cursors
         console.log('🚀 Using ultimate cursor system...');

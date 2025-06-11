@@ -136,8 +136,7 @@ export default function SelectionLobby() {
       <div className={styles.homeMainContent}>
         <div className={styles.homeCardWrapper}>
           <div className={styles.sideLinksContainer}>
-            {/* Side Links positioned relative to the card like old design */}
-            <SideLinks isMobile={isMobile} />
+
 
             {/* Main Card using old design components but modular structure */}
             <div ref={cardWrapperRef} className={styles.cardZIndex}>
@@ -155,6 +154,9 @@ export default function SelectionLobby() {
                 toast={toast}
               />
             </div>
+                      <div className="mt-4">
+            <SideLinks isMobile={isMobile} />
+          </div>
           </div>
         </div>
       </div>
