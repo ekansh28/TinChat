@@ -1,4 +1,4 @@
-// server/index.ts - Simplified and Fixed Version
+// server/index.ts - Enhanced with Online Users Data
 import 'dotenv/config';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -148,11 +148,16 @@ let onlineUserCount = 0;
 const lastMatchRequest: { [socketId: string]: number } = {};
 const FIND_PARTNER_COOLDOWN_MS = 2000;
 
-
-// NEW: Helper function to get online usernames
-async function getOnlineUsernames(): Promise<string[]> {
-  const onlineUsernames: string[] = [];
+// Enhanced helper function to get comprehensive online data
+async function getOnlineUsersData(): Promise<{
+  connectedUsers: string[];
+  queueStats: { textQueue: number; videoQueue: number };
+  activeChats: number;
+  totalOnline: number;
+}> {
+  const connectedUsers: string[] = [];
   
+  // Get authenticated usernames
   for (const [socketId, authId] of Object.entries(socketToAuthId)) {
     try {
       // Check if socket is still connected
@@ -165,26 +170,53 @@ async function getOnlineUsernames(): Promise<string[]> {
         // Fetch username from database
         const profile = await fetchUserProfile(authId);
         if (profile && profile.username) {
-          onlineUsernames.push(profile.username);
+          connectedUsers.push(profile.username);
         }
       }
-      // Note: We skip anonymous users (no authId) from the list
     } catch (error) {
       console.warn(`[USERNAME_FETCH_ERROR] Failed to fetch username for ${authId}:`, error);
     }
   }
-  
-  return onlineUsernames;
+
+  // Calculate queue stats
+  const queueStats = {
+    textQueue: waitingUsers.text.length,
+    videoQueue: waitingUsers.video.length
+  };
+
+  // Calculate active chats (people in rooms)
+  const activeChats = Object.values(rooms).reduce((total, room) => total + room.users.length, 0);
+
+  return {
+    connectedUsers,
+    queueStats,
+    activeChats,
+    totalOnline: onlineUserCount
+  };
 }
 
-// NEW: Helper function to broadcast online users list to all clients
-async function broadcastOnlineUsersList(): Promise<void> {
+// Enhanced broadcast function
+async function broadcastOnlineUsersData(): Promise<void> {
   try {
-    const onlineUsernames = await getOnlineUsernames();
-    io.emit('onlineUsersList', onlineUsernames);
-    console.log(`[BROADCAST] Online users list updated: ${onlineUsernames.length} users - [${onlineUsernames.join(', ')}]`);
+    const onlineData = await getOnlineUsersData();
+    
+    // Broadcast comprehensive data
+    io.emit('onlineUsersData', onlineData);
+    
+    // Also emit individual events for backward compatibility
+    io.emit('onlineUsersList', onlineData.connectedUsers);
+    io.emit('queueStatsUpdate', onlineData.queueStats);
+    io.emit('activeChatUpdate', onlineData.activeChats);
+    
+    console.log(`[BROADCAST] Online data updated:`, {
+      users: onlineData.connectedUsers.length,
+      total: onlineData.totalOnline,
+      textQueue: onlineData.queueStats.textQueue,
+      videoQueue: onlineData.queueStats.videoQueue,
+      activeChats: onlineData.activeChats
+    });
   } catch (error) {
-    console.error('[BROADCAST_ERROR] Failed to broadcast online users list:', error);
+    console.error('[BROADCAST_ERROR] Failed to broadcast online users data:', error);
   }
 }
 
@@ -313,12 +345,30 @@ io.on('connection', (socket) => {
   socket.on('getOnlineUserCount', () => {
     socket.emit('onlineUserCount', onlineUserCount);
   });
-    // ADD this event handler to your existing socket event handlers:
+
+  // Enhanced event handler for getting complete data
+  socket.on('getOnlineUsersData', async () => {
+    try {
+      const onlineData = await getOnlineUsersData();
+      socket.emit('onlineUsersData', onlineData);
+      console.log(`[GET_ONLINE_DATA] Sent complete data to ${socket.id}:`, onlineData);
+    } catch (error) {
+      console.error('[GET_ONLINE_DATA_ERROR]', error);
+      socket.emit('onlineUsersData', {
+        connectedUsers: [],
+        queueStats: { textQueue: 0, videoQueue: 0 },
+        activeChats: 0,
+        totalOnline: 0
+      });
+    }
+  });
+
+  // Backward compatibility - individual online users list
   socket.on('getOnlineUsersList', async () => {
     try {
-      const onlineUsernames = await getOnlineUsernames();
-      socket.emit('onlineUsersList', onlineUsernames);
-      console.log(`[GET_ONLINE_USERS] Sent list to ${socket.id}: ${onlineUsernames.length} users`);
+      const onlineData = await getOnlineUsersData();
+      socket.emit('onlineUsersList', onlineData.connectedUsers);
+      console.log(`[GET_ONLINE_USERS] Sent list to ${socket.id}: ${onlineData.connectedUsers.length} users`);
     } catch (error) {
       console.error('[GET_ONLINE_USERS_ERROR]', error);
       socket.emit('onlineUsersList', []);
@@ -367,15 +417,15 @@ io.on('connection', (socket) => {
 
       console.log(`[FIND_PARTNER] ${socket.id} looking for ${chatType} chat. AuthID: ${authId || 'anonymous'}`);
 
-      // MODIFY your existing 'findPartner' event handler - add this after setting socketToAuthId:
       if (authId) {
         socketToAuthId[socket.id] = authId;
         authIdToSocketId[authId] = socket.id;
         await updateUserStatus(authId, 'online');
         
-        // NEW: Broadcast updated online users list when someone authenticates
-        setTimeout(() => broadcastOnlineUsersList(), 500);
+        // Broadcast updated online users data when someone authenticates
+        setTimeout(() => broadcastOnlineUsersData(), 500);
       }
+
       removeFromWaitingLists(socket.id);
 
       const currentUser: any = {
@@ -416,7 +466,7 @@ io.on('connection', (socket) => {
         const partnerSocket = io.sockets.sockets.get(matchedPartner.id);
         if (partnerSocket?.connected) {
           const roomId = `${currentUser.id}#${Date.now()}`;
-          const now = Date.now(); // Get the current timestamp
+          const now = Date.now();
           rooms[roomId] = { 
             id: roomId, 
             users: [currentUser.id, matchedPartner.id], 
@@ -466,6 +516,9 @@ io.on('connection', (socket) => {
           });
 
           console.log(`[MATCH_SUCCESS] Room ${roomId} created for ${currentUser.id} and ${matchedPartner.id}`);
+          
+          // Broadcast when people enter chat
+          setTimeout(() => broadcastOnlineUsersData(), 200);
         } else {
           console.warn(`[MATCH_FAIL] Partner ${matchedPartner.id} disconnected`);
           waitingUsers[chatType].push(currentUser);
@@ -475,6 +528,9 @@ io.on('connection', (socket) => {
         waitingUsers[chatType].push(currentUser);
         console.log(`[WAITING] User ${socket.id} added to ${chatType} queue (size: ${waitingUsers[chatType].length})`);
         socket.emit('waitingForPartner');
+        
+        // Broadcast queue changes
+        setTimeout(() => broadcastOnlineUsersData(), 200);
       }
     } catch (error: any) {
       console.warn(`[VALIDATION_FAIL] Invalid findPartner from ${socket.id}:`, error.message);
@@ -532,22 +588,6 @@ io.on('connection', (socket) => {
     }
   });
 
-    // In your server/index.ts, add this event handler
-  socket.on('getOnlineUsersList', () => {
-    // Get actual online usernames from your user management system
-    const onlineUsernames = Object.values(socketToAuthId)
-      .map(authId => {
-        // Fetch username from your database or cache
-        return getUsernameFromAuthId(authId);
-      })
-      .filter(Boolean);
-      
-    socket.emit('onlineUsersList', onlineUsernames);
-  });
-
-  // Broadcast when users join/leave
-  io.emit('onlineUsersList', onlineUsernames);
-
   socket.on('typing_start', (payload) => {
     try {
       const { roomId } = RoomIdPayloadSchema.parse(payload);
@@ -591,6 +631,9 @@ io.on('connection', (socket) => {
         
         delete rooms[roomId];
         console.log(`[LEAVE_CHAT] User ${socket.id} left room ${roomId}`);
+        
+        // Broadcast when people leave chat
+        setTimeout(() => broadcastOnlineUsersData(), 200);
       }
     } catch (error: any) {
       console.warn(`[VALIDATION_FAIL] Invalid leaveChat from ${socket.id}:`, error.message);
@@ -598,40 +641,43 @@ io.on('connection', (socket) => {
     }
   });
 
-// MODIFY your existing 'disconnect' event handler - add this at the end:
-socket.on('disconnect', async (reason) => {
-  console.log(`[DISCONNECT] User ${socket.id} disconnected: ${reason}`);
-  
-  onlineUserCount = Math.max(0, onlineUserCount - 1);
-  io.emit('onlineUserCountUpdate', onlineUserCount);
-  
-  removeFromWaitingLists(socket.id);
-  delete lastMatchRequest[socket.id];
-  
-  const authId = socketToAuthId[socket.id];
-  if (authId) {
-    await updateUserStatus(authId, 'offline');
-    delete socketToAuthId[socket.id];
-    delete authIdToSocketId[authId];
+  socket.on('disconnect', async (reason) => {
+    console.log(`[DISCONNECT] User ${socket.id} disconnected: ${reason}`);
     
-    // NEW: Broadcast updated online users list when someone disconnects
-    setTimeout(() => broadcastOnlineUsersList(), 500);
-  }
-  
-  // Clean up rooms (existing code)
-  for (const roomId in rooms) {
-    const room = rooms[roomId];
-    if (room.users.includes(socket.id)) {
-      const partnerId = room.users.find((id: string) => id !== socket.id);
-      if (partnerId) {
-        io.to(partnerId).emit('partnerLeft');
-        const partnerSocket = io.sockets.sockets.get(partnerId);
-        if (partnerSocket) partnerSocket.leave(roomId);
-      }
-      delete rooms[roomId];
-      break;
+    onlineUserCount = Math.max(0, onlineUserCount - 1);
+    io.emit('onlineUserCountUpdate', onlineUserCount);
+    
+    removeFromWaitingLists(socket.id);
+    delete lastMatchRequest[socket.id];
+    
+    const authId = socketToAuthId[socket.id];
+    if (authId) {
+      await updateUserStatus(authId, 'offline');
+      delete socketToAuthId[socket.id];
+      delete authIdToSocketId[authId];
+      
+      // Broadcast updated online users data when someone disconnects
+      setTimeout(() => broadcastOnlineUsersData(), 500);
     }
-  }
+    
+    // Clean up rooms
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+      if (room.users.includes(socket.id)) {
+        const partnerId = room.users.find((id: string) => id !== socket.id);
+        if (partnerId) {
+          io.to(partnerId).emit('partnerLeft');
+          const partnerSocket = io.sockets.sockets.get(partnerId);
+          if (partnerSocket) partnerSocket.leave(roomId);
+        }
+        delete rooms[roomId];
+        
+        // Broadcast when room changes
+        setTimeout(() => broadcastOnlineUsersData(), 200);
+        break;
+      }
+    }
+  });
 });
 
 // Start server

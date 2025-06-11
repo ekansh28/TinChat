@@ -1,4 +1,4 @@
-// src/app/page.tsx
+// src/app/page.tsx - Updated with Enhanced Online Users Data
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -13,10 +13,10 @@ import MainCard from '@/components/home/MainCard';
 import SideLinks from '@/components/home/SideLinks';
 import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
-import OnlineUsersWindow from '@/components/home/OnlineUsersWindow';
+import OnlineUsersWindow from '@/components/home/OnlineUsersWindow'; // Enhanced component
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
-import { useOnlineUsersListMock } from '@/hooks/useOnlineUsersList'; // Use mock for now
+import { useOnlineUsersData } from '@/hooks/useOnlineUsersData'; // Enhanced hook
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useTheme } from '@/components/theme-provider';
 
@@ -47,8 +47,8 @@ export default function SelectionLobby() {
   const { toast } = useToast();
 
   // Custom hooks
-  const usersOnline = useOnlineUsers();
-  const onlineUsersList = useOnlineUsersListMock(); // Use mock for testing
+  const usersOnline = useOnlineUsers(); // Still used for the main card count
+  const onlineUsersData = useOnlineUsersData(); // Enhanced data for the sidebar
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
 
@@ -80,10 +80,8 @@ export default function SelectionLobby() {
       ? `/video-chat${queryString ? `?${queryString}` : ''}` 
       : `/chat${queryString ? `?${queryString}` : ''}`;
     
-    // Fixed: Handle router.push properly since it returns void in App Router
     try {
       router.push(path);
-      // Navigation state will be reset by the useEffect when pathname changes
     } catch (err) {
       console.error("Navigation failed:", err);
       toast({ 
@@ -126,9 +124,9 @@ export default function SelectionLobby() {
 
   return (
     <div className={styles.homePageContainer}>
-      {/* Online Users Window - Left side */}
+      {/* Enhanced Online Users Window - Left side */}
       <OnlineUsersWindow 
-        onlineUsers={onlineUsersList}
+        onlineUsersData={onlineUsersData}
         isMobile={isMobile}
       />
 
@@ -153,7 +151,7 @@ export default function SelectionLobby() {
                 setCurrentInterest={setCurrentInterest}
                 selectedInterests={selectedInterests}
                 setSelectedInterests={setSelectedInterests}
-                usersOnline={usersOnline}
+                usersOnline={usersOnline} // Still using this for the main count
                 inputRef={inputRef}
                 onStartChat={handleStartChat}
                 onToggleSettings={handleToggleSettings}
