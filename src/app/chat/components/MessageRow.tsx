@@ -74,7 +74,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     : [message.content]
   ), [message.content, theme]);
 
-  // Determine display name and styling for current message
+  // Determine display name and styling for current message with better fallbacks
   let displayName: string;
   let displayNameColor: string;
   let displayNameAnimation: string;
@@ -83,21 +83,51 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   if (message.sender === 'self') {
     displayName = ownInfo.username;
-    displayNameColor = ownInfo.displayNameColor;
-    displayNameAnimation = ownInfo.displayNameAnimation;
+    displayNameColor = ownInfo.displayNameColor || '#0066cc'; // Ensure fallback
+    displayNameAnimation = ownInfo.displayNameAnimation || 'none';
     rainbowSpeed = 3; // Default for own messages
     authIdToUse = ownInfo.authId;
   } else {
     // For partner messages, prioritize message styling data over partner info
     displayName = message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
-    displayNameColor = message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#ff0000';
-    displayNameAnimation = message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none';
+    
+    // Better color fallback logic - ensure we always have a visible color
+    displayNameColor = message.senderDisplayNameColor || 
+                      partnerInfo?.displayNameColor || 
+                      '#ff6b6b'; // Changed from #ff0000 to a more visible red
+    
+    displayNameAnimation = message.senderDisplayNameAnimation || 
+                          partnerInfo?.displayNameAnimation || 
+                          'none';
+    
     rainbowSpeed = message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3;
     authIdToUse = message.senderAuthId || partnerInfo?.authId || null;
   }
 
   const isClickable = authIdToUse && authIdToUse !== 'anonymous' && authIdToUse !== null;
   const displayNameClass = getDisplayNameClass(displayNameAnimation);
+
+  // Enhanced styling logic to ensure colors are always visible
+  const getDisplayNameStyle = () => {
+    const baseStyle: React.CSSProperties = {};
+    
+    // For rainbow and gradient animations, we still set a fallback color
+    // in case the CSS animations don't load properly
+    if (displayNameAnimation === 'rainbow') {
+      baseStyle.animationDuration = `${rainbowSpeed}s`;
+      // Set a fallback color that will be overridden by CSS animation
+      baseStyle.color = displayNameColor;
+    } else if (displayNameAnimation === 'gradient') {
+      baseStyle.animationDuration = `4s`;
+      // Set a fallback color that will be overridden by CSS animation  
+      baseStyle.color = displayNameColor;
+    } else {
+      // For non-animated names, always use the specified color
+      baseStyle.color = displayNameColor;
+    }
+    
+    return baseStyle;
+  };
 
   const UsernameComponent = ({ children, className }: { children: React.ReactNode, className: string }) => {
     if (isClickable && authIdToUse) {
@@ -118,12 +148,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
             isMobile && "active:underline"
           )}
-          style={{ 
-            color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
-              ? undefined 
-              : displayNameColor,
-            animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
-          }}
+          style={getDisplayNameStyle()}
           role="link"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -145,12 +170,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return (
       <span 
         className={cn(className, displayNameClass)}
-        style={{ 
-          color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
-            ? undefined 
-            : displayNameColor,
-          animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
-        }}
+        style={getDisplayNameStyle()}
       >
         {children}
       </span>
