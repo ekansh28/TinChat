@@ -207,3 +207,46 @@
     gap: 0.5rem;
   }
 }
+
+/* Add this to your CSS file (likely in styles/page.module.css or a separate component CSS file) */
+
+.onlineUsersWindow {
+  position: fixed !important;
+  top: 50%;
+  left: 20px; /* Adjust based on your design */
+  transform: translateY(-50%);
+  z-index: 1000;
+  width: 280px; /* Adjust as needed */
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+/* For mobile devices - make it responsive */
+@media (max-width: 768px) {
+  .onlineUsersWindow {
+    position: fixed !important;
+    bottom: 20px;
+    left: 50%;
+    top: auto;
+    transform: translateX(-50%);
+    width: calc(100vw - 40px);
+    max-width: 320px;
+    max-height: 40vh;
+  }
+}
+
+/* Alternative: If you want it completely static on mobile */
+@media (max-width: 768px) {
+  .onlineUsersWindow {
+    position: static !important;
+    transform: none;
+    width: 100%;
+    max-height: none;
+    margin-bottom: 20px;
+  }
+}

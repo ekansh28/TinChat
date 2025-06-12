@@ -25,123 +25,128 @@ export default function OnlineUsersWindow({ onlineUsersData, isMobile }: OnlineU
   const { connectedUsers, queueStats, activeChats, totalOnline } = onlineUsersData;
 
   return (
-    <div 
-      className={cn(
-        "fixed top-1/2 left-4 transform -translate-y-1/2 z-10",
-        "w-[250px] h-[220px]", // Slightly taller to accommodate stats
-        "bg-black bg-opacity-60",
-        "border border-white border-opacity-100",
-        "rounded-lg",
-        "flex flex-col",
-        "pixelated-border"
-      )}
-      style={{
-        imageRendering: 'pixelated',
-        boxShadow: `
-          0 0 0 1px white,
-          1px 1px 0 1px white,
-          -1px -1px 0 1px white,
-          1px -1px 0 1px white,
-          -1px 1px 0 1px white
-        `
-      }}
-    >
-      {/* Header */}
-      <div className="flex-shrink-0 text-center py-2 border-b border-white border-opacity-30">
-        <h3 
-          className="text-green-600 font-bold text-sm tracking-wide"
+    <>
+      {/* Import 98.css */}
+      <link rel="stylesheet" href="https://unpkg.com/98.css" />
+      
+      <div 
+        className="window pixelated-border bg-black"
+        style={{ 
+            position: 'absolute',
+            top: '50vh',
+            left: '10%',
+            transform: 'translateY(-50%)',
+          zIndex: 9999, // Increased z-index
+          width: '250px',
+          backgroundColor: '#000000',
+          borderTopColor: '#00ff00',
+          borderRightColor: '#00ff00', 
+          borderBottomColor: '#00ff00',
+          borderLeftColor: '#00ff00',
+          borderRadius: '8px',
+          boxShadow: 'inset -1px -1px rgb(22, 22, 22), inset 1px 1px rgb(42, 43, 42), inset -2px -2px rgb(13, 13, 14), inset 2px 2px rgb(31, 31, 30)',
+          // Add these to ensure it stays fixed
+          willChange: 'transform',
+          pointerEvents: 'auto',
+          isolation: 'isolate'
+        }}
+      >
+
+        <div 
+          className="title-bar" 
           style={{ 
-            textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-            fontFamily: 'monospace'
+            backgroundColor: '#000000',
+            background: 'none',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            borderTopColor: '#00ff00',
+            borderRightColor: '#00ff00', 
+            borderBottomColor: '#00ff00',
+            borderLeftColor: '#00ff00',
+            borderTopLeftRadius: '8px',
+            borderTopRightRadius: '8px'
           }}
         >
-          ONLINE NOW
-        </h3>
-      </div>
-
-      {/* Stats Section */}
-      <div className="flex-shrink-0 px-2 py-1 border-b border-white border-opacity-20">
-        <div className="grid grid-cols-2 gap-1 text-xs">
           <div 
-            className="text-white text-center"
             style={{ 
+              color: 'rgba(150, 10, 10, 0.8)',
               textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-              fontFamily: 'monospace'
+              fontSize: '11px',
+              fontWeight: 'normal',
+              margin: '0 auto'
             }}
           >
-            <div>Total: {totalOnline}</div>
-          </div>
-          <div 
-            className="text-white text-center"
-            style={{ 
-              textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-              fontFamily: 'monospace'
-            }}
-          >
-            <div>Chatting: {activeChats}</div>
+            ONLINE USERS
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-1 text-xs mt-1">
-          <div 
-            className="text-white text-center"
-            style={{ 
-              textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-              fontFamily: 'monospace'
-            }}
-          >
-            <div>Text Q: {queueStats.textQueue}</div>
-          </div>
-          <div 
-            className="text-white text-center"
-            style={{ 
-              textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-              fontFamily: 'monospace'
-            }}
-          >
-            <div>Video Q: {queueStats.videoQueue}</div>
-          </div>
-        </div>
-      </div>
 
-      {/* Users Grid */}
-      <div className="flex-1 p-2 overflow-y-auto">
-        {connectedUsers.length > 0 ? (
-          <div className="grid grid-cols-3 gap-1 text-xs">
-            {connectedUsers.map((username, index) => (
-              <div
-                key={`${username}-${index}`}
-                className={cn(
-                  "text-red-500 font-medium truncate text-center",
-                  "hover:text-red-400 transition-colors cursor-default",
-                  "p-1 rounded-sm hover:bg-white hover:bg-opacity-10"
-                )}
+        {/* Window Body */}
+        <div 
+          className="window-body" 
+          style={{ 
+            padding: '8px',
+            backgroundColor: '#000000',
+            borderTopColor: '#00ff00',
+            borderRightColor: '#00ff00', 
+            borderBottomColor: '#00ff00',
+            borderLeftColor: '#00ff00',
+            borderBottomLeftRadius: '8px',
+            borderBottomRightRadius: '8px'
+          }}
+        >
+          {/* Users List using TreeView style */}
+          <div 
+            className="sunken-panel overflow-y-auto" 
+            style={{ 
+              height: '120px', 
+              padding: '4px',
+              backgroundColor: '#000000',
+              borderTopColor: '#00ff00',
+              borderRightColor: '#00ff00', 
+              borderBottomColor: '#00ff00',
+              borderLeftColor: '#00ff00',
+              borderRadius: '4px'
+            }}
+          >
+            {connectedUsers.length > 0 ? (
+              <ul 
+                className="tree-view"
                 style={{ 
-                  textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-                  fontFamily: 'monospace'
+                  backgroundColor: '#000000'
                 }}
-                title={username} // Show full username on hover
               >
-                {username}
+                {connectedUsers.map((username, index) => (
+                  <li 
+                    key={`${username}-${index}`}
+                    style={{ 
+                      color: '#8f8f8f',
+                      textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
+                      cursor: 'default',
+                      padding: '1px 0'
+                    }}
+                    className="hover:bg-green-900 hover:bg-opacity-30"
+                  >
+                    {username}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                height: '100%',
+                color: '#8f8f8f',
+                textShadow: '1px 1px 0 rgba(0,0,0,0.8)'
+              }}>
+                No users online
               </div>
-            ))}
+            )}
           </div>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p 
-              className="text-gray-400 text-xs text-center"
-              style={{ 
-                textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
-                fontFamily: 'monospace'
-              }}
-            >
-              No users online
-            </p>
-          </div>
-        )}
+        </div>
       </div>
-
-      {/* Bottom spacing */}
-      <div className="flex-shrink-0 h-1"></div>
-    </div>
+    </>
   );
 }

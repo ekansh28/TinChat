@@ -1,0 +1,339 @@
+/* 666 Theme - Dark Red Sub-theme for Windows 98 */
+
+html.theme-98.subtheme-666-theme body {
+  background-image: url('/wallpapers/red.jpg'), url('/wallpapers/red2.jpg') !important;
+  background-repeat: repeat, repeat !important;
+  background-attachment: fixed, fixed !important;
+
+  background-position: 0 0, 200px 175px !important;
+  background-blend-mode: multiply !important;
+  background-color: #33000000 !important;
+}
+
+/* Window - Dark red with bloody accents */
+html.theme-98.subtheme-666-theme .window {
+  background-image: url('/wallpapers/red2.jpg') !important;
+  background-size: 200px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: overlay !important;
+  background-color: #4d0000 !important;
+  border-top: 1px solid #660000 !important;
+  border-left: 1px solid #660000 !important;
+  border-right: 1px solid #1a0000 !important;
+  border-bottom: 1px solid #1a0000 !important;
+  box-shadow: inset 1px 1px 0px #800000, inset -1px -1px 0px #000000 !important;
+}
+
+/* Window Body - Dark with red undertones */
+html.theme-98.subtheme-666-theme .window-body {
+  background-image: url('/wallpapers/red.jpg') !important;
+  background-size: 150px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: soft-light !important;
+  background-color: #1a0000 !important;
+  color: #ff6666 !important;
+  border-top: 1px solid #000000 !important;
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #660000 !important;
+  border-bottom: 1px solid #660000 !important;
+  box-shadow: inset 1px 1px 0px #330000, inset -1px -1px 0px #800000 !important;
+}
+
+/* Title Bar - Using red4 wallpaper instead of gradient */
+html.theme-98.subtheme-666-theme .title-bar {
+  background-image: url('/wallpapers/red4.jpg') !important;
+  background-size: 120px !important;
+  background-repeat: repeat !important;
+  background-color: #8B0000 !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px #000000 !important;
+  padding: 2px 3px !important;
+}
+
+/* Active Title Bar - Brighter red4 wallpaper */
+html.theme-98.subtheme-666-theme .window.active > .title-bar {
+  background-image: url('/wallpapers/red4.jpg') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-color: #A52A2A !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px #330000 !important;
+}
+
+html.theme-98.subtheme-666-theme .title-bar-text {
+  color: #ffffff !important;
+  font-weight: bold !important;
+}
+
+/* General Buttons - Keep original dark style for UI buttons */
+html.theme-98.subtheme-666-theme button,
+html.theme-98.subtheme-666-theme .button {
+  background-color: #330000 !important;
+  color: #ff9999 !important;
+  border-top: 1px solid #660000 !important;
+  border-left: 1px solid #660000 !important;
+  border-right: 1px solid #1a0000 !important;
+  border-bottom: 1px solid #1a0000 !important;
+  box-shadow: inset 1px 1px 0px #4d0000, 1px 1px 0px #000000 !important;
+}
+
+
+
+/* Stop/Find/Skip Button - Special red3 treatment with maximum specificity */
+html.theme-98.subtheme-666-theme button[aria-label="Stop"],
+html.theme-98.subtheme-666-theme button[aria-label="Find"], 
+html.theme-98.subtheme-666-theme button[aria-label="Skip"],
+html.theme-98.subtheme-666-theme .button[aria-label="Stop"],
+html.theme-98.subtheme-666-theme .button[aria-label="Find"], 
+html.theme-98.subtheme-666-theme .button[aria-label="Skip"] {
+
+  background-image: url('/wallpapers/red3.jpg') !important;
+
+}
+
+/* Override any potential conflicting background properties */
+html.theme-98.subtheme-666-theme button[aria-label="Stop"]:not(:active),
+html.theme-98.subtheme-666-theme button[aria-label="Find"]:not(:active), 
+html.theme-98.subtheme-666-theme button[aria-label="Skip"]:not(:active) {
+  background: url('/wallpapers/red3.jpg')  repeat 0 0 / 90px 90px scroll padding-box padding-box !important;
+}
+
+/* Action Buttons (Send) - Special wallpaper treatment */
+html.theme-98.subtheme-666-theme button[type="submit"],
+html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]),
+html.theme-98.subtheme-666-theme .chat-window button {
+  background-image: url('/wallpapers/red4.jpg') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  background-color: #330000 !important;
+ 
+}
+
+html.theme-98.subtheme-666-theme button:focus,
+html.theme-98.subtheme-666-theme .button:focus {
+  
+
+}
+
+html.theme-98.subtheme-666-theme button:active,
+html.theme-98.subtheme-666-theme .button:active,
+html.theme-98.subtheme-666-theme button.active,
+html.theme-98.subtheme-666-theme .button.active {
+  background-color: #1a0000 !important;
+  color: #ffffff !important;
+  border-top: 1px solid #000000 !important;
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #660000 !important;
+  border-bottom: 1px solid #660000 !important;
+  box-shadow: inset 1px 1px 0px #330000 !important;
+}
+
+/* Stop/Find/Skip Button - Active/Pressed state */
+html.theme-98.subtheme-666-theme button[aria-label="Stop"]:active,
+html.theme-98.subtheme-666-theme button[aria-label="Find"]:active,
+html.theme-98.subtheme-666-theme button[aria-label="Skip"]:active,
+html.theme-98.subtheme-666-theme button[aria-label="Stop"].active,
+html.theme-98.subtheme-666-theme button[aria-label="Find"].active,
+html.theme-98.subtheme-666-theme button[aria-label="Skip"].active {
+  background-image: url('/wallpapers/red3.jpg') !important;
+  background-size: 70px !important;
+  background-repeat: repeat !important;
+  background-color: #660000 !important;
+  color: #ffffff !important;
+  border-top: 1px solid #330000 !important;
+  border-left: 1px solid #330000 !important;
+  border-right: 1px solid #A52A2A !important;
+  border-bottom: 1px solid #A52A2A !important;
+  box-shadow: inset 1px 1px 0px #8B0000 !important;
+}
+
+/* Action Buttons - Active/Pressed state with red2 wallpaper */
+html.theme-98.subtheme-666-theme button[type="submit"]:active,
+html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]):active,
+html.theme-98.subtheme-666-theme .chat-window button:active,
+html.theme-98.subtheme-666-theme button[type="submit"].active,
+html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]).active,
+html.theme-98.subtheme-666-theme .chat-window button.active {
+  background-image: url('/wallpapers/red2.jpg') !important;
+  background-size: 60px !important;
+  background-repeat: repeat !important;
+  background-color: #1a0000 !important;
+  color: #ffffff !important;
+  border-top: 1px solid #000000 !important;
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #660000 !important;
+  border-bottom: 1px solid #660000 !important;
+  box-shadow: inset 1px 1px 0px #330000 !important;
+}
+
+/* Inputs - Dark red with light text */
+html.theme-98.subtheme-666-theme input[type="text"],
+html.theme-98.subtheme-666-theme input[type="password"],
+html.theme-98.subtheme-666-theme textarea,
+html.theme-98.subtheme-666-theme .themed-input {
+  background-color: #1a0000 !important;
+  color: #ffcccc !important;
+  border: 1px solid #660000 !important;
+  box-shadow: inset 1px 1px 1px #000000, inset -1px -1px 1px #4d0000 !important;
+  padding: 2px 3px !important;
+}
+
+html.theme-98.subtheme-666-theme .themed-input-inner {
+  background-color: transparent !important;
+  color: #ffcccc !important;
+}
+
+/* Sunken Panels - Dark with red tint and wallpaper */
+html.theme-98.subtheme-666-theme .sunken-panel,
+html.theme-98.subtheme-666-theme .tree-view {
+  background-image: url('/wallpapers/red.jpg') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: overlay !important;
+  background-color: #0d0000 !important;
+  border-top: 1px solid #000000 !important;
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #660000 !important;
+  border-bottom: 1px solid #660000 !important;
+  box-shadow: none !important;
+  padding: 2px !important;
+}
+
+/* Dropdown - Dark theme */
+html.theme-98.subtheme-666-theme select,
+html.theme-98.subtheme-666-theme .themed-select-trigger {
+  background-color: #1a0000 !important;
+  color: #ff9999 !important;
+  border-top: 1px solid #660000 !important;
+  border-left: 1px solid #660000 !important;
+  border-right: 1px solid #1a0000 !important;
+  border-bottom: 1px solid #1a0000 !important;
+}
+
+html.theme-98.subtheme-666-theme .themed-select-trigger.button {
+  background-color: #330000 !important;
+  color: #ff9999 !important;
+  border-top: 1px solid #660000 !important;
+  border-left: 1px solid #660000 !important;
+  border-right: 1px solid #1a0000 !important;
+  border-bottom: 1px solid #1a0000 !important;
+  box-shadow: inset 1px 1px 0px #4d0000, 1px 1px 0px #000000 !important;
+}
+
+html.theme-98.subtheme-666-theme .select-content.themed-select-content,
+html.theme-98.subtheme-666-theme .menu {
+  background-color: #330000 !important;
+  border-color: #660000 !important;
+}
+
+html.theme-98.subtheme-666-theme .select-item.themed-select-item ,
+html.theme-98.subtheme-666-theme .select-item.themed-select-item[data-highlighted] {
+  background-color: #660000 !important;
+  color: white !important;
+}
+
+/* Scrollbars - Dark red theme */
+html.theme-98.subtheme-666-theme .themed-scrollbar-98 {
+  background-color: #330000 !important;
+}
+
+html.theme-98.subtheme-666-theme .themed-scrollbar-98 > [data-radix-scroll-area-thumb] {
+  background-color: #660000 !important;
+  border-top: 1px solid #800000 !important;
+  border-left: 1px solid #800000 !important;
+  border-right: 1px solid #1a0000 !important;
+  border-bottom: 1px solid #1a0000 !important;
+  box-shadow: inset 1px 1px #990000, inset -1px -1px #000000 !important;
+}
+
+/* Tabs - Dark theme */
+html.theme-98.subtheme-666-theme [role="tab"] {
+  background-color: #330000 !important;
+  border-color: #660000 #660000 #1a0000 #660000 !important;
+}
+
+html.theme-98.subtheme-666-theme [role="tab"][aria-selected="true"] {
+  background-color: #1a0000 !important;
+  border-bottom-color: #1a0000 !important;
+}
+
+/* Labels - Light red text */
+html.theme-98.subtheme-666-theme label,
+html.theme-98.subtheme-666-theme .label,
+html.theme-98.subtheme-666-theme .themed-label {
+  color: #ff9999 !important;
+}
+
+/* Links - Blood red theme */
+html.theme-98.subtheme-666-theme a {
+  color: #ff3333 !important;
+}
+html.theme-98.subtheme-666-theme a  {
+  color: #ff6666 !important;
+}
+
+/* Card components - Dark theme */
+html.theme-98.subtheme-666-theme .card-title {
+  color: #ffffff !important;
+}
+html.theme-98.subtheme-666-theme .card-description {
+  color: #ffcccc !important;
+}
+html.theme-98.subtheme-666-theme .card-header {
+  color: #ffffff !important;
+}
+
+/* Status bar - Dark with red accents */
+html.theme-98.subtheme-666-theme .status-bar,
+html.theme-98.subtheme-666-theme .input-area.status-bar {
+  color: #ff9999 !important;
+  border-top: 1px solid #660000 !important;
+}
+html.theme-98.subtheme-666-theme .status-bar-field {
+  border-right: 1px solid #660000 !important;
+}
+
+/* Enhanced dark atmosphere */
+html.theme-98.subtheme-666-theme .window-body h1,
+html.theme-98.subtheme-666-theme .window-body h2,
+html.theme-98.subtheme-666-theme .window-body h3 {
+  color: #ff6666 !important;
+  text-shadow: 1px 1px #000000 !important;
+}
+
+html.theme-98.subtheme-666-theme .window-body p {
+  color: #ffcccc !important;
+}
+
+/* Special effects for 666 theme */
+html.theme-98.subtheme-666-theme .window  {
+  box-shadow: inset 1px 1px 0px #800000, inset -1px -1px 0px #000000, 0 0 5px #660000 !important;
+}
+
+/* General button hover */
+html.theme-98.subtheme-666-theme button ,
+html.theme-98.subtheme-666-theme .button  {
+  background-color: #4d0000 !important;
+  box-shadow: inset 1px 1px 0px #660000, 1px 1px 0px #000000, 0 0 3px #330000 !important;
+}
+
+/* Stop/Find/Skip Button hover - with red3 wallpaper */
+html.theme-98.subtheme-666-theme button[aria-label="Stop"] ,
+html.theme-98.subtheme-666-theme button[aria-label="Find"] ,
+html.theme-98.subtheme-666-theme button[aria-label="Skip"]  {
+  background-image: url('/wallpapers/red3 .jpg') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  box-shadow: inset 1px 1px 0px #CD5C5C, 1px 1px 0px #000000, 0 0 3px #8B0000 !important;
+}
+
+/* Action button hover - with red2 wallpaper */
+html.theme-98.subtheme-666-theme button[type="submit"] ,
+html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]) ,
+html.theme-98.subtheme-666-theme .chat-window button  {
+  background-image: url('/wallpapers/red2.jpg') !important;
+  background-size: 70px !important;
+  background-repeat: repeat !important;
+  background-color: #4d0000 !important;
+  box-shadow: inset 1px 1px 0px #660000, 1px 1px 0px #000000, 0 0 3px #330000 !important;
+}

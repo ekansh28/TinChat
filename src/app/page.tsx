@@ -1,4 +1,4 @@
-// src/app/page.tsx - Updated with Enhanced Online Users Data
+// src/app/page.tsx - Updated with Fixed OnlineUsersWindow Position
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -13,10 +13,10 @@ import MainCard from '@/components/home/MainCard';
 import SideLinks from '@/components/home/SideLinks';
 import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
-import OnlineUsersWindow from '@/components/home/OnlineUsersWindow'; // Enhanced component
+import OnlineUsersWindow from '@/components/home/OnlineUsersWindow';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
-import { useOnlineUsersData } from '@/hooks/useOnlineUsersData'; // Enhanced hook
+import { useOnlineUsersData } from '@/hooks/useOnlineUsersData';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useTheme } from '@/components/theme-provider';
 
@@ -47,8 +47,8 @@ export default function SelectionLobby() {
   const { toast } = useToast();
 
   // Custom hooks
-  const usersOnline = useOnlineUsers(); // Still used for the main card count
-  const onlineUsersData = useOnlineUsersData(); // Enhanced data for the sidebar
+  const usersOnline = useOnlineUsers();
+  const onlineUsersData = useOnlineUsersData();
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
 
@@ -123,70 +123,72 @@ export default function SelectionLobby() {
   };
 
   return (
-    <div className={styles.homePageContainer}>
-      {/* Enhanced Online Users Window - Left side */}
+    <>
+      {/* Move OnlineUsersWindow outside of scrollable container - render at root level */}
       <OnlineUsersWindow 
         onlineUsersData={onlineUsersData}
         isMobile={isMobile}
       />
 
-      {/* Header with AuthButtons that now handles Profile Customizer button */}
-      <div className={styles.homeHeader}>
-        <Header 
-          version={version} 
-          isMobile={isMobile}
-          onOpenProfileCustomizer={handleOpenProfileCustomizer}
-        />
-      </div>
+      <div className={styles.homePageContainer}>
+        {/* Header with AuthButtons that now handles Profile Customizer button */}
+        <div className={styles.homeHeader}>
+          <Header 
+            version={version} 
+            isMobile={isMobile}
+            onOpenProfileCustomizer={handleOpenProfileCustomizer}
+          />
+        </div>
 
-      {/* Main content area - centered like old design */}
-      <div className={styles.homeMainContent}>
-        <div className={styles.homeCardWrapper}>
-          <div className={styles.sideLinksContainer}>
+        {/* Main content area - centered like old design */}
+        <div className={styles.homeMainContent}>
+          <div className={styles.homeCardWrapper}>
+            <div className={styles.sideLinksContainer}>
 
-            {/* Main Card using old design components but modular structure */}
-            <div ref={cardWrapperRef} className={styles.cardZIndex}>
-              <MainCard
-                currentInterest={currentInterest}
-                setCurrentInterest={setCurrentInterest}
-                selectedInterests={selectedInterests}
-                setSelectedInterests={setSelectedInterests}
-                usersOnline={usersOnline} // Still using this for the main count
-                inputRef={inputRef}
-                onStartChat={handleStartChat}
-                onToggleSettings={handleToggleSettings}
-                isNavigating={isNavigating}
-                isMobile={isMobile}
-                toast={toast}
-              />
-            </div>
-            <div className="mt-4">
-              <SideLinks isMobile={isMobile} />
+              {/* Main Card using old design components but modular structure */}
+              <div ref={cardWrapperRef} className={styles.cardZIndex}>
+                <MainCard
+                  currentInterest={currentInterest}
+                  setCurrentInterest={setCurrentInterest}
+                  selectedInterests={selectedInterests}
+                  setSelectedInterests={setSelectedInterests}
+                  usersOnline={usersOnline}
+                  inputRef={inputRef}
+                  onStartChat={handleStartChat}
+                  onToggleSettings={handleToggleSettings}
+                  isNavigating={isNavigating}
+                  isMobile={isMobile}
+                  toast={toast}
+                />
+              </div>
+              <div className="mt-4">
+                <SideLinks isMobile={isMobile} />
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Settings Panel - using current theme */}
+        <SettingsPanel
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          position={panelPosition}
+          setPanelPosition={setPanelPosition}
+          cardWrapperRef={cardWrapperRef}
+          currentTheme={currentTheme}
+          isNavigating={isNavigating}
+          isMobile={isMobile}
+        />
+
+        {/* Footer */}
+        <Footer isMobile={isMobile} />
+
+        {/* Profile Customizer Modal - Only opens when user is authenticated */}
+        <ProfileCustomizer
+          isOpen={isProfileCustomizerOpen}
+          onClose={handleCloseProfileCustomizer}
+        />
       </div>
-
-      {/* Settings Panel - using current theme */}
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        position={panelPosition}
-        setPanelPosition={setPanelPosition}
-        cardWrapperRef={cardWrapperRef}
-        currentTheme={currentTheme}
-        isNavigating={isNavigating}
-        isMobile={isMobile}
-      />
-
-      {/* Footer */}
-      <Footer isMobile={isMobile} />
-
-      {/* Profile Customizer Modal - Only opens when user is authenticated */}
-      <ProfileCustomizer
-        isOpen={isProfileCustomizerOpen}
-        onClose={handleCloseProfileCustomizer}
-      />
-    </div>
+    </>
   );
 }

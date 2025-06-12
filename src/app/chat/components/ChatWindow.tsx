@@ -68,6 +68,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     [currentInputAreaHeight]
   );
 
+  // Check if pink theme is active by looking for the CSS file in the DOM
+  const isPinkThemeActive = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const themeLink = document.getElementById('dynamic-win98-theme-style') as HTMLLinkElement;
+    return themeLink && themeLink.href.includes('pink-theme.css');
+  }, []);
+
   // Improved scroll to bottom function
   const scrollToBottom = useCallback((force = false) => {
     if (messagesContainerRef.current) {
@@ -93,12 +100,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     [isConnected, isPartnerConnected]
   );
 
+  // Biscuit Frame Component with proper slicing
+  const BiscuitFrame: React.FC = () => (
+    <div className="biscuit-frame-overlay">
+      {/* Edges - these will repeat the appropriate slices */}
+      <div className="frame-edge frame-top"></div>
+      <div className="frame-edge frame-bottom"></div>
+      <div className="frame-edge frame-left"></div>
+      <div className="frame-edge frame-right"></div>
+      {/* Corners - these show only the corner portions */}
+      <div className="frame-edge frame-corner frame-top-left"></div>
+      <div className="frame-edge frame-corner frame-top-right"></div>
+      <div className="frame-edge frame-corner frame-bottom-left"></div>
+      <div className="frame-edge frame-corner frame-bottom-right"></div>
+    </div>
+  );
+
+  // Add this at the top to check theme
+  const isGlassTheme = theme === 'theme-7';
+
   return (
     <div className={cn(
       'window-body window-body-content flex-grow flex flex-col',
       theme === 'theme-7' ? 'glass-body-padding' : 'p-0.5',
-      isMobile && 'p-1'
-    )}>
+      isMobile && 'p-1',
+      // Add biscuit-frame class when pink theme is active
+      isPinkThemeActive && 'relative'
+    )} style={{ position: 'relative' }}>
+      
+      {/* Render biscuit frame if pink theme is active */}
+      {isPinkThemeActive && <BiscuitFrame />}
+      
       <div 
         ref={messagesContainerRef}
         className={cn(

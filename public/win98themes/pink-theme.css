@@ -1,4 +1,3 @@
-
 /* Pink Windows Sub-theme for Windows 98 Theme */
 
 /* Main background - already set with bows.png */
@@ -17,6 +16,184 @@
   border-right: 1px solid #E75480 !important; /* Darker pink */
   border-bottom: 1px solid #E75480 !important; /* Darker pink */
   box-shadow: inset 1px 1px 0px #FFB6C1, inset -1px -1px 0px #FF69B4 !important; /* Pink inset shadows */
+}
+
+/* Chat Window with Biscuit Frame - Only for windows with biscuit-frame class */
+.theme-98 .window.biscuit-frame {
+  position: relative;
+  overflow: visible;
+}
+
+/* Use individual frame pieces with ::before pseudo-element */
+.theme-98 .window.biscuit-frame::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  z-index: -1;
+  pointer-events: none;
+  
+  /* Create the frame using individual images in layers */
+  background-image: 
+    /* Corners first (highest priority) - using PNG files */
+    url('/win98themes/pinktheme/topleftcorner.png'),
+    url('/win98themes/pinktheme/toprightcorner.png'),
+    url('/win98themes/pinktheme/bottomleftcorner.png'),
+    url('/win98themes/pinktheme/bottomrightcorner.png'),
+    /* Then edges that connect directly to corners with no gaps - using PNG files */
+    url('/win98themes/pinktheme/topframe.png'),
+    url('/win98themes/pinktheme/bottomframe.png'),
+    url('/win98themes/pinktheme/leftframe.png'),
+    url('/win98themes/pinktheme/rightframe.png');
+    
+  background-position:
+    /* Position corners at exact locations */
+    0 0,
+    100% 0,
+    0 100%,
+    100% 100%,
+    /* Position edges to connect directly to corners - no gaps */
+    4px 0,      /* top frame starts right after left corner (4px from left) */
+    4px 100%,   /* bottom frame starts right after left corner (4px from left) */
+    0 4px,      /* left frame starts right after top corner (4px from top) */
+    100% 4px;   /* right frame starts right after top corner (4px from top) */
+    
+  background-repeat:
+    /* Corners don't repeat */
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    /* Edges repeat at their natural size */
+    repeat-x,
+    repeat-x,
+    repeat-y,
+    repeat-y;
+    
+  background-size:
+    /* Corners are fixed size - 4px */
+    4px 4px,
+    4px 4px,
+    4px 4px,
+    4px 4px,
+    /* Edges use natural size for proper repeating */
+    auto 4px,   /* top frame: natural width, 4px height */
+    auto 4px,   /* bottom frame: natural width, 4px height */
+    4px auto,   /* left frame: 4px width, natural height */
+    4px auto;   /* right frame: 4px width, natural height */
+}
+
+/* Alternative approach using border-image if the above doesn't work well */
+.theme-98 .window.biscuit-frame-alt {
+  border: 20px solid transparent;
+  border-image: url('/win98themes/pinktheme/biscuitframe.gif') 20 repeat;
+  border-image-outset: 0;
+}
+
+/* Biscuit frame overlay approach - using individual frame pieces */
+.theme-98 .biscuit-frame-overlay {
+  position: absolute;
+  top: -20px;
+  left: -20px;
+  right: -20px;
+  bottom: -20px;
+  z-index: 99999; /* Maximum z-index to ensure it's on top */
+  pointer-events: none;
+}
+
+.theme-98 .biscuit-frame-overlay .frame-edge {
+  position: absolute;
+}
+
+/* Top edge - extends from left corner to right corner, repeats horizontally */
+.theme-98 .biscuit-frame-overlay .frame-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background-image: url('/win98themes/pinktheme/topframe.gif');
+  background-repeat: repeat-x;
+  background-position: 0 0;
+  background-size: auto 20px;
+}
+
+/* Bottom edge - extends from left corner to right corner, repeats horizontally */
+.theme-98 .biscuit-frame-overlay .frame-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background-image: url('/win98themes/pinktheme/bottomframe.gif');
+  background-repeat: repeat-x;
+  background-position: 0 0;
+  background-size: auto 20px;
+}
+
+/* Left edge - extends from top corner to bottom corner, repeats vertically */
+.theme-98 .biscuit-frame-overlay .frame-left {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  background-image: url('/win98themes/pinktheme/leftframe.gif');
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-size: 20px auto;
+}
+
+/* Right edge - extends from top corner to bottom corner, repeats vertically */
+.theme-98 .biscuit-frame-overlay .frame-right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  background-image: url('/win98themes/pinktheme/rightframe.gif');
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-size: 20px auto;
+}
+
+.theme-98 .biscuit-frame-overlay .frame-corner {
+  width: 20px;
+  height: 20px;
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  z-index: 100000; /* Corners on top of edges */
+}
+
+/* Corner pieces - using individual corner files */
+/* Top-left corner - positioned at the very top-left */
+.theme-98 .biscuit-frame-overlay .frame-top-left {
+  top: 0;
+  left: 0;
+  background-image: url('/win98themes/pinktheme/topleftcorner.gif');
+  background-position: 0 0;
+}
+
+/* Top-right corner - positioned at the very top-right */
+.theme-98 .biscuit-frame-overlay .frame-top-right {
+  top: 0;
+  right: 0;
+  background-image: url('/win98themes/pinktheme/toprightcorner.gif');
+  background-position: 0 0;
+}
+
+/* Bottom-left corner - positioned at the very bottom-left */
+.theme-98 .biscuit-frame-overlay .frame-bottom-left {
+  bottom: 0;
+  left: 0;
+  background-image: url('/win98themes/pinktheme/bottomleftcorner.gif');
+  background-position: 0 0;
+}
+
+/* Bottom-right corner - positioned at the very bottom-right */
+.theme-98 .biscuit-frame-overlay .frame-bottom-right {
+  bottom: 0;
+  right: 0;
+  background-image: url('/win98themes/pinktheme/bottomrightcorner.gif');
+  background-position: 0 0;
 }
 
 /* Window Body */
@@ -200,4 +377,3 @@
 .theme-98 .status-bar-field {
   border-right: 1px solid #E75480 !important;
 }
-```

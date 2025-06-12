@@ -46,6 +46,9 @@ const ChatPageClientContent: React.FC = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(0);
   
+  // Pink theme detection state
+  const [pinkThemeActive, setPinkThemeActive] = useState(false);
+  
   // Auth state
   const [authId, setAuthId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -176,9 +179,6 @@ const ChatPageClientContent: React.FC = () => {
     }
   `;
 
-  // Rest of your component logic remains exactly the same...
-  // [All the useEffect hooks, handlers, etc. stay identical]
-
   // Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/chat') {
@@ -192,6 +192,38 @@ const ChatPageClientContent: React.FC = () => {
       autoSearchDoneRef.current = false;
     }
   }, [pathname, setIsFindingPartner, setIsPartnerConnected, setMessages, setPartnerInfo]);
+
+  // Pink theme detection effect
+  useEffect(() => {
+    const checkPinkTheme = () => {
+      if (typeof window === 'undefined') return false;
+      const themeLink = document.getElementById('dynamic-win98-theme-style') as HTMLLinkElement;
+      const isActive = themeLink && themeLink.href.includes('pink-theme.css');
+      setPinkThemeActive(isActive);
+      console.log(`${LOG_PREFIX}: Pink theme active:`, isActive);
+      return isActive;
+    };
+
+    // Check immediately
+    checkPinkTheme();
+
+    // Set up a MutationObserver to watch for theme changes
+    const observer = new MutationObserver(() => {
+      checkPinkTheme();
+    });
+
+    // Watch for changes to the head element (where theme links are added/removed)
+    if (document.head) {
+      observer.observe(document.head, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['href']
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Handle mobile detection and viewport changes
   useEffect(() => {
@@ -703,6 +735,8 @@ const ChatPageClientContent: React.FC = () => {
       )}>
         <div className={cn(
           'window flex flex-col relative',
+          // Add biscuit frame when pink theme is active
+          pinkThemeActive && 'biscuit-frame',
           // Windows 98 theme - no special glass effects since we're not using theme-7
           isMobile ? 'h-full w-full' : ''
         )} style={chatWindowStyle}>
@@ -720,8 +754,6 @@ const ChatPageClientContent: React.FC = () => {
               </div>
               
               <div className="flex items-center space-x-2">
-
-             
                 {/* TopBar for theme customization - hide on mobile to save space */}
                 {!isMobile && (
                   <div className="scale-75 origin-right">
