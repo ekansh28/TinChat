@@ -23,9 +23,6 @@ jobs:
           submodules: true
           lfs: false
 
-      # Optional: You can keep this if you're using it for auth or custom token management
-      - name: Install OIDC Client from Core Package
-        run: npm install @actions/core@1.6.0 @actions/http-client
 
       - name: Get Id Token
         uses: actions/github-script@v6
