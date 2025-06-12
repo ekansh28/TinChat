@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button-themed';
 import { usePathname, useRouter } from 'next/navigation';
-import { Settings } from 'lucide-react';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 import { cn } from '@/lib/utils';
 
@@ -96,7 +95,8 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             console.error("AuthButtons: Profile fetch error:", profileError);
             setProfileUsername(null);
           } else if (profileData) {
-            const displayName = profileData.display_name || profileData.username;
+            // FIXED: Prioritize username over display_name, and show username not email
+            const displayName = profileData.username || profileData.display_name;
             setProfileUsername(displayName);
             console.log("AuthButtons: Profile loaded:", displayName);
           } else {
@@ -166,7 +166,8 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             console.error("AuthButtons: Profile error in auth change:", profileError);
             setProfileUsername(null);
           } else if (profileData) {
-            const displayName = profileData.display_name || profileData.username;
+            // FIXED: Prioritize username over display_name
+            const displayName = profileData.username || profileData.display_name;
             setProfileUsername(displayName);
             console.log("AuthButtons: Profile updated via auth change:", displayName);
 
@@ -268,11 +269,13 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
 
   // Show authenticated user UI
   if (user) {
+    // FIXED: Show username instead of email, fallback to email only if no username
     const displayName = profileUsername || user.email;
+    
     return (
       <>
         <div className="flex items-center space-x-2">
-          {/* Profile Customizer Button - Only shown when authenticated */}
+          {/* Profile Customizer Button - Only one button shown */}
           <Button 
             onClick={handleOpenCustomizer}
             variant="outline"
@@ -289,17 +292,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             {!isMobile && <span>Profile</span>}
           </Button>
 
-          {/* Settings Button */}
-          <Button 
-            onClick={handleOpenCustomizer}
-            className="text-xs p-1 w-8 h-8" 
-            variant="outline"
-            disabled={signingOut}
-            title="Profile Settings"
-            aria-label="Profile Settings"
-          >
-            <Settings size={14} />
-          </Button>
+          {/* REMOVED: The duplicate Settings button that was causing the extra profile customizer button */}
 
           <span 
             className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" 
