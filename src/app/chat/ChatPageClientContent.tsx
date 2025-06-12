@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useTheme } from '@/components/theme-provider';
 import { cn, playSound } from '@/lib/utils';
-import { ConditionalGoldfishImage } from '@/components/ConditionalGoldfishImage';
 import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
 import { supabase } from '@/lib/supabase';

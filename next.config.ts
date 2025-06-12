@@ -13,13 +13,17 @@ if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
   }
 }
 
+// Add localhost for development
+const isDevelopment = process.env.NODE_ENV === 'development';
+const localhostConnections = isDevelopment ? 'ws://localhost:* http://localhost:* https://localhost:*' : '';
+
 const cspHeader = `
     default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com;
     style-src 'self' 'unsafe-inline' https://unpkg.com;
     img-src 'self' data: https://placehold.co https://github.com https://storage.googleapis.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? supabaseHostname : ''};
     font-src 'self' https://unpkg.com;
-    connect-src 'self' ${NEXT_PUBLIC_SOCKET_SERVER_URL} wss://${socketServerHostname} *.google.com *.googleapis.com https://www.google-analytics.com https://ssl.google-analytics.com https://analytics.google.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? `https://${supabaseHostname} wss://${supabaseHostname}` : ''};
+    connect-src 'self' ${NEXT_PUBLIC_SOCKET_SERVER_URL} wss://${socketServerHostname} *.google.com *.googleapis.com https://www.google-analytics.com https://ssl.google-analytics.com https://analytics.google.com https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? `https://${supabaseHostname} wss://${supabaseHostname}` : ''} ${localhostConnections};
     frame-src 'self' https://www.paypal.com https://*.paypal.com https://www.paypalobjects.com https://*.paypalobjects.com ${supabaseHostname ? `https://${supabaseHostname}` : ''};
     object-src 'none';
     base-uri 'self';
