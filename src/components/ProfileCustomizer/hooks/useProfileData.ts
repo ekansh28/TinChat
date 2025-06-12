@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { sanitizeCSS } from '@/lib/SafeCSS';
 import { useToast } from '@/hooks/use-toast';
-import { useDebounce } from '@/hooks/use-debounce';
+import { useDebounce } from '../../../hooks/use-debounce';
 import { uploadFile } from '../utils/fileHandlers';
 import type { EasyCustomization, Badge } from '../types';
 
@@ -12,7 +12,7 @@ interface UseProfileDataProps {
   originalUsername: string;
   currentUser: any;
   mountedRef: React.MutableRefObject<boolean>;
-  onProfileLoaded: (profile: any) => void;
+  onProfileLoaded: (data: { user: any; profile: any }) => void;
 }
 
 export const useProfileData = ({
@@ -29,6 +29,7 @@ export const useProfileData = ({
   // Track if profile has been loaded to prevent repeated loads
   const profileLoadedRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
+  const loadingRef = useRef(false); // Prevent concurrent loads
   
   const { toast } = useToast();
   const debouncedUsername = useDebounce(username, 500);
@@ -42,7 +43,8 @@ export const useProfileData = ({
           !currentUser || 
           !mountedRef.current ||
           saving || 
-          loading) {
+          loading ||
+          loadingRef.current) {
         setUsernameAvailable(null);
         return;
       }
@@ -79,8 +81,8 @@ export const useProfileData = ({
       }
     };
 
-    // Only check if conditions are met
-    if (currentUser && debouncedUsername && debouncedUsername.length >= 3) {
+    // Only check if conditions are met and not currently loading
+    if (currentUser && debouncedUsername && debouncedUsername.length >= 3 && !loadingRef.current) {
       checkUsername();
     }
   }, [debouncedUsername, currentUser?.id, originalUsername, mountedRef, saving, loading]);
@@ -88,11 +90,12 @@ export const useProfileData = ({
   // FIXED: Stable loadCurrentProfile function that prevents infinite loops
   const loadCurrentProfile = useCallback(async () => {
     // Prevent multiple simultaneous loads
-    if (!mountedRef.current || loading || saving) {
+    if (!mountedRef.current || loading || saving || loadingRef.current) {
       console.log('ProfileCustomizer: Skipping load - component unmounted or already loading');
       return null;
     }
     
+    loadingRef.current = true;
     setLoading(true);
     console.log('ProfileCustomizer: Starting profile load...');
     
@@ -118,6 +121,7 @@ export const useProfileData = ({
       if (profileLoadedRef.current && lastUserIdRef.current === user.id) {
         console.log('ProfileCustomizer: Profile already loaded for this user');
         setLoading(false);
+        loadingRef.current = false;
         return { user, profile: null, alreadyLoaded: true };
       }
 
@@ -182,15 +186,17 @@ export const useProfileData = ({
     } finally {
       if (mountedRef.current) {
         setLoading(false);
+        loadingRef.current = false;
       }
     }
-  }, [mountedRef, onProfileLoaded, toast, loading, saving]); // Stable dependencies
+  }, [mountedRef, onProfileLoaded, toast]); // Minimal stable dependencies
 
   // Reset profile loaded state when user changes
   useEffect(() => {
     if (currentUser?.id && lastUserIdRef.current !== currentUser.id) {
       profileLoadedRef.current = false;
       lastUserIdRef.current = null;
+      loadingRef.current = false;
     }
   }, [currentUser?.id]);
 
@@ -321,6 +327,7 @@ export const useProfileData = ({
 
       // Reset the profile loaded flag so next open will reload fresh data
       profileLoadedRef.current = false;
+      loadingRef.current = false;
 
       return true;
 

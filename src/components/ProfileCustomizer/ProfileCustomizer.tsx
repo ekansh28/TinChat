@@ -1,7 +1,7 @@
 // src/components/ProfileCustomizer/ProfileCustomizer.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { cn } from '@/lib/utils';
 import { getDefaultProfileCSS } from '@/lib/SafeCSS';
@@ -12,7 +12,7 @@ import { useProfileData } from './hooks/useProfileData';
 import { useEasyMode } from './hooks/useEasyMode';
 
 // Components
-import { EnhancedProfilePreview } from './EnhancedProfilePreview';
+import { ProfileCard } from '../ProfileCard'; // Use the actual ProfileCard component
 import { BasicInfoSection } from './components/BasicInfoSection';
 import { DisplayNameStyling } from './components/DisplayNameStyling';
 import { ImageUploadSection } from './components/ImageUploadSection';
@@ -29,6 +29,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   onClose 
 }) => {
   const [showCustomCSS, setShowCustomCSS] = useState(false);
+  const [showProfileCard, setShowProfileCard] = useState(false);
 
   const {
     // CSS and mode states
@@ -102,6 +103,84 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     isMobile,
   } = useProfileCustomizer();
 
+  // Stable callback for profile loaded
+  const handleProfileLoaded = useCallback(({ user, profile }: { user: any; profile: any }) => {
+    console.log('ProfileCustomizer: Profile loaded callback', { user, profile });
+    
+    if (!mountedRef.current) return;
+    
+    setCurrentUser(user);
+    
+    if (profile) {
+      // Always set default CSS first to prevent undefined states
+      const profileCSS = profile.profile_card_css || getDefaultProfileCSS();
+      setCustomCSS(profileCSS);
+      
+      setBio(profile.bio || '');
+      setDisplayName(profile.display_name || '');
+      setUsername(profile.username || '');
+      setOriginalUsername(profile.username || '');
+      setPronouns(profile.pronouns || '');
+      setStatus(profile.status || 'online');
+      setDisplayNameColor(profile.display_name_color || '#ffffff');
+      setDisplayNameAnimation(profile.display_name_animation || 'none');
+      setRainbowSpeed(profile.rainbow_speed || 3);
+      setAvatarUrl(profile.avatar_url);
+      setBannerUrl(profile.banner_url);
+      setBadges(profile.badges ? JSON.parse(profile.badges) : []);
+      
+      // Set previews
+      if (profile.avatar_url) setAvatarPreview(profile.avatar_url);
+      if (profile.banner_url) setBannerPreview(profile.banner_url);
+      
+      // Safe parsing with comprehensive error handling
+      try {
+        if (profile.easy_customization_data && typeof profile.easy_customization_data === 'string') {
+          const parsedData = JSON.parse(profile.easy_customization_data);
+          console.log('Successfully parsed easy customization data:', parsedData);
+          
+          // Validate the parsed data structure
+          if (parsedData && typeof parsedData === 'object' && parsedData.elements) {
+            setEasyCustomization({ 
+              ...DEFAULT_EASY_CUSTOMIZATION, 
+              ...parsedData,
+              // Ensure elements always exists with proper defaults
+              elements: {
+                ...DEFAULT_EASY_CUSTOMIZATION.elements,
+                ...parsedData.elements
+              }
+            });
+          } else {
+            console.warn('Parsed easy customization data is invalid, using defaults');
+            setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+          }
+        } else {
+          console.log('No easy customization data found, using defaults');
+          setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+        }
+      } catch (e) {
+        console.error('Failed to parse easy customization data:', e);
+        console.log('Raw easy_customization_data:', profile.easy_customization_data);
+        // Always fallback to defaults instead of leaving undefined
+        setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+      }
+    } else {
+      // Initialize with proper defaults for new profile
+      console.log('No profile found, initializing with defaults');
+      setCustomCSS(getDefaultProfileCSS());
+      setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+      setStatus('online'); // Set default status to prevent "Offline" showing
+      setDisplayNameColor('#ffffff');
+      setDisplayNameAnimation('none');
+      setRainbowSpeed(3);
+    }
+  }, [
+    mountedRef, setCurrentUser, setCustomCSS, setBio, setDisplayName, setUsername, 
+    setOriginalUsername, setPronouns, setStatus, setDisplayNameColor, 
+    setDisplayNameAnimation, setRainbowSpeed, setAvatarUrl, setBannerUrl, 
+    setBadges, setAvatarPreview, setBannerPreview, setEasyCustomization
+  ]);
+
   // Profile data management
   const {
     usernameAvailable,
@@ -112,73 +191,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     originalUsername,
     currentUser,
     mountedRef,
-    onProfileLoaded: ({ user, profile }) => {
-      console.log('ProfileCustomizer: Profile loaded callback', { user, profile });
-      setCurrentUser(user);
-      if (profile) {
-        // Always set default CSS first to prevent undefined states
-        const profileCSS = profile.profile_card_css || getDefaultProfileCSS();
-        setCustomCSS(profileCSS);
-        
-        setBio(profile.bio || '');
-        setDisplayName(profile.display_name || '');
-        setUsername(profile.username || '');
-        setOriginalUsername(profile.username || '');
-        setPronouns(profile.pronouns || '');
-        setStatus(profile.status || 'online');
-        setDisplayNameColor(profile.display_name_color || '#ffffff');
-        setDisplayNameAnimation(profile.display_name_animation || 'none');
-        setRainbowSpeed(profile.rainbow_speed || 3);
-        setAvatarUrl(profile.avatar_url);
-        setBannerUrl(profile.banner_url);
-        setBadges(profile.badges ? JSON.parse(profile.badges) : []);
-        
-        // Set previews
-        if (profile.avatar_url) setAvatarPreview(profile.avatar_url);
-        if (profile.banner_url) setBannerPreview(profile.banner_url);
-        
-        // Safe parsing with comprehensive error handling
-        try {
-          if (profile.easy_customization_data && typeof profile.easy_customization_data === 'string') {
-            const parsedData = JSON.parse(profile.easy_customization_data);
-            console.log('Successfully parsed easy customization data:', parsedData);
-            
-            // Validate the parsed data structure
-            if (parsedData && typeof parsedData === 'object' && parsedData.elements) {
-              setEasyCustomization({ 
-                ...DEFAULT_EASY_CUSTOMIZATION, 
-                ...parsedData,
-                // Ensure elements always exists with proper defaults
-                elements: {
-                  ...DEFAULT_EASY_CUSTOMIZATION.elements,
-                  ...parsedData.elements
-                }
-              });
-            } else {
-              console.warn('Parsed easy customization data is invalid, using defaults');
-              setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-            }
-          } else {
-            console.log('No easy customization data found, using defaults');
-            setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-          }
-        } catch (e) {
-          console.error('Failed to parse easy customization data:', e);
-          console.log('Raw easy_customization_data:', profile.easy_customization_data);
-          // Always fallback to defaults instead of leaving undefined
-          setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-        }
-      } else {
-        // Initialize with proper defaults for new profile
-        console.log('No profile found, initializing with defaults');
-        setCustomCSS(getDefaultProfileCSS());
-        setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-        setStatus('online'); // Set default status to prevent "Offline" showing
-        setDisplayNameColor('#ffffff');
-        setDisplayNameAnimation('none');
-        setRainbowSpeed(3);
-      }
-    }
+    onProfileLoaded: handleProfileLoaded,
   });
 
   // Easy mode drag & drop
@@ -202,13 +215,13 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     positionMode
   });
 
-  // Load profile when component opens
+  // Load profile when component opens - FIXED to prevent infinite loops
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !loading && !saving) {
       console.log('ProfileCustomizer: Component opened, loading profile');
       loadCurrentProfile();
     }
-  }, [isOpen, loadCurrentProfile]);
+  }, [isOpen]); // Only depend on isOpen
 
   // Ensure default CSS is set when CSS mode changes
   useEffect(() => {
@@ -263,6 +276,10 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     }
   };
 
+  const toggleProfileCard = () => {
+    setShowProfileCard(!showProfileCard);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -279,14 +296,24 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           <div className={cn("title-bar", isTheme98 ? '' : 'border-b p-4')}>
             <div className="flex items-center justify-between">
               <div className="title-bar-text">Enhanced Profile Customizer</div>
-              <Button 
-                onClick={onClose} 
-                variant={isTheme98 ? undefined : "outline"}
-                disabled={saving}
-                size={isMobile ? "sm" : "default"}
-              >
-                {saving ? 'Saving...' : (isMobile ? '✕' : 'Close')}
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={toggleProfileCard}
+                  variant="outline"
+                  disabled={saving}
+                  size={isMobile ? "sm" : "default"}
+                >
+                  {showProfileCard ? 'Hide' : 'Show'} Profile Card
+                </Button>
+                <Button 
+                  onClick={onClose} 
+                  variant={isTheme98 ? undefined : "outline"}
+                  disabled={saving}
+                  size={isMobile ? "sm" : "default"}
+                >
+                  {saving ? 'Saving...' : (isMobile ? '✕' : 'Close')}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -488,31 +515,176 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                     )}
                   </div>
                   <div className="flex-1 p-3 overflow-auto bg-gray-100 dark:bg-gray-900 rounded-lg">
-                    <EnhancedProfilePreview
-                      customCSS={customCSS || getDefaultProfileCSS()}
-                      bio={bio}
-                      displayName={displayName}
-                      username={username}
-                      pronouns={pronouns}
-                      status={status}
-                      displayNameColor={displayNameColor}
-                      displayNameAnimation={displayNameAnimation}
-                      avatarPreview={avatarPreview}
-                      avatarUrl={avatarUrl}
-                      bannerPreview={bannerPreview}
-                      bannerUrl={bannerUrl}
-                      badges={badges}
-                      cssMode={cssMode}
-                      isTheme98={isTheme98}
-                      onMouseDown={cssMode === 'easy' ? handlePreviewMouseDown : undefined}
+                    {/* Mock Profile Preview using actual ProfileCard styles */}
+                    <div 
+                      ref={previewRef}
+                      className="flex justify-center items-center min-h-full p-4"
                       onMouseMove={cssMode === 'easy' ? handlePreviewMouseMove : undefined}
                       onMouseUp={cssMode === 'easy' ? handlePreviewMouseUp : undefined}
-                      onContextMenu={cssMode === 'easy' ? handlePreviewContextMenu : undefined}
-                      onRightClick={cssMode === 'easy' ? handleTextElementRightClick : undefined}
-                      previewRef={previewRef}
-                      selectedElement={selectedElement}
-                      selectedElements={selectedElements}
-                    />
+                      onMouseLeave={cssMode === 'easy' ? handlePreviewMouseUp : undefined}
+                    >
+                      <style dangerouslySetInnerHTML={{ 
+                        __html: customCSS || getDefaultProfileCSS() 
+                      }} />
+                      
+                      <div 
+                        className={cn(
+                          "window bg-white dark:bg-gray-800 p-4 rounded shadow-lg max-w-sm w-80",
+                          cssMode === 'easy' && "editing-mode"
+                        )}
+                        style={{
+                          userSelect: cssMode === 'easy' ? 'none' : 'auto'
+                        }}
+                      >
+                        <div className="title-bar mb-3">
+                          <div className="title-bar-text">User Profile</div>
+                        </div>
+
+                        <div className="window-body">
+                          <div className="space-y-3">
+                            {/* Avatar */}
+                            {(avatarPreview || avatarUrl) && (
+                              <div 
+                                className={cn(
+                                  "text-center profile-avatar-container",
+                                  selectedElements.includes('profile-avatar') && "element-selected"
+                                )}
+                                onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-avatar') : undefined}
+                                onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-avatar') : undefined}
+                              >
+                                <img 
+                                  src={avatarPreview || avatarUrl || ''} 
+                                  alt="Avatar" 
+                                  className="profile-avatar w-16 h-16 rounded-full mx-auto"
+                                />
+                              </div>
+                            )}
+
+                            {/* Name */}
+                            <div className="text-center">
+                              {displayName && (
+                                <h3 
+                                  className={cn(
+                                    "profile-display-name font-bold text-lg",
+                                    displayNameAnimation === 'rainbow' && 'display-name-rainbow',
+                                    displayNameAnimation === 'gradient' && 'display-name-gradient',
+                                    displayNameAnimation === 'pulse' && 'display-name-pulse',
+                                    displayNameAnimation === 'glow' && 'display-name-glow',
+                                    selectedElements.includes('profile-display-name') && "element-selected"
+                                  )}
+                                  style={{ 
+                                    color: displayNameAnimation === 'none' ? displayNameColor : undefined 
+                                  }}
+                                  onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-display-name') : undefined}
+                                  onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-display-name') : undefined}
+                                  onDoubleClick={cssMode === 'easy' ? (e) => handleTextElementRightClick(e, 'profile-display-name') : undefined}
+                                >
+                                  {displayName}
+                                </h3>
+                              )}
+                              
+                              {username && (
+                                <div 
+                                  className={cn(
+                                    "profile-username text-sm text-gray-500",
+                                    selectedElements.includes('profile-username') && "element-selected"
+                                  )}
+                                  onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-username') : undefined}
+                                  onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-username') : undefined}
+                                  onDoubleClick={cssMode === 'easy' ? (e) => handleTextElementRightClick(e, 'profile-username') : undefined}
+                                >
+                                  @{username}
+                                </div>
+                              )}
+                              
+                              {pronouns && (
+                                <p 
+                                  className={cn(
+                                    "profile-pronouns text-sm text-gray-500",
+                                    selectedElements.includes('profile-pronouns') && "element-selected"
+                                  )}
+                                  onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-pronouns') : undefined}
+                                  onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-pronouns') : undefined}
+                                  onDoubleClick={cssMode === 'easy' ? (e) => handleTextElementRightClick(e, 'profile-pronouns') : undefined}
+                                >
+                                  ({pronouns})
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Status */}
+                            {status && (
+                              <div 
+                                className={cn(
+                                  "profile-status-text flex items-center justify-center gap-2",
+                                  selectedElements.includes('profile-status-text') && "element-selected"
+                                )}
+                                onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-status-text') : undefined}
+                                onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-status-text') : undefined}
+                              >
+                                <div 
+                                  className={cn(
+                                    "profile-status w-3 h-3 rounded-full",
+                                    status === 'online' && 'bg-green-500',
+                                    status === 'idle' && 'bg-yellow-500',
+                                    status === 'dnd' && 'bg-red-500',
+                                    status === 'offline' && 'bg-gray-500'
+                                  )}
+                                />
+                                <span className="text-sm capitalize">{status}</span>
+                              </div>
+                            )}
+
+                            {/* Bio */}
+                            {bio && (
+                              <div>
+                                <h4 className="font-semibold text-sm">About</h4>
+                                <p 
+                                  className={cn(
+                                    "profile-bio text-sm text-gray-600 dark:text-gray-300",
+                                    selectedElements.includes('profile-bio') && "element-selected"
+                                  )}
+                                  onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-bio') : undefined}
+                                  onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-bio') : undefined}
+                                  onDoubleClick={cssMode === 'easy' ? (e) => handleTextElementRightClick(e, 'profile-bio') : undefined}
+                                >
+                                  {bio}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Badges */}
+                            {badges.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm mb-2">Badges</h4>
+                                <div 
+                                  className={cn(
+                                    "profile-badges flex flex-wrap gap-1",
+                                    selectedElements.includes('profile-badges') && "element-selected"
+                                  )}
+                                  onMouseDown={cssMode === 'easy' ? (e) => handlePreviewMouseDown(e, 'profile-badges') : undefined}
+                                  onContextMenu={cssMode === 'easy' ? (e) => handlePreviewContextMenu(e, 'profile-badges') : undefined}
+                                >
+                                  {badges.map((badge, index) => (
+                                    <img 
+                                      key={badge.id}
+                                      src={badge.url}
+                                      alt={badge.name || 'Badge'}
+                                      title={badge.name}
+                                      className="profile-badge w-6 h-6 rounded"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   
                   {cssMode === 'easy' && (
@@ -529,6 +701,17 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Actual ProfileCard Component for Testing */}
+      {showProfileCard && currentUser && (
+        <ProfileCard
+          userId={currentUser.id}
+          isOpen={showProfileCard}
+          onClose={() => setShowProfileCard(false)}
+          onScrollToggle={() => {}}
+          clickPosition={{ x: window.innerWidth / 2, y: window.innerHeight / 2 }}
+        />
+      )}
 
       {/* Context Menu */}
       <ContextMenu
