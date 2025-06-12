@@ -295,7 +295,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
           {/* REMOVED: The duplicate Settings button that was causing the extra profile customizer button */}
 
           <span 
-            className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" 
+            className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white" 
             title={displayName ?? undefined}
           >
             {displayName}
