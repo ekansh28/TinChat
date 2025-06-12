@@ -17,6 +17,10 @@
         {
             "folderPath": "chat\\src\\app\\globals.css\\",
             "color": "foldercolorizer.color_00cc99"
+        },
+        {
+            "folderPath": "chat\\src\\components\\ProfileCustomizer\\",
+            "color": "foldercolorizer.color_66cc33"
         }
     ]
 }

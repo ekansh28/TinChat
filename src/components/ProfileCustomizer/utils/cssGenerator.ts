@@ -62,81 +62,54 @@ class CSSGenerator {
 
     const cssBlocks: string[] = [];
 
-    // Base Discord-style CSS with performance optimizations
+    // Base clean profile card CSS
     cssBlocks.push(`
-/* Enhanced Discord-Style Profile Card with Performance Optimizations */
+/* Clean Profile Card without hover effects */
 .profile-card-container {
   background: ${this.generateBackground(easyCustomization)};
   border-radius: ${easyCustomization.borderRadius || 16}px;
   padding: 0;
   color: white;
-  font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'MS Sans Serif', sans-serif;
   width: 300px;
-  min-height: 600px;
+  min-height: 500px;
   position: relative;
-  overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  
-  /* Performance optimizations */
-  contain: layout style paint;
-  will-change: transform;
-  backface-visibility: hidden;
-  transform: translateZ(0);
+  overflow: visible;
   
   ${this.generateShadowCSS(easyCustomization)}
   ${easyCustomization.border ? 'border: 2px solid rgba(255, 255, 255, 0.3);' : ''}
 }
 
+/* Remove all hover effects from profile card */
 .profile-card-container:hover {
-  transform: translateY(-4px) scale(1.02);
-  ${easyCustomization.glow ? 'box-shadow: 0 0 30px rgba(102, 126, 234, 0.6), 0 20px 40px rgba(0, 0, 0, 0.35);' : 'box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);'}
+  transform: none !important;
+  box-shadow: ${this.generateShadowCSS(easyCustomization).replace('box-shadow: ', '').replace(';', '')};
 }
 
-/* Discord-style Banner with Dynamic Height */
+/* Banner without container constraints */
 .profile-banner {
   width: 100%;
   height: ${easyCustomization.bannerHeight || 120}px;
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
-  background-size: 400% 400%;
-  animation: gradientFlow 12s ease-in-out infinite;
+  background: linear-gradient(45deg, #667eea, #764ba2);
   position: relative;
   overflow: hidden;
-}
-
-@keyframes gradientFlow {
-  0%, 100% { background-position: 0% 50%; }
-  33% { background-position: 100% 0%; }
-  66% { background-position: 0% 100%; }
-}
-
-.profile-banner::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
-  animation: shimmer 4s infinite;
-}
-
-@keyframes shimmer {
-  0% { left: -100%; }
-  100% { left: 100%; }
+  margin: 0;
+  padding: 0;
 }
 
 .profile-banner img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
 }
 
+/* Remove banner hover effects */
+.profile-banner:hover,
 .profile-banner:hover img {
-  transform: scale(1.05);
+  transform: none !important;
 }
 
-/* Content Area with Dynamic Padding */
+/* Content area with proper positioning */
 .profile-content {
   padding: ${easyCustomization.contentPadding || 16}px;
   position: relative;
@@ -144,130 +117,99 @@ class CSSGenerator {
   z-index: 2;
 }
 
-/* Dynamic Avatar Styling */
-.profile-avatar-container {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 12px;
-}
-
+/* Avatar without nested containers */
 .profile-avatar {
   width: ${easyCustomization.avatarSize || 80}px;
   height: ${easyCustomization.avatarSize || 80}px;
   border-radius: ${easyCustomization.avatarFrame === 'circle' ? '50%' : '12px'};
-  border: 6px solid #2f3136;
+  border: 4px solid rgba(255, 255, 255, 0.2);
   object-fit: cover;
   background: #2f3136;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  cursor: pointer;
+  display: block;
+  margin-bottom: 12px;
   position: relative;
 }
 
-.profile-avatar::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
+/* Remove avatar hover effects */
 .profile-avatar:hover {
-  transform: scale(1.1) rotate(5deg);
-  border-color: #5865f2;
-  box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4);
+  transform: none !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-.profile-avatar:hover::after {
-  opacity: 1;
-}
-
-/* Enhanced Status Indicator */
+/* Status indicator positioned relative to avatar */
 .profile-status {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
-  border: 4px solid #2f3136;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid white;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 3;
-  animation: statusPulse 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
-@keyframes statusPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
+/* Remove status hover effects */
+.profile-status:hover {
+  transform: none !important;
 }
 
-/* Enhanced Badge System */
+/* Badge container with horizontal scroll */
 .profile-badges {
-  position: absolute;
-  top: ${(easyCustomization.bannerHeight || 120) - 30}px;
-  right: 12px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 3;
+  flex-direction: row;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 }
 
+.profile-badges::-webkit-scrollbar {
+  height: 4px;
+}
+
+.profile-badges::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.profile-badges::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+/* Rectangular badge layout */
 .profile-badge {
-  width: 28px;
-  height: 28px;
-  background: rgba(47, 49, 54, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
+  min-width: 48px;
+  width: 48px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
   padding: 2px;
-  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.profile-badge::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(45deg, transparent, rgba(88, 101, 242, 0.2), transparent);
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
+/* Remove badge hover effects */
 .profile-badge:hover {
-  transform: scale(1.25) rotate(10deg);
-  border-color: #5865f2;
-  box-shadow: 0 4px 15px rgba(88, 101, 242, 0.5);
-}
-
-.profile-badge:hover::before {
-  opacity: 1;
+  transform: none !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 .profile-badge img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
-  transition: transform 0.3s ease;
+  border-radius: 4px;
 }
 
-.profile-badge:hover img {
-  transform: scale(1.1);
-}
-
-/* Enhanced Typography with Dynamic Font */
+/* Text elements without background colors */
 .profile-display-name {
   font-size: ${Math.max(18, (easyCustomization.fontSize || 16) + 6)}px;
   font-weight: ${easyCustomization.textBold ? '700' : '600'};
@@ -275,8 +217,7 @@ class CSSGenerator {
   margin-bottom: 4px;
   word-wrap: break-word;
   line-height: 1.2;
-  cursor: text;
-  transition: all 0.3s ease;
+  background: none !important;
   
   ${this.generateTextEffects(easyCustomization)}
 }
@@ -288,11 +229,7 @@ class CSSGenerator {
   margin-bottom: 4px;
   font-weight: 400;
   color: #b9bbbe;
-  transition: color 0.3s ease;
-}
-
-.profile-username:hover {
-  color: #dcddde;
+  background: none !important;
 }
 
 .profile-pronouns {
@@ -300,19 +237,17 @@ class CSSGenerator {
   font-family: ${easyCustomization.fontFamily === 'default' ? 'inherit' : easyCustomization.fontFamily};
   opacity: 0.8;
   margin-bottom: 12px;
-  background: rgba(88, 101, 242, 0.2);
-  padding: 4px 8px;
-  border-radius: 10px;
   display: inline-block;
   color: #dee2e6;
-  border: 1px solid rgba(88, 101, 242, 0.3);
-  transition: all 0.3s ease;
-  backdrop-filter: blur(5px);
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
+/* Remove pronouns hover effects */
 .profile-pronouns:hover {
-  background: rgba(88, 101, 242, 0.3);
-  transform: translateY(-1px);
+  background: none !important;
+  transform: none !important;
 }
 
 .profile-status-text {
@@ -325,11 +260,7 @@ class CSSGenerator {
   align-items: center;
   gap: 6px;
   color: #b9bbbe;
-  transition: color 0.3s ease;
-}
-
-.profile-status-text:hover {
-  color: #dcddde;
+  background: none !important;
 }
 
 .profile-bio {
@@ -339,54 +270,70 @@ class CSSGenerator {
   opacity: 0.95;
   margin-top: 12px;
   word-wrap: break-word;
-  background: rgba(47, 49, 54, 0.6);
-  padding: 12px;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #dcddde;
-  transition: all 0.3s ease;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
+/* Remove bio hover effects */
 .profile-bio:hover {
-  background: rgba(47, 49, 54, 0.8);
-  transform: translateY(-1px);
+  background: none !important;
+  transform: none !important;
 }
 
 .profile-divider {
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
   margin: 16px 0;
   border-radius: 1px;
 }
 
-/* Activity Status Section */
-.profile-activity {
-  background: rgba(47, 49, 54, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(15px);
-  transition: all 0.3s ease;
+/* Constrain elements within profile card */
+.profile-card-container * {
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.profile-activity:hover {
-  background: rgba(47, 49, 54, 0.9);
-  transform: translateY(-1px);
+/* Easy mode editing styles */
+.profile-card-container.editing-mode {
+  overflow: visible !important;
+  min-height: 600px;
 }
 
-.profile-member-since {
-  background: rgba(47, 49, 54, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(15px);
-  transition: all 0.3s ease;
+.profile-card-container.editing-mode .profile-content {
+  overflow: visible !important;
 }
 
-.profile-member-since:hover {
-  background: rgba(47, 49, 54, 0.9);
-  transform: translateY(-1px);
+/* Selection and resize handles */
+.element-selected {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px;
+  position: relative !important;
 }
+
+.resize-handle {
+  position: absolute;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  z-index: 1000;
+  cursor: pointer;
+}
+
+.resize-handle-nw { top: -6px; left: -6px; cursor: nw-resize; }
+.resize-handle-ne { top: -6px; right: -6px; cursor: ne-resize; }
+.resize-handle-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+.resize-handle-se { bottom: -6px; right: -6px; cursor: se-resize; }
+.resize-handle-n { top: -6px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+.resize-handle-s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+.resize-handle-e { right: -6px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
+.resize-handle-w { left: -6px; top: 50%; transform: translateY(-50%); cursor: w-resize; }
 `);
 
-    // Enhanced display name animations
+    // Display name animations
     cssBlocks.push(this.generateDisplayNameAnimations(displayNameAnimation, rainbowSpeed));
 
     // Element positioning and transformations
@@ -394,49 +341,6 @@ class CSSGenerator {
 
     // Theme-specific overrides
     cssBlocks.push(this.generateThemeOverrides());
-
-    // Performance optimizations
-    cssBlocks.push(`
-/* Performance Optimizations */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* GPU Acceleration */
-.profile-card-container,
-.profile-banner,
-.profile-avatar,
-.profile-badge {
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
-/* Smooth scrolling */
-.profile-content {
-  scroll-behavior: smooth;
-}
-
-/* Optimized for mobile */
-@media (max-width: 480px) {
-  .profile-card-container {
-    width: 280px;
-    min-height: 500px;
-  }
-  
-  .profile-avatar {
-    width: ${Math.max(60, (easyCustomization.avatarSize || 80) - 20)}px;
-    height: ${Math.max(60, (easyCustomization.avatarSize || 80) - 20)}px;
-  }
-  
-  .profile-banner {
-    height: ${Math.max(80, (easyCustomization.bannerHeight || 120) - 40)}px;
-  }
-}
-`);
 
     return cssBlocks.join('\n');
   }
@@ -482,7 +386,7 @@ class CSSGenerator {
 
   private generateDisplayNameAnimations(animation: DisplayNameAnimation, speed: number): string {
     return `
-/* Enhanced Display Name Animations */
+/* Display Name Animations */
 .display-name-rainbow {
   background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
   background-size: 400% 400%;
@@ -501,7 +405,7 @@ class CSSGenerator {
 }
 
 .display-name-gradient {
-  background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe, #00f2fe);
+  background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #f5576c);
   background-size: 300% 300%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -531,11 +435,9 @@ class CSSGenerator {
 @keyframes textGlow {
   from { 
     text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
-    filter: brightness(1);
   }
   to { 
     text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor;
-    filter: brightness(1.2);
   }
 }
 `;
@@ -558,13 +460,18 @@ class CSSGenerator {
         const y = typeof props.y === 'number' ? props.y : 0;
         const scale = typeof props.scale === 'number' ? props.scale : 1;
         
-        if (x !== 0 || y !== 0 || scale !== 1) {
-          styles.push(`transform: translate(${x}px, ${y}px) scale(${scale}) !important;`);
+        // Constrain movement within profile card bounds
+        const constrainedX = Math.max(-50, Math.min(250, x));
+        const constrainedY = Math.max(-50, Math.min(450, y));
+        
+        if (constrainedX !== 0 || constrainedY !== 0 || scale !== 1) {
+          styles.push(`transform: translate(${constrainedX}px, ${constrainedY}px) scale(${scale}) !important;`);
           styles.push('position: relative !important;');
         }
         
         if (typeof props.width === 'number') {
-          styles.push(`width: ${props.width}px !important;`);
+          const constrainedWidth = Math.min(props.width, 280);
+          styles.push(`width: ${constrainedWidth}px !important;`);
         }
         
         if (typeof props.height === 'number') {
@@ -583,6 +490,27 @@ class CSSGenerator {
         if (typeof props.fontSize === 'number') {
           styles.push(`font-size: ${props.fontSize}px !important;`);
         }
+
+        // New background properties
+        if (props.background && typeof props.background === 'string' && props.background !== 'none') {
+          styles.push(`background: ${props.background} !important;`);
+        }
+
+        if (props.padding && typeof props.padding === 'string' && props.padding !== '0') {
+          styles.push(`padding: ${props.padding} !important;`);
+        }
+
+        if (props.borderRadius && typeof props.borderRadius === 'string' && props.borderRadius !== '0') {
+          styles.push(`border-radius: ${props.borderRadius} !important;`);
+        }
+
+        if (props.border && typeof props.border === 'string' && props.border !== 'none') {
+          styles.push(`border: ${props.border} !important;`);
+        }
+
+        if (typeof props.zIndex === 'number') {
+          styles.push(`z-index: ${props.zIndex} !important;`);
+        }
       }
       
       if (styles.length > 0) {
@@ -599,7 +527,6 @@ class CSSGenerator {
 .theme-98 .profile-card-container {
   border: 2px outset #c0c0c0;
   border-radius: 0;
-  box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #dfdfdf, inset -2px -2px grey, inset 2px 2px #fff;
   background: #c0c0c0;
   color: black;
   font-family: 'MS Sans Serif', sans-serif;
@@ -607,12 +534,10 @@ class CSSGenerator {
 
 .theme-98 .profile-banner {
   border-bottom: 1px solid #808080;
-  background: linear-gradient(45deg, #008080, #0000ff, #800080, #ff0000);
 }
 
 .theme-98 .profile-avatar {
   border: 2px inset #c0c0c0;
-  box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #dfdfdf;
 }
 
 .theme-98 .profile-status {
@@ -624,26 +549,15 @@ class CSSGenerator {
   border: 1px inset #c0c0c0;
 }
 
-.theme-98 .profile-pronouns,
-.theme-98 .profile-bio,
-.theme-98 .profile-activity,
-.theme-98 .profile-member-since {
-  background: #dfdfdf;
-  border: 1px inset #c0c0c0;
-  color: black;
-}
-
 .theme-98 .profile-username,
 .theme-98 .profile-status-text {
   color: #000080;
 }
 
-/* Dark theme overrides */
-@media (prefers-color-scheme: dark) {
-  .profile-card-container:not(.theme-98) {
-    background: linear-gradient(135deg, #2c2f36, #1e1f24);
-    color: #e0e0e0;
-  }
+.theme-98 .profile-display-name,
+.theme-98 .profile-pronouns,
+.theme-98 .profile-bio {
+  color: black;
 }
 `;
   }

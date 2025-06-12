@@ -26,19 +26,25 @@ export interface EasyCustomization {
   shadow: boolean;
   glow: boolean;
   border: boolean;
-    elements: {
+  elements: {
     [key: string]: {
-        x: number;
-        y: number;
-        scale: number;
-        width?: number;
-        height?: number;
-        color?: string;
-        fontFamily?: string;     // ← Make sure this line exists
-        fontSize?: number;       // ← Make sure this line exists
-        visible: boolean;
+      x: number;
+      y: number;
+      scale: number;
+      width?: number;
+      height?: number;
+      color?: string;
+      fontFamily?: string;
+      fontSize?: number;
+      visible: boolean;
+      // New background properties
+      background?: string;
+      padding?: string;
+      borderRadius?: string;
+      border?: string;
+      zIndex?: number;
     };
-    };
+  };
 }
 
 export interface Badge {

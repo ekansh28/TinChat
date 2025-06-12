@@ -40,7 +40,6 @@ export const useEasyMode = ({
   // Refs for stable references
   const typographyPopupRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
 
@@ -70,12 +69,13 @@ export const useEasyMode = ({
     }
   }, [isElementSelected]);
 
-  // Throttled update function for performance
-  const throttledUpdate = useCallback((updateFn: () => void) => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    animationFrameRef.current = requestAnimationFrame(updateFn);
+  // Constrain element within profile card bounds
+  const constrainPosition = useCallback((x: number, y: number) => {
+    // Profile card is 300px wide, so constrain x between -50 and 250
+    const constrainedX = Math.max(-50, Math.min(250, x));
+    // Profile card min height is 500px, so constrain y between -50 and 450
+    const constrainedY = Math.max(-50, Math.min(450, y));
+    return { x: constrainedX, y: constrainedY };
   }, []);
 
   // Mouse event handlers
@@ -153,89 +153,65 @@ export const useEasyMode = ({
       const element = easyCustomization.elements[selectedElement];
       if (!element) return;
 
-      let newWidth = currentDragState.elementWidth;
-      let newHeight = currentDragState.elementHeight;
-      let newScale = element.scale;
+      let newScale = element.scale || 1;
       
-      // Handle different resize directions
-      if (resizeHandle.includes('e')) {
-        if (newWidth > 0) {
-          newWidth = Math.max(20, snapToGrid(currentDragState.elementWidth + deltaX));
-        } else {
-          newScale = Math.max(0.3, Math.min(3, element.scale + deltaX / 200));
-        }
+      // Handle different resize directions with proper scaling
+      if (resizeHandle.includes('e') || resizeHandle.includes('w')) {
+        newScale = Math.max(0.3, Math.min(3, element.scale + deltaX / 200));
       }
-      if (resizeHandle.includes('w')) {
-        if (newWidth > 0) {
-          newWidth = Math.max(20, snapToGrid(currentDragState.elementWidth - deltaX));
-        } else {
-          newScale = Math.max(0.3, Math.min(3, element.scale - deltaX / 200));
-        }
-      }
-      if (resizeHandle.includes('s')) {
-        if (newHeight > 0) {
-          newHeight = Math.max(20, snapToGrid(currentDragState.elementHeight + deltaY));
-        } else {
-          newScale = Math.max(0.3, Math.min(3, element.scale + deltaY / 200));
-        }
-      }
-      if (resizeHandle.includes('n')) {
-        if (newHeight > 0) {
-          newHeight = Math.max(20, snapToGrid(currentDragState.elementHeight - deltaY));
-        } else {
-          newScale = Math.max(0.3, Math.min(3, element.scale - deltaY / 200));
-        }
+      if (resizeHandle.includes('s') || resizeHandle.includes('n')) {
+        newScale = Math.max(0.3, Math.min(3, element.scale + deltaY / 200));
       }
       
-      // For corner handles, use diagonal scaling
+      // For corner handles, use average of both directions
       if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
         const diagonal = (deltaX + deltaY) / 2;
         newScale = Math.max(0.3, Math.min(3, element.scale + diagonal / 200));
       }
       
-      throttledUpdate(() => {
-        setEasyCustomization(prev => ({
-          ...prev,
-          elements: {
-            ...prev.elements,
-            [selectedElement]: {
-              ...prev.elements[selectedElement],
-              scale: newWidth > 0 || newHeight > 0 ? element.scale : newScale,
-              width: newWidth > 0 ? newWidth : undefined,
-              height: newHeight > 0 ? newHeight : undefined,
-            }
+      setEasyCustomization(prev => ({
+        ...prev,
+        elements: {
+          ...prev.elements,
+          [selectedElement]: {
+            ...prev.elements[selectedElement],
+            scale: newScale
           }
-        }));
-      });
+        }
+      }));
     } else if (isDraggingRef.current && (selectedElement || selectedElements.length > 0)) {
-      const deltaX = snapToGrid(e.clientX - currentDragState.x);
-      const deltaY = snapToGrid(e.clientY - currentDragState.y);
+      const deltaX = e.clientX - currentDragState.x;
+      const deltaY = e.clientY - currentDragState.y;
       
       const elementsToUpdate = selectedElements.length > 0 ? selectedElements : [selectedElement!];
       
-      throttledUpdate(() => {
-        setEasyCustomization(prev => {
-          const newElements = { ...prev.elements };
-          
-          elementsToUpdate.forEach(element => {
-            if (element && newElements[element]) {
-              const currentElement = newElements[element];
-              newElements[element] = {
-                ...currentElement,
-                x: snapToGrid(currentDragState.elementX + deltaX),
-                y: snapToGrid(currentDragState.elementY + deltaY),
-              };
-            }
-          });
-          
-          return {
-            ...prev,
-            elements: newElements
-          };
+      setEasyCustomization(prev => {
+        const newElements = { ...prev.elements };
+        
+        elementsToUpdate.forEach(element => {
+          if (element && newElements[element]) {
+            const currentElement = newElements[element];
+            const newX = snapToGrid(currentDragState.elementX + deltaX);
+            const newY = snapToGrid(currentDragState.elementY + deltaY);
+            
+            // Constrain position within profile card bounds
+            const constrained = constrainPosition(newX, newY);
+            
+            newElements[element] = {
+              ...currentElement,
+              x: constrained.x,
+              y: constrained.y,
+            };
+          }
         });
+        
+        return {
+          ...prev,
+          elements: newElements
+        };
       });
     }
-  }, [cssMode, selectedElement, selectedElements, resizeHandle, snapToGrid, setEasyCustomization, throttledUpdate]);
+  }, [cssMode, selectedElement, selectedElements, resizeHandle, snapToGrid, setEasyCustomization, constrainPosition]);
 
   const handlePreviewMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -244,11 +220,6 @@ export const useEasyMode = ({
     isDraggingRef.current = false;
     isResizingRef.current = false;
     dragStateRef.current = null;
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
   }, []);
 
   // Context menu handler
@@ -410,23 +381,26 @@ export const useEasyMode = ({
               
               switch (e.key) {
                 case 'ArrowLeft':
-                  newX = Math.max(0, currentElement.x - step);
+                  newX = currentElement.x - step;
                   break;
                 case 'ArrowRight':
                   newX = currentElement.x + step;
                   break;
                 case 'ArrowUp':
-                  newY = Math.max(0, currentElement.y - step);
+                  newY = currentElement.y - step;
                   break;
                 case 'ArrowDown':
                   newY = currentElement.y + step;
                   break;
               }
               
+              // Constrain position within bounds
+              const constrained = constrainPosition(snapToGrid(newX), snapToGrid(newY));
+              
               newElements[element] = {
                 ...currentElement,
-                x: snapToGrid(newX),
-                y: snapToGrid(newY)
+                x: constrained.x,
+                y: constrained.y
               };
             }
           });
@@ -441,16 +415,7 @@ export const useEasyMode = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [cssMode, selectedElement, selectedElements, setEasyCustomization, snapToGrid]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
+  }, [cssMode, selectedElement, selectedElements, setEasyCustomization, snapToGrid, constrainPosition]);
 
   return {
     // Selection states

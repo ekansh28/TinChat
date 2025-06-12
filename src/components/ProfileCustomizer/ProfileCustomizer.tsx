@@ -1,7 +1,7 @@
 // src/components/ProfileCustomizer/ProfileCustomizer.tsx
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { cn } from '@/lib/utils';
 import { getDefaultProfileCSS } from '@/lib/SafeCSS';
@@ -28,6 +28,8 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   isOpen, 
   onClose 
 }) => {
+  const [showCustomCSS, setShowCustomCSS] = useState(false);
+
   const {
     // CSS and mode states
     customCSS,
@@ -347,6 +349,51 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
                         </Button>
                       </div>
                     )}
+
+                    {/* Custom CSS Editor */}
+                    {cssMode === 'custom' && (
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">Custom CSS</h4>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowCustomCSS(!showCustomCSS)}
+                          >
+                            {showCustomCSS ? 'Hide CSS' : 'Show CSS Editor'}
+                          </Button>
+                        </div>
+                        
+                        {showCustomCSS && (
+                          <div className="mt-3">
+                            <textarea
+                              value={customCSS}
+                              onChange={(e) => setCustomCSS(e.target.value)}
+                              placeholder="Enter your custom CSS here..."
+                              disabled={saving}
+                              rows={12}
+                              className={cn(
+                                "w-full text-sm font-mono resize-none",
+                                isTheme98 
+                                  ? "sunken-panel px-2 py-1" 
+                                  : "rounded-md border border-input bg-transparent px-3 py-2 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                              )}
+                            />
+                            <div className="text-xs text-gray-500 mt-2">
+                              <p><strong>Available CSS Classes:</strong></p>
+                              <p>• .profile-card-container - Main container</p>
+                              <p>• .profile-banner - Banner section</p>
+                              <p>• .profile-avatar - Avatar image</p>
+                              <p>• .profile-display-name - Display name</p>
+                              <p>• .profile-username - Username</p>
+                              <p>• .profile-bio - Bio text</p>
+                              <p>• .profile-badges - Badge container</p>
+                              <p>• .profile-status - Status indicator</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <BasicInfoSection
@@ -505,4 +552,4 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   );
 };
 
-export default ProfileCustomizer; // <--- This line is the fix!
+export default ProfileCustomizer;

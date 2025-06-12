@@ -68,7 +68,7 @@ export const PROFILE_ELEMENTS = [
 
 export const GRID_SIZE = 10; // Grid snap size in pixels
 
-// FIXED: More robust default customization with all required properties
+// FIXED: Unified default customization with background properties
 export const DEFAULT_EASY_CUSTOMIZATION = {
   backgroundColor: '#667eea',
   backgroundGradient: {
@@ -78,15 +78,15 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
     direction: '135deg'
   },
   borderRadius: 16,
-  bannerHeight: 140,
-  avatarSize: 100,
+  bannerHeight: 120,
+  avatarSize: 80,
   avatarFrame: 'circle' as const,
-  textShadow: true,
+  textShadow: false,
   textGlow: false,
   textBold: false,
-  fontFamily: 'default',
-  fontSize: 16,
-  contentPadding: 24,
+  fontFamily: 'MS Sans Serif',
+  fontSize: 14,
+  contentPadding: 16,
   shadow: true,
   glow: false,
   border: false,
@@ -100,7 +100,12 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       fontFamily: undefined,
       fontSize: undefined,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-display-name': { 
       x: 0, 
@@ -108,43 +113,63 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       scale: 1, 
       visible: true,
       color: '#ffffff',
-      fontFamily: 'default',
-      fontSize: 26,
+      fontFamily: 'MS Sans Serif',
+      fontSize: 18,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-username': { 
       x: 0, 
       y: 0, 
       scale: 1, 
       visible: true,
-      color: '#ffffff',
-      fontFamily: 'default',
-      fontSize: 16,
+      color: '#b9bbbe',
+      fontFamily: 'MS Sans Serif',
+      fontSize: 14,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-pronouns': { 
       x: 0, 
       y: 0, 
       scale: 1, 
       visible: true,
-      color: '#ffffff',
-      fontFamily: 'default',
-      fontSize: 14,
+      color: '#dee2e6',
+      fontFamily: 'MS Sans Serif',
+      fontSize: 12,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-bio': { 
       x: 0, 
       y: 0, 
       scale: 1, 
       visible: true,
-      color: '#ffffff',
-      fontFamily: 'default',
+      color: '#dcddde',
+      fontFamily: 'MS Sans Serif',
       fontSize: 14,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-status': { 
       x: 0, 
@@ -155,7 +180,12 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       fontFamily: undefined,
       fontSize: undefined,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-banner': { 
       x: 0, 
@@ -166,7 +196,12 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       fontFamily: undefined,
       fontSize: undefined,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-divider': { 
       x: 0, 
@@ -177,7 +212,12 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       fontFamily: undefined,
       fontSize: undefined,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-badges': { 
       x: 0, 
@@ -188,18 +228,28 @@ export const DEFAULT_EASY_CUSTOMIZATION = {
       fontFamily: undefined,
       fontSize: undefined,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     },
     'profile-status-text': { 
       x: 0, 
       y: 0, 
       scale: 1, 
       visible: true,
-      color: '#ffffff',
-      fontFamily: 'default',
-      fontSize: 14,
+      color: '#b9bbbe',
+      fontFamily: 'MS Sans Serif',
+      fontSize: 12,
       width: undefined,
-      height: undefined
+      height: undefined,
+      background: undefined,
+      padding: undefined,
+      borderRadius: undefined,
+      border: undefined,
+      zIndex: undefined
     }
   }
 };
