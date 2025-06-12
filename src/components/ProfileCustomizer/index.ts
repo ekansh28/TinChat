@@ -1,8 +1,8 @@
-
-// src/components/ProfileCustomizer/index.ts
+// src/components/ProfileCustomizer/index.ts - Fixed Export Structure
 import React from 'react';
-// Change this line:
-import ProfileCustomizer from './ProfileCustomizer'; // Import as default
+
+// FIXED: Import and export ProfileCustomizer correctly
+import ProfileCustomizer from './ProfileCustomizer';
 
 // Enhanced preview component
 export { EnhancedProfilePreview } from './EnhancedProfilePreview';
@@ -15,11 +15,18 @@ export { BadgeManager } from './components/BadgeManager';
 export { ContextMenu } from './components/ContextMenu';
 export { TypographyPopup } from './components/TypographyPopup';
 
-// New advanced components
+// Advanced components
 export { AdvancedCustomization } from './components/AdvancedCustomization';
 export { ThemeSelector } from './components/ThemeSelector';
 export { LayoutPresets } from './components/LayoutPresets';
 export { AnimationControls } from './components/AnimationControls';
+
+// Error handling
+export { 
+  ProfileCustomizerErrorBoundary, 
+  withErrorBoundary, 
+  useErrorHandler 
+} from './components/ErrorBoundary';
 
 // Hooks
 export { useProfileCustomizer } from './hooks/useProfileCustomizer';
@@ -337,5 +344,6 @@ export const debug = process.env.NODE_ENV === 'development' ? {
   }
 } : {};
 
-// Default export for convenience
+// FIXED: Export ProfileCustomizer as both named and default export
+export { ProfileCustomizer };
 export default ProfileCustomizer;

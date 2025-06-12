@@ -17,32 +17,53 @@ interface BadgeManagerProps {
   isTheme98: boolean;
 }
 
-// Simplified image validation
-const validateImageUrl = async (url: string): Promise<{valid: boolean, error?: string}> => {
-  if (!url.trim()) {
-    return { valid: false, error: 'URL cannot be empty' };
-  }
-
-  try {
-    new URL(url);
-  } catch {
-    return { valid: false, error: 'Invalid URL format' };
-  }
-
+// Enhanced image validation
+const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}> => {
   return new Promise((resolve) => {
+    // Basic checks
+    if (!file.type.startsWith('image/')) {
+      resolve({ valid: false, error: 'File must be an image' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      resolve({ valid: false, error: 'File size must be under 5MB' });
+      return;
+    }
+
+    // Advanced validation: try to load the image
     const img = new Image();
+    const url = URL.createObjectURL(file);
+    
+    const cleanup = () => URL.revokeObjectURL(url);
+    
     const timeout = setTimeout(() => {
-      resolve({ valid: false, error: 'Image load timeout' });
-    }, 10000);
+      cleanup();
+      resolve({ valid: false, error: 'Image validation timeout' });
+    }, 5000);
     
     img.onload = () => {
       clearTimeout(timeout);
+      cleanup();
+      
+      // Check image dimensions
+      if (img.width < 16 || img.height < 16) {
+        resolve({ valid: false, error: 'Image must be at least 16x16 pixels' });
+        return;
+      }
+      
+      if (img.width > 512 || img.height > 512) {
+        resolve({ valid: false, error: 'Image must be smaller than 512x512 pixels' });
+        return;
+      }
+      
       resolve({ valid: true });
     };
     
     img.onerror = () => {
       clearTimeout(timeout);
-      resolve({ valid: false, error: 'Failed to load image' });
+      cleanup();
+      resolve({ valid: false, error: 'Invalid or corrupted image file' });
     };
     
     img.src = url;
@@ -137,9 +158,26 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     setImageLoading(prev => new Set(prev).add('new-badge'));
     
     try {
-      const result = await validateImageUrl(url);
-      setValidationResults(prev => new Map(prev).set('new-badge', result));
-      return result.valid;
+      // Basic URL validation
+      try {
+        new URL(url);
+      } catch {
+        setValidationResults(prev => new Map(prev).set('new-badge', { valid: false, error: 'Invalid URL format' }));
+        return false;
+      }
+
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+      const isImageUrl = imageExtensions.some(ext => 
+        url.toLowerCase().includes(ext)
+      ) || url.includes('image') || url.includes('img');
+
+      if (!isImageUrl) {
+        setValidationResults(prev => new Map(prev).set('new-badge', { valid: false, error: 'URL must point to an image file' }));
+        return false;
+      }
+
+      setValidationResults(prev => new Map(prev).set('new-badge', { valid: true }));
+      return true;
     } catch (error) {
       console.error('Badge validation error:', error);
       setValidationResults(prev => new Map(prev).set('new-badge', { valid: false, error: 'Validation failed' }));
@@ -174,62 +212,18 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     }
   }, [newBadgeUrl, validateNewBadge, addBadge, validationResults, toast]);
 
-  // File upload handling
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Enhanced file upload handling
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select an image file",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      toast({
-        title: "File Too Large",
-        description: "Please choose a file under 5MB",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setNewBadgeUrl(dataUrl);
-    };
-    reader.onerror = () => {
-      toast({
-        title: "Error",
-        description: "Failed to read file",
-        variant: "destructive"
-      });
-    };
-    reader.readAsDataURL(file);
-  }, [setNewBadgeUrl, toast]);
-
-  // Drag and drop for file uploads
-  const handleFileDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleFileDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => file.type.startsWith('image/'));
-
-    if (imageFile) {
-      if (imageFile.size > 5 * 1024 * 1024) {
+    try {
+      const validation = await validateImageFile(file);
+      
+      if (!validation.valid) {
         toast({
-          title: "File Too Large",
-          description: "Please choose a file under 5MB",
+          title: "Invalid File",
+          description: validation.error,
           variant: "destructive"
         });
         return;
@@ -239,19 +233,102 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         setNewBadgeUrl(dataUrl);
+        toast({
+          title: "Image Loaded",
+          description: "Image successfully loaded for badge",
+          variant: "default"
+        });
       };
       reader.onerror = () => {
         toast({
-          title: "Error",
-          description: "Failed to read file",
+          title: "Read Error",
+          description: "Failed to read the image file",
           variant: "destructive"
         });
       };
-      reader.readAsDataURL(imageFile);
-    } else {
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('File upload error:', error);
       toast({
-        title: "Invalid File",
-        description: "Please drop an image file",
+        title: "Upload Error",
+        description: "Failed to process the uploaded file",
+        variant: "destructive"
+      });
+    }
+  }, [setNewBadgeUrl, toast]);
+
+  // Enhanced drag and drop for file uploads
+  const handleFileDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    if (imageFiles.length === 0) {
+      toast({
+        title: "No Images Found",
+        description: "Please drop image files (JPG, PNG, GIF, WebP, SVG)",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (imageFiles.length > 1) {
+      toast({
+        title: "Multiple Files",
+        description: "Please drop one image at a time",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const file = imageFiles[0];
+    
+    try {
+      const validation = await validateImageFile(file);
+      
+      if (!validation.valid) {
+        toast({
+          title: "Invalid Image",
+          description: validation.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // If validation passes, process the file
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setNewBadgeUrl(dataUrl);
+        toast({
+          title: "Image Loaded",
+          description: "Image successfully loaded for badge",
+          variant: "default"
+        });
+      };
+      
+      reader.onerror = () => {
+        toast({
+          title: "Read Error",
+          description: "Failed to read the image file",
+          variant: "destructive"
+        });
+      };
+      
+      reader.readAsDataURL(file);
+      
+    } catch (error) {
+      console.error('File drop error:', error);
+      toast({
+        title: "Processing Error",
+        description: "Failed to process the dropped file",
         variant: "destructive"
       });
     }
@@ -310,8 +387,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     clearSelection();
     toast({
       title: "Badges Deleted",
-      description: `${selectedBadges.size} badge(s) removed`,
-      variant: "success"
+      description: `${selectedBadges.size} badge(s) removed`
     });
   }, [selectedBadges, removeBadge, clearSelection, toast]);
 
@@ -635,124 +711,6 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
               {badges.length >= 10 ? 'Maximum badges reached (10/10)' : 'Add Badge'}
             </Button>
           </div>
-
-          {/* Existing Badges Management */}
-          {filteredBadges.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h5 className="font-medium text-sm">
-                  Current Badges {searchFilter && `(${filteredBadges.length}/${badges.length})`}
-                </h5>
-                {selectedBadges.size > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={deleteSelectedBadges}
-                    disabled={saving}
-                  >
-                    Delete {selectedBadges.size} Selected
-                  </Button>
-                )}
-              </div>
-              
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {filteredBadges.map((badge, index) => (
-                  <div
-                    key={badge.id}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded border transition-all duration-200",
-                      isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-600",
-                      selectedBadges.has(badge.id) && "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                    )}
-                  >
-                    {/* Selection checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={selectedBadges.has(badge.id)}
-                      onChange={() => toggleBadgeSelection(badge.id)}
-                      className="w-4 h-4"
-                    />
-                    
-                    {/* Badge preview */}
-                    <div className="relative w-10 h-10 flex-shrink-0">
-                      {imageLoading.has(badge.id) && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                      )}
-                      
-                      <img
-                        src={imageErrors.has(badge.id) ? getBrokenImageSrc() : badge.url}
-                        alt={badge.name || `Badge ${index + 1}`}
-                        className={cn(
-                          "w-full h-full object-cover rounded transition-opacity duration-200",
-                          imageLoading.has(badge.id) && "opacity-0"
-                        )}
-                        onError={() => handleImageError(badge.id)}
-                        onLoad={() => handleImageLoad(badge.id)}
-                        onLoadStart={() => handleImageLoadStart(badge.id)}
-                      />
-                      
-                      {imageErrors.has(badge.id) && (
-                        <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full"></div>
-                      )}
-                    </div>
-                    
-                    {/* Badge info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {badge.name || `Badge ${index + 1}`}
-                      </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {badge.url.length > 50 ? `${badge.url.substring(0, 50)}...` : badge.url}
-                      </div>
-                      {imageErrors.has(badge.id) && (
-                        <div className="text-xs text-red-500">Failed to load image</div>
-                      )}
-                    </div>
-                    
-                    {/* Badge controls */}
-                    <div className="flex items-center gap-1">
-                      {index > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => reorderBadges(index, index - 1)}
-                          disabled={saving}
-                          className="w-7 h-7 p-0 text-xs"
-                          title="Move up"
-                        >
-                          ↑
-                        </Button>
-                      )}
-                      {index < badges.length - 1 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => reorderBadges(index, index + 1)}
-                          disabled={saving}
-                          className="w-7 h-7 p-0 text-xs"
-                          title="Move down"
-                        >
-                          ↓
-                        </Button>
-                      )}
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => removeBadge(badge.id)}
-                        disabled={saving}
-                        className="w-7 h-7 p-0 text-xs"
-                        title="Remove badge"
-                      >
-                        ×
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Help text */}
           <div className="text-xs text-gray-500 space-y-1 pt-3 border-t">

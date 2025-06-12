@@ -26,10 +26,11 @@ export const useProfileData = ({
   const [saving, setSaving] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null | 'checking'>(null);
   
-  // Track if profile has been loaded to prevent repeated loads
+  // Atomic loading state management
+  const loadingRef = useRef(false);
+  const loadingPromiseRef = useRef<Promise<any> | null>(null);
   const profileLoadedRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
-  const loadingRef = useRef(false); // Prevent concurrent loads
   
   const { toast } = useToast();
   const debouncedUsername = useDebounce(username, 500);
@@ -87,118 +88,129 @@ export const useProfileData = ({
     }
   }, [debouncedUsername, currentUser?.id, originalUsername, mountedRef, saving, loading]);
 
-  // FIXED: Stable loadCurrentProfile function that prevents infinite loops
+  // Improved loadCurrentProfile with race condition protection
   const loadCurrentProfile = useCallback(async () => {
-    // Prevent multiple simultaneous loads
-    if (!mountedRef.current || loading || saving || loadingRef.current) {
-      console.log('ProfileCustomizer: Skipping load - component unmounted or already loading');
+    // Return existing promise if already loading
+    if (loadingPromiseRef.current) {
+      console.log('ProfileCustomizer: Returning existing load promise');
+      return loadingPromiseRef.current;
+    }
+
+    // Comprehensive pre-flight checks
+    if (!mountedRef.current || saving) {
+      console.log('ProfileCustomizer: Skipping load - component unmounted or saving');
       return null;
     }
-    
-    loadingRef.current = true;
-    setLoading(true);
-    console.log('ProfileCustomizer: Starting profile load...');
-    
-    try {
-      console.log('ProfileCustomizer: Getting current user...');
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        console.error('ProfileCustomizer: Auth error:', userError);
-        toast({
-          title: "Authentication Error",
-          description: "Please sign in to customize your profile"
-        });
-        return null;
-      }
 
-      if (!mountedRef.current) {
-        console.log('ProfileCustomizer: Component unmounted during auth check');
-        return null;
-      }
+    // Atomic check-and-set
+    if (loadingRef.current) {
+      console.log('ProfileCustomizer: Already loading, skipping');
+      return null;
+    }
 
-      // Check if we already loaded this user's profile
-      if (profileLoadedRef.current && lastUserIdRef.current === user.id) {
-        console.log('ProfileCustomizer: Profile already loaded for this user');
-        setLoading(false);
-        loadingRef.current = false;
-        return { user, profile: null, alreadyLoaded: true };
-      }
-
-      console.log('ProfileCustomizer: Loading profile for user:', user.id);
-
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select(`
-          profile_card_css, 
-          bio, 
-          display_name, 
-          username, 
-          avatar_url, 
-          banner_url,
-          pronouns,
-          status,
-          display_name_color,
-          display_name_animation,
-          rainbow_speed,
-          easy_customization_data,
-          badges
-        `)
-        .eq('id', user.id)
-        .maybeSingle(); // Use maybeSingle instead of expecting array
-
-      if (!mountedRef.current) {
-        console.log('ProfileCustomizer: Component unmounted during profile fetch');
-        return null;
-      }
-
-      if (error) {
-        console.error('ProfileCustomizer: Error loading profile:', error);
-        // Don't show error for missing profile (PGRST116)
-        if (error.code !== 'PGRST116') {
-          toast({
-            title: "Error",
-            description: "Failed to load profile data"
-          });
+    // Create and store the loading promise
+    const loadPromise = (async () => {
+      try {
+        loadingRef.current = true;
+        setLoading(true);
+        console.log('ProfileCustomizer: Starting atomic profile load...');
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError || !user) {
+          console.error('ProfileCustomizer: Auth error:', userError);
+          throw new Error('Authentication required');
         }
-        // Still call onProfileLoaded for new profiles
-        onProfileLoaded({ user, profile: null });
-        profileLoadedRef.current = true;
-        lastUserIdRef.current = user.id;
-        return { user, profile: null };
-      } else {
+
+        if (!mountedRef.current) {
+          throw new Error('Component unmounted during auth check');
+        }
+
+        // Check if we already loaded this user's profile
+        if (profileLoadedRef.current && lastUserIdRef.current === user.id) {
+          console.log('ProfileCustomizer: Profile already loaded for this user');
+          return { user, profile: null, alreadyLoaded: true };
+        }
+
+        console.log('ProfileCustomizer: Loading profile for user:', user.id);
+
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select(`
+            profile_card_css, bio, display_name, username, avatar_url, banner_url,
+            pronouns, status, display_name_color, display_name_animation,
+            rainbow_speed, easy_customization_data, badges
+          `)
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!mountedRef.current) {
+          throw new Error('Component unmounted during profile fetch');
+        }
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('ProfileCustomizer: Error loading profile:', error);
+          throw new Error('Failed to load profile data');
+        }
+
         const profile = data;
-        console.log('ProfileCustomizer: Profile data loaded:', profile);
-        onProfileLoaded({ user, profile });
+        console.log('ProfileCustomizer: Profile data loaded:', profile ? 'found' : 'not found');
+        
+        // Call onProfileLoaded with proper error handling
+        try {
+          onProfileLoaded({ user, profile });
+        } catch (callbackError) {
+          console.error('ProfileCustomizer: Error in onProfileLoaded callback:', callbackError);
+          // Don't throw, just log the error
+        }
+        
         profileLoadedRef.current = true;
         lastUserIdRef.current = user.id;
         return { user, profile };
+
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false);
+          loadingRef.current = false;
+          loadingPromiseRef.current = null;
+        }
       }
+    })();
+
+    // Store the promise
+    loadingPromiseRef.current = loadPromise;
+    
+    try {
+      return await loadPromise;
     } catch (error) {
-      console.error('ProfileCustomizer: Exception loading profile:', error);
+      console.error('ProfileCustomizer: Load failed:', error);
       if (mountedRef.current) {
         toast({
           title: "Error",
-          description: "Failed to load profile data"
+          description: error instanceof Error ? error.message : "Failed to load profile data"
         });
       }
       return null;
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-        loadingRef.current = false;
-      }
     }
-  }, [mountedRef, onProfileLoaded, toast]); // Minimal stable dependencies
+  }, [mountedRef, onProfileLoaded, toast, saving]);
 
-  // Reset profile loaded state when user changes
+  // Reset state when user changes
   useEffect(() => {
     if (currentUser?.id && lastUserIdRef.current !== currentUser.id) {
       profileLoadedRef.current = false;
       lastUserIdRef.current = null;
       loadingRef.current = false;
+      loadingPromiseRef.current = null;
     }
   }, [currentUser?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      loadingRef.current = false;
+      loadingPromiseRef.current = null;
+    };
+  }, []);
 
   const handleSave = useCallback(async (profileData: {
     customCSS: string;

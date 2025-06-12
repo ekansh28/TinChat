@@ -37,11 +37,13 @@ export const useEasyMode = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [typographyPopup, setTypographyPopup] = useState<TypographyPopupState | null>(null);
   
-  // Refs for stable references
+  // Refs for stable references and performance
   const typographyPopupRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
+  const lastMouseMoveRef = useRef<number>(0);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // Grid snap helper function
   const snapToGrid = useCallback((value: number) => {
@@ -69,14 +71,148 @@ export const useEasyMode = ({
     }
   }, [isElementSelected]);
 
-  // Constrain element within profile card bounds
-  const constrainPosition = useCallback((x: number, y: number) => {
-    // Profile card is 300px wide, so constrain x between -50 and 250
-    const constrainedX = Math.max(-50, Math.min(250, x));
-    // Profile card min height is 500px, so constrain y between -50 and 450
-    const constrainedY = Math.max(-50, Math.min(450, y));
-    return { x: constrainedX, y: constrainedY };
+  // Dynamic constraint calculation
+  const calculateConstraints = useCallback((containerRef?: React.RefObject<HTMLElement>) => {
+    let bounds = {
+      minX: -50,
+      maxX: 250,
+      minY: -50,
+      maxY: 450
+    };
+    
+    if (containerRef?.current) {
+      const container = containerRef.current;
+      const rect = container.getBoundingClientRect();
+      
+      // Calculate dynamic bounds based on container size
+      bounds = {
+        minX: -Math.min(50, rect.width * 0.1),
+        maxX: rect.width - 50,
+        minY: -Math.min(50, rect.height * 0.1),
+        maxY: rect.height - 50
+      };
+    }
+    
+    return bounds;
   }, []);
+
+  // Enhanced position constraint
+  const constrainPosition = useCallback((
+    x: number, 
+    y: number, 
+    containerRef?: React.RefObject<HTMLElement>
+  ) => {
+    const bounds = calculateConstraints(containerRef);
+    
+    const constrainedX = Math.max(bounds.minX, Math.min(bounds.maxX, x));
+    const constrainedY = Math.max(bounds.minY, Math.min(bounds.maxY, y));
+    
+    return { x: constrainedX, y: constrainedY };
+  }, [calculateConstraints]);
+
+  // Separate resize and drag handlers for better performance
+  const handleResize = useCallback((e: React.MouseEvent, dragState: DragState) => {
+    if (!selectedElement || !resizeHandle) return;
+
+    const deltaX = e.clientX - dragState.x;
+    const deltaY = e.clientY - dragState.y;
+    
+    const element = easyCustomization.elements[selectedElement];
+    if (!element) return;
+
+    let newScale = element.scale || 1;
+    let scaleChange = 0;
+    
+    // Calculate scale change based on resize handle
+    switch (resizeHandle) {
+      case 'e':
+      case 'w':
+        scaleChange = deltaX / 200;
+        break;
+      case 'n':
+      case 's':
+        scaleChange = deltaY / 200;
+        break;
+      case 'nw':
+        scaleChange = -(deltaX + deltaY) / 400;
+        break;
+      case 'ne':
+        scaleChange = (-deltaX + deltaY) / 400;
+        break;
+      case 'sw':
+        scaleChange = (deltaX - deltaY) / 400;
+        break;
+      case 'se':
+        scaleChange = (deltaX + deltaY) / 400;
+        break;
+    }
+    
+    newScale = Math.max(0.1, Math.min(3, element.scale + scaleChange));
+    
+    setEasyCustomization(prev => ({
+      ...prev,
+      elements: {
+        ...prev.elements,
+        [selectedElement]: {
+          ...prev.elements[selectedElement],
+          scale: newScale
+        }
+      }
+    }));
+  }, [selectedElement, resizeHandle, easyCustomization.elements, setEasyCustomization]);
+
+  const handleDrag = useCallback((e: React.MouseEvent, dragState: DragState) => {
+    const deltaX = e.clientX - dragState.x;
+    const deltaY = e.clientY - dragState.y;
+    
+    const elementsToUpdate = selectedElements.length > 0 ? selectedElements : [selectedElement!];
+    
+    setEasyCustomization(prev => {
+      const newElements = { ...prev.elements };
+      
+      elementsToUpdate.forEach(element => {
+        if (element && newElements[element]) {
+          const currentElement = newElements[element];
+          const newX = snapToGrid(dragState.elementX + deltaX);
+          const newY = snapToGrid(dragState.elementY + deltaY);
+          
+          // Use dynamic constraints
+          const constrained = constrainPosition(newX, newY, previewRef);
+          
+          newElements[element] = {
+            ...currentElement,
+            x: constrained.x,
+            y: constrained.y,
+          };
+        }
+      });
+      
+      return {
+        ...prev,
+        elements: newElements
+      };
+    });
+  }, [selectedElement, selectedElements, snapToGrid, constrainPosition, setEasyCustomization]);
+
+  // Enhanced mouse move handler with performance optimization
+  const handlePreviewMouseMove = useCallback((e: React.MouseEvent) => {
+    if (cssMode !== 'easy' || (!isDraggingRef.current && !isResizingRef.current)) return;
+
+    // Throttle mouse move events for performance (~60fps)
+    if (Date.now() - (lastMouseMoveRef.current || 0) < 16) return;
+    lastMouseMoveRef.current = Date.now();
+
+    e.preventDefault();
+    
+    const currentDragState = dragStateRef.current;
+    if (!currentDragState) return;
+
+    if (isResizingRef.current && selectedElement && resizeHandle) {
+      handleResize(e, currentDragState);
+    } else if (isDraggingRef.current) {
+      handleDrag(e, currentDragState);
+    }
+  }, [cssMode, selectedElement, resizeHandle, handleResize, handleDrag]);
 
   // Mouse event handlers
   const handlePreviewMouseDown = useCallback((e: React.MouseEvent, element: string) => {
@@ -137,81 +273,6 @@ export const useEasyMode = ({
     setDragStart(initialDragState);
     dragStateRef.current = initialDragState;
   }, [cssMode, easyCustomization.elements, toggleElementSelection]);
-
-  const handlePreviewMouseMove = useCallback((e: React.MouseEvent) => {
-    if (cssMode !== 'easy' || (!isDraggingRef.current && !isResizingRef.current)) return;
-
-    e.preventDefault();
-    
-    const currentDragState = dragStateRef.current;
-    if (!currentDragState) return;
-
-    if (isResizingRef.current && selectedElement && resizeHandle) {
-      const deltaX = e.clientX - currentDragState.x;
-      const deltaY = e.clientY - currentDragState.y;
-      
-      const element = easyCustomization.elements[selectedElement];
-      if (!element) return;
-
-      let newScale = element.scale || 1;
-      
-      // Handle different resize directions with proper scaling
-      if (resizeHandle.includes('e') || resizeHandle.includes('w')) {
-        newScale = Math.max(0.3, Math.min(3, element.scale + deltaX / 200));
-      }
-      if (resizeHandle.includes('s') || resizeHandle.includes('n')) {
-        newScale = Math.max(0.3, Math.min(3, element.scale + deltaY / 200));
-      }
-      
-      // For corner handles, use average of both directions
-      if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
-        const diagonal = (deltaX + deltaY) / 2;
-        newScale = Math.max(0.3, Math.min(3, element.scale + diagonal / 200));
-      }
-      
-      setEasyCustomization(prev => ({
-        ...prev,
-        elements: {
-          ...prev.elements,
-          [selectedElement]: {
-            ...prev.elements[selectedElement],
-            scale: newScale
-          }
-        }
-      }));
-    } else if (isDraggingRef.current && (selectedElement || selectedElements.length > 0)) {
-      const deltaX = e.clientX - currentDragState.x;
-      const deltaY = e.clientY - currentDragState.y;
-      
-      const elementsToUpdate = selectedElements.length > 0 ? selectedElements : [selectedElement!];
-      
-      setEasyCustomization(prev => {
-        const newElements = { ...prev.elements };
-        
-        elementsToUpdate.forEach(element => {
-          if (element && newElements[element]) {
-            const currentElement = newElements[element];
-            const newX = snapToGrid(currentDragState.elementX + deltaX);
-            const newY = snapToGrid(currentDragState.elementY + deltaY);
-            
-            // Constrain position within profile card bounds
-            const constrained = constrainPosition(newX, newY);
-            
-            newElements[element] = {
-              ...currentElement,
-              x: constrained.x,
-              y: constrained.y,
-            };
-          }
-        });
-        
-        return {
-          ...prev,
-          elements: newElements
-        };
-      });
-    }
-  }, [cssMode, selectedElement, selectedElements, resizeHandle, snapToGrid, setEasyCustomization, constrainPosition]);
 
   const handlePreviewMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -395,7 +456,7 @@ export const useEasyMode = ({
               }
               
               // Constrain position within bounds
-              const constrained = constrainPosition(snapToGrid(newX), snapToGrid(newY));
+              const constrained = constrainPosition(snapToGrid(newX), snapToGrid(newY), previewRef);
               
               newElements[element] = {
                 ...currentElement,
@@ -437,6 +498,7 @@ export const useEasyMode = ({
     
     // Refs
     typographyPopupRef,
+    previewRef,
     
     // Handlers
     handlePreviewMouseDown,
@@ -449,5 +511,7 @@ export const useEasyMode = ({
     snapToGrid,
     isElementSelected,
     toggleElementSelection,
+    constrainPosition,
+    calculateConstraints,
   };
 };

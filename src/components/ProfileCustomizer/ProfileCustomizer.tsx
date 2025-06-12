@@ -12,19 +12,20 @@ import { useProfileData } from './hooks/useProfileData';
 import { useEasyMode } from './hooks/useEasyMode';
 
 // Components
-import { ProfileCard } from '../ProfileCard'; // Use the actual ProfileCard component
+import { ProfileCard } from '../ProfileCard';
 import { BasicInfoSection } from './components/BasicInfoSection';
 import { DisplayNameStyling } from './components/DisplayNameStyling';
 import { ImageUploadSection } from './components/ImageUploadSection';
 import { BadgeManager } from './components/BadgeManager';
 import { ContextMenu } from './components/ContextMenu';
 import { TypographyPopup } from './components/TypographyPopup';
+import { ProfileCustomizerErrorBoundary } from './components/ErrorBoundary';
 
 // Utils
 import { DEFAULT_EASY_CUSTOMIZATION } from './utils/constants';
 import type { ProfileCustomizerProps } from './types';
 
-export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({ 
+const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({ 
   isOpen, 
   onClose 
 }) => {
@@ -103,81 +104,125 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
     isMobile,
   } = useProfileCustomizer();
 
-  // Stable callback for profile loaded
+  // Enhanced profile loaded callback with comprehensive error handling
   const handleProfileLoaded = useCallback(({ user, profile }: { user: any; profile: any }) => {
-    console.log('ProfileCustomizer: Profile loaded callback', { user, profile });
+    console.log('ProfileCustomizer: Profile loaded callback', { user: user?.id, profile: !!profile });
     
-    if (!mountedRef.current) return;
+    if (!mountedRef.current) {
+      console.log('ProfileCustomizer: Component unmounted, ignoring profile load');
+      return;
+    }
     
-    setCurrentUser(user);
-    
-    if (profile) {
-      // Always set default CSS first to prevent undefined states
-      const profileCSS = profile.profile_card_css || getDefaultProfileCSS();
-      setCustomCSS(profileCSS);
+    try {
+      setCurrentUser(user);
       
-      setBio(profile.bio || '');
-      setDisplayName(profile.display_name || '');
-      setUsername(profile.username || '');
-      setOriginalUsername(profile.username || '');
-      setPronouns(profile.pronouns || '');
-      setStatus(profile.status || 'online');
-      setDisplayNameColor(profile.display_name_color || '#ffffff');
-      setDisplayNameAnimation(profile.display_name_animation || 'none');
-      setRainbowSpeed(profile.rainbow_speed || 3);
-      setAvatarUrl(profile.avatar_url);
-      setBannerUrl(profile.banner_url);
-      setBadges(profile.badges ? JSON.parse(profile.badges) : []);
-      
-      // Set previews
-      if (profile.avatar_url) setAvatarPreview(profile.avatar_url);
-      if (profile.banner_url) setBannerPreview(profile.banner_url);
-      
-      // Safe parsing with comprehensive error handling
-      try {
-        if (profile.easy_customization_data && typeof profile.easy_customization_data === 'string') {
-          const parsedData = JSON.parse(profile.easy_customization_data);
-          console.log('Successfully parsed easy customization data:', parsedData);
-          
-          // Validate the parsed data structure
-          if (parsedData && typeof parsedData === 'object' && parsedData.elements) {
-            setEasyCustomization({ 
-              ...DEFAULT_EASY_CUSTOMIZATION, 
-              ...parsedData,
-              // Ensure elements always exists with proper defaults
-              elements: {
-                ...DEFAULT_EASY_CUSTOMIZATION.elements,
-                ...parsedData.elements
-              }
-            });
+      if (profile) {
+        // Validate and set profile data with fallbacks
+        const safeProfile = {
+          profile_card_css: typeof profile.profile_card_css === 'string' ? profile.profile_card_css : getDefaultProfileCSS(),
+          bio: typeof profile.bio === 'string' ? profile.bio : '',
+          display_name: typeof profile.display_name === 'string' ? profile.display_name : '',
+          username: typeof profile.username === 'string' ? profile.username : '',
+          pronouns: typeof profile.pronouns === 'string' ? profile.pronouns : '',
+          status: ['online', 'idle', 'dnd', 'offline'].includes(profile.status) ? profile.status : 'online',
+          display_name_color: typeof profile.display_name_color === 'string' ? profile.display_name_color : '#ffffff',
+          display_name_animation: ['none', 'rainbow', 'gradient', 'pulse', 'glow'].includes(profile.display_name_animation) ? profile.display_name_animation : 'none',
+          rainbow_speed: typeof profile.rainbow_speed === 'number' && profile.rainbow_speed > 0 ? profile.rainbow_speed : 3,
+          avatar_url: typeof profile.avatar_url === 'string' ? profile.avatar_url : null,
+          banner_url: typeof profile.banner_url === 'string' ? profile.banner_url : null,
+          badges: Array.isArray(profile.badges) ? profile.badges : [],
+          easy_customization_data: profile.easy_customization_data
+        };
+        
+        // Set profile data with validation
+        setCustomCSS(safeProfile.profile_card_css);
+        setBio(safeProfile.bio);
+        setDisplayName(safeProfile.display_name);
+        setUsername(safeProfile.username);
+        setOriginalUsername(safeProfile.username);
+        setPronouns(safeProfile.pronouns);
+        setStatus(safeProfile.status);
+        setDisplayNameColor(safeProfile.display_name_color);
+        setDisplayNameAnimation(safeProfile.display_name_animation);
+        setRainbowSpeed(safeProfile.rainbow_speed);
+        setAvatarUrl(safeProfile.avatar_url);
+        setBannerUrl(safeProfile.banner_url);
+        setBadges(safeProfile.badges);
+        
+        // Set previews
+        if (safeProfile.avatar_url) setAvatarPreview(safeProfile.avatar_url);
+        if (safeProfile.banner_url) setBannerPreview(safeProfile.banner_url);
+        
+        // Enhanced easy customization parsing
+        try {
+          if (safeProfile.easy_customization_data) {
+            let parsedData;
+            
+            if (typeof safeProfile.easy_customization_data === 'string') {
+              parsedData = JSON.parse(safeProfile.easy_customization_data);
+            } else if (typeof safeProfile.easy_customization_data === 'object') {
+              parsedData = safeProfile.easy_customization_data;
+            }
+            
+            if (parsedData && typeof parsedData === 'object' && parsedData.elements) {
+              // Validate the structure
+              const validatedCustomization = {
+                ...DEFAULT_EASY_CUSTOMIZATION,
+                ...parsedData,
+                elements: {
+                  ...DEFAULT_EASY_CUSTOMIZATION.elements,
+                  ...parsedData.elements
+                }
+              };
+              
+              // Validate each element
+              Object.keys(validatedCustomization.elements).forEach(key => {
+                const element = validatedCustomization.elements[key];
+                if (!element || typeof element !== 'object') {
+                  validatedCustomization.elements[key] = DEFAULT_EASY_CUSTOMIZATION.elements[key] || {
+                    x: 0, y: 0, scale: 1, visible: true
+                  };
+                }
+              });
+              
+              setEasyCustomization(validatedCustomization);
+              console.log('Successfully loaded easy customization data');
+            } else {
+              console.warn('Easy customization data has invalid structure, using defaults');
+              setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+            }
           } else {
-            console.warn('Parsed easy customization data is invalid, using defaults');
+            console.log('No easy customization data found, using defaults');
             setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
           }
-        } else {
-          console.log('No easy customization data found, using defaults');
+        } catch (e) {
+          console.error('Failed to parse easy customization data:', e);
           setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
         }
-      } catch (e) {
-        console.error('Failed to parse easy customization data:', e);
-        console.log('Raw easy_customization_data:', profile.easy_customization_data);
-        // Always fallback to defaults instead of leaving undefined
+      } else {
+        // Initialize with proper defaults for new profile
+        console.log('No profile found, initializing with defaults');
+        setCustomCSS(getDefaultProfileCSS());
         setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
+        setStatus('online');
+        setDisplayNameColor('#ffffff');
+        setDisplayNameAnimation('none');
+        setRainbowSpeed(3);
       }
-    } else {
-      // Initialize with proper defaults for new profile
-      console.log('No profile found, initializing with defaults');
+    } catch (error) {
+      console.error('Error in handleProfileLoaded:', error);
+      // Fallback to defaults on any error
       setCustomCSS(getDefaultProfileCSS());
       setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-      setStatus('online'); // Set default status to prevent "Offline" showing
+      setStatus('online');
       setDisplayNameColor('#ffffff');
       setDisplayNameAnimation('none');
       setRainbowSpeed(3);
     }
   }, [
-    mountedRef, setCurrentUser, setCustomCSS, setBio, setDisplayName, setUsername, 
-    setOriginalUsername, setPronouns, setStatus, setDisplayNameColor, 
-    setDisplayNameAnimation, setRainbowSpeed, setAvatarUrl, setBannerUrl, 
+    mountedRef, setCurrentUser, setCustomCSS, setBio, setDisplayName, setUsername,
+    setOriginalUsername, setPronouns, setStatus, setDisplayNameColor,
+    setDisplayNameAnimation, setRainbowSpeed, setAvatarUrl, setBannerUrl,
     setBadges, setAvatarPreview, setBannerPreview, setEasyCustomization
   ]);
 
@@ -283,7 +328,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <>
+    <ProfileCustomizerErrorBoundary>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-2 overflow-hidden">
         <div className={cn(
           'window flex flex-col relative',
@@ -731,7 +776,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({
         typographyPopupRef={typographyPopupRef}
         isTheme98={isTheme98}
       />
-    </>
+    </ProfileCustomizerErrorBoundary>
   );
 };
 

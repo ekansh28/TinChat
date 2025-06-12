@@ -2,9 +2,11 @@
 import type { EasyCustomization, DisplayNameAnimation } from '../types';
 import { getDefaultProfileCSS } from '@/lib/SafeCSS';
 
-// Performance-optimized CSS generation with caching
+// Performance-optimized CSS generation with enhanced caching
 class CSSGenerator {
-  private cache = new Map<string, string>();
+  private cache = new Map<string, { css: string; timestamp: number }>();
+  private readonly MAX_CACHE_SIZE = 10;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private lastGeneratedHash = '';
 
   // Generate a hash for the current configuration
@@ -16,9 +18,24 @@ class CSSGenerator {
     return JSON.stringify({ easyCustomization, displayNameAnimation, rainbowSpeed });
   }
 
-  // Check if configuration has changed
-  private hasConfigChanged(hash: string): boolean {
-    return this.lastGeneratedHash !== hash;
+  // Improved cache management
+  private manageCacheSize(): void {
+    // Remove expired entries
+    const now = Date.now();
+    for (const [key, value] of this.cache.entries()) {
+      if (now - value.timestamp > this.CACHE_TTL) {
+        this.cache.delete(key);
+      }
+    }
+
+    // Remove oldest entries if still over limit
+    if (this.cache.size >= this.MAX_CACHE_SIZE) {
+      const sortedEntries = Array.from(this.cache.entries())
+        .sort((a, b) => a[1].timestamp - b[1].timestamp);
+      
+      const toRemove = sortedEntries.slice(0, this.cache.size - this.MAX_CACHE_SIZE + 1);
+      toRemove.forEach(([key]) => this.cache.delete(key));
+    }
   }
 
   generateCSS(
@@ -28,22 +45,31 @@ class CSSGenerator {
   ): string {
     const configHash = this.generateHash(easyCustomization, displayNameAnimation, rainbowSpeed);
     
-    // Return cached CSS if configuration hasn't changed
-    if (!this.hasConfigChanged(configHash) && this.cache.has(configHash)) {
-      return this.cache.get(configHash)!;
+    // Check cache with TTL
+    const cached = this.cache.get(configHash);
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+      return cached.css;
     }
 
     try {
-      const css = this.buildCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
-      this.cache.set(configHash, css);
-      this.lastGeneratedHash = configHash;
-      
-      // Clean up old cache entries (keep last 5)
-      if (this.cache.size > 5) {
-        const keysToDelete = Array.from(this.cache.keys()).slice(0, this.cache.size - 5);
-        keysToDelete.forEach(key => this.cache.delete(key));
+      // Validate input data
+      if (!easyCustomization || typeof easyCustomization !== 'object') {
+        console.warn('Invalid easyCustomization provided to CSS generator');
+        return getDefaultProfileCSS();
       }
 
+      const css = this.buildCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
+      
+      // Manage cache size before adding
+      this.manageCacheSize();
+      
+      // Cache with timestamp
+      this.cache.set(configHash, {
+        css,
+        timestamp: Date.now()
+      });
+      
+      this.lastGeneratedHash = configHash;
       return css;
     } catch (error) {
       console.error('Error generating CSS:', error);
@@ -443,6 +469,7 @@ class CSSGenerator {
 `;
   }
 
+  // Safe element transformation generation
   private generateElementTransforms(elements: EasyCustomization['elements']): string {
     if (!elements || typeof elements !== 'object') return '';
     
@@ -453,63 +480,80 @@ class CSSGenerator {
       
       const styles: string[] = [];
       
-      if (props.visible === false) {
+      // Safe property access with validation
+      const safeProps = {
+        visible: typeof props.visible === 'boolean' ? props.visible : true,
+        x: Number.isFinite(props.x) ? props.x : 0,
+        y: Number.isFinite(props.y) ? props.y : 0,
+        scale: Number.isFinite(props.scale) && props.scale > 0 ? props.scale : 1,
+        width: Number.isFinite(props.width) && props.width > 0 ? props.width : undefined,
+        height: Number.isFinite(props.height) && props.height > 0 ? props.height : undefined,
+        color: typeof props.color === 'string' && props.color.trim() ? props.color : undefined,
+        fontFamily: typeof props.fontFamily === 'string' && props.fontFamily.trim() ? props.fontFamily : undefined,
+        fontSize: Number.isFinite(props.fontSize) && props.fontSize > 0 ? props.fontSize : undefined,
+        background: typeof props.background === 'string' && props.background.trim() !== 'none' ? props.background : undefined,
+        padding: typeof props.padding === 'string' && props.padding.trim() !== '0' ? props.padding : undefined,
+        borderRadius: typeof props.borderRadius === 'string' && props.borderRadius.trim() !== '0' ? props.borderRadius : undefined,
+        border: typeof props.border === 'string' && props.border.trim() !== 'none' ? props.border : undefined,
+        zIndex: Number.isFinite(props.zIndex) ? props.zIndex : undefined
+      };
+      
+      if (!safeProps.visible) {
         styles.push('display: none !important;');
       } else {
-        const x = typeof props.x === 'number' ? props.x : 0;
-        const y = typeof props.y === 'number' ? props.y : 0;
-        const scale = typeof props.scale === 'number' ? props.scale : 1;
+        // Constrain movement within reasonable bounds
+        const constrainedX = Math.max(-100, Math.min(300, safeProps.x));
+        const constrainedY = Math.max(-100, Math.min(500, safeProps.y));
+        const constrainedScale = Math.max(0.1, Math.min(3, safeProps.scale));
         
-        // Constrain movement within profile card bounds
-        const constrainedX = Math.max(-50, Math.min(250, x));
-        const constrainedY = Math.max(-50, Math.min(450, y));
-        
-        if (constrainedX !== 0 || constrainedY !== 0 || scale !== 1) {
-          styles.push(`transform: translate(${constrainedX}px, ${constrainedY}px) scale(${scale}) !important;`);
+        if (constrainedX !== 0 || constrainedY !== 0 || constrainedScale !== 1) {
+          styles.push(`transform: translate(${constrainedX}px, ${constrainedY}px) scale(${constrainedScale}) !important;`);
           styles.push('position: relative !important;');
         }
         
-        if (typeof props.width === 'number') {
-          const constrainedWidth = Math.min(props.width, 280);
+        // Apply other safe properties
+        if (safeProps.width) {
+          const constrainedWidth = Math.min(safeProps.width, 400);
           styles.push(`width: ${constrainedWidth}px !important;`);
         }
         
-        if (typeof props.height === 'number') {
-          styles.push(`height: ${props.height}px !important;`);
+        if (safeProps.height) {
+          const constrainedHeight = Math.min(safeProps.height, 600);
+          styles.push(`height: ${constrainedHeight}px !important;`);
         }
         
-        if (props.color && typeof props.color === 'string') {
-          styles.push(`color: ${props.color} !important;`);
+        if (safeProps.color) {
+          styles.push(`color: ${safeProps.color} !important;`);
         }
         
-        if (props.fontFamily && typeof props.fontFamily === 'string') {
-          const fontFamily = props.fontFamily === 'default' ? 'inherit' : props.fontFamily;
+        if (safeProps.fontFamily) {
+          const fontFamily = safeProps.fontFamily === 'default' ? 'inherit' : safeProps.fontFamily;
           styles.push(`font-family: ${fontFamily} !important;`);
         }
         
-        if (typeof props.fontSize === 'number') {
-          styles.push(`font-size: ${props.fontSize}px !important;`);
+        if (safeProps.fontSize) {
+          const constrainedSize = Math.max(8, Math.min(48, safeProps.fontSize));
+          styles.push(`font-size: ${constrainedSize}px !important;`);
         }
 
-        // New background properties
-        if (props.background && typeof props.background === 'string' && props.background !== 'none') {
-          styles.push(`background: ${props.background} !important;`);
+        if (safeProps.background) {
+          styles.push(`background: ${safeProps.background} !important;`);
         }
 
-        if (props.padding && typeof props.padding === 'string' && props.padding !== '0') {
-          styles.push(`padding: ${props.padding} !important;`);
+        if (safeProps.padding) {
+          styles.push(`padding: ${safeProps.padding} !important;`);
         }
 
-        if (props.borderRadius && typeof props.borderRadius === 'string' && props.borderRadius !== '0') {
-          styles.push(`border-radius: ${props.borderRadius} !important;`);
+        if (safeProps.borderRadius) {
+          styles.push(`border-radius: ${safeProps.borderRadius} !important;`);
         }
 
-        if (props.border && typeof props.border === 'string' && props.border !== 'none') {
-          styles.push(`border: ${props.border} !important;`);
+        if (safeProps.border) {
+          styles.push(`border: ${safeProps.border} !important;`);
         }
 
-        if (typeof props.zIndex === 'number') {
-          styles.push(`z-index: ${props.zIndex} !important;`);
+        if (safeProps.zIndex !== undefined) {
+          styles.push(`z-index: ${safeProps.zIndex} !important;`);
         }
       }
       
@@ -562,18 +606,23 @@ class CSSGenerator {
 `;
   }
 
-  // Clear cache (useful for testing or memory management)
+  // Enhanced cache statistics
+  getCacheStats(): { size: number; hits: number; memory: number } {
+    let totalMemory = 0;
+    for (const [key, value] of this.cache.entries()) {
+      totalMemory += key.length + value.css.length;
+    }
+    
+    return {
+      size: this.cache.size,
+      hits: this.cache.size,
+      memory: totalMemory
+    };
+  }
+
   clearCache(): void {
     this.cache.clear();
     this.lastGeneratedHash = '';
-  }
-
-  // Get cache statistics
-  getCacheStats(): { size: number; hits: number } {
-    return {
-      size: this.cache.size,
-      hits: this.cache.size // Simplified metric
-    };
   }
 }
 
