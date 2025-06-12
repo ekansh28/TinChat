@@ -74,7 +74,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     : [message.content]
   ), [message.content, theme]);
 
-  // Determine display name and styling for current message with better fallbacks
+  // IMPROVED: Better display name and styling logic with proper fallbacks
   let displayName: string;
   let displayNameColor: string;
   let displayNameAnimation: string;
@@ -83,18 +83,24 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   if (message.sender === 'self') {
     displayName = ownInfo.username;
-    displayNameColor = ownInfo.displayNameColor || '#0066cc'; // Ensure fallback
+    displayNameColor = ownInfo.displayNameColor || '#0066cc';
     displayNameAnimation = ownInfo.displayNameAnimation || 'none';
     rainbowSpeed = 3; // Default for own messages
     authIdToUse = ownInfo.authId;
   } else {
-    // For partner messages, prioritize message styling data over partner info
+    // FIXED: For partner messages, prioritize message data over cached partner info
+    // This ensures the most recent styling is always used
     displayName = message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
     
-    // Better color fallback logic - ensure we always have a visible color
-    displayNameColor = message.senderDisplayNameColor || 
-                      partnerInfo?.displayNameColor || 
-                      '#ff6b6b'; // Changed from #ff0000 to a more visible red
+    // FIXED: Ensure proper color fallback and better default colors
+    if (message.senderDisplayNameColor) {
+      displayNameColor = message.senderDisplayNameColor;
+    } else if (partnerInfo?.displayNameColor) {
+      displayNameColor = partnerInfo.displayNameColor;
+    } else {
+      // Better fallback color that's more visible
+      displayNameColor = '#ff6b6b'; // Softer red that's more visible
+    }
     
     displayNameAnimation = message.senderDisplayNameAnimation || 
                           partnerInfo?.displayNameAnimation || 
@@ -104,26 +110,39 @@ const MessageRow: React.FC<MessageRowProps> = ({
     authIdToUse = message.senderAuthId || partnerInfo?.authId || null;
   }
 
+  // DEBUGGING: Log color values to help troubleshoot
+  if (message.sender === 'partner') {
+    console.log('MessageRow Partner Color Debug:', {
+      messageColor: message.senderDisplayNameColor,
+      partnerInfoColor: partnerInfo?.displayNameColor,
+      finalColor: displayNameColor,
+      username: displayName
+    });
+  }
+
   const isClickable = authIdToUse && authIdToUse !== 'anonymous' && authIdToUse !== null;
   const displayNameClass = getDisplayNameClass(displayNameAnimation);
 
-  // Enhanced styling logic to ensure colors are always visible
+  // Enhanced styling logic to ensure colors are always visible and properly applied
   const getDisplayNameStyle = () => {
     const baseStyle: React.CSSProperties = {};
     
-    // For rainbow and gradient animations, we still set a fallback color
-    // in case the CSS animations don't load properly
+    // FIXED: Ensure colors are properly applied for all animation types
     if (displayNameAnimation === 'rainbow') {
       baseStyle.animationDuration = `${rainbowSpeed}s`;
-      // Set a fallback color that will be overridden by CSS animation
-      baseStyle.color = displayNameColor;
+      // For rainbow, we don't set color as it's handled by CSS animation
+      // But we ensure the animation class is applied
     } else if (displayNameAnimation === 'gradient') {
       baseStyle.animationDuration = `4s`;
-      // Set a fallback color that will be overridden by CSS animation  
-      baseStyle.color = displayNameColor;
+      // For gradient, we don't set color as it's handled by CSS animation
     } else {
-      // For non-animated names, always use the specified color
+      // FIXED: For non-animated names, ALWAYS use the specified color
       baseStyle.color = displayNameColor;
+      
+      // Ensure the color is valid and visible
+      if (!displayNameColor || displayNameColor === 'undefined') {
+        baseStyle.color = message.sender === 'self' ? '#0066cc' : '#ff6b6b';
+      }
     }
     
     return baseStyle;

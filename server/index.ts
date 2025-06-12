@@ -228,8 +228,18 @@ async function fetchUserProfile(authId: string): Promise<any> {
     const { data, error } = await supabase
       .from('user_profiles')
       .select(`
-        username, display_name, avatar_url, banner_url, pronouns, status,
-        display_name_color, display_name_animation, rainbow_speed, badges
+        username, 
+        display_name, 
+        avatar_url, 
+        banner_url, 
+        pronouns, 
+        status,
+        display_name_color, 
+        display_name_animation, 
+        rainbow_speed, 
+        badges,
+        last_seen,
+        is_online
       `)
       .eq('id', authId)
       .single();
@@ -238,6 +248,11 @@ async function fetchUserProfile(authId: string): Promise<any> {
       if (error.code !== 'PGRST116') {
         console.error(`[PROFILE_ERROR] Error fetching profile for ${authId}:`, error);
       }
+      return null;
+    }
+
+    if (!data) {
+      console.warn(`[PROFILE_ERROR] No data returned for ${authId}`);
       return null;
     }
 
@@ -252,7 +267,26 @@ async function fetchUserProfile(authId: string): Promise<any> {
       }
     }
 
-    return { ...data, badges: parsedBadges };
+    // FIXED: Ensure all styling fields have proper defaults
+    const profileData = {
+      ...data,
+      badges: parsedBadges,
+      display_name_color: data.display_name_color || '#ff6b6b', // Better default
+      display_name_animation: data.display_name_animation || 'none',
+      rainbow_speed: data.rainbow_speed || 3,
+      status: data.status || 'online'
+    };
+
+    // DEBUGGING: Log profile data to verify styling fields
+    console.log(`[PROFILE_FETCH] Fetched profile for ${authId}:`, {
+      username: profileData.username,
+      display_name: profileData.display_name,
+      color: profileData.display_name_color,
+      animation: profileData.display_name_animation,
+      speed: profileData.rainbow_speed
+    });
+
+    return profileData;
   } catch (err) {
     console.error(`[PROFILE_EXCEPTION] Exception fetching profile for ${authId}:`, err);
     return null;
@@ -538,6 +572,8 @@ io.on('connection', (socket) => {
     }
   });
 
+// In server/index.ts - Fix the sendMessage handler to ensure proper styling data
+
   socket.on('sendMessage', async (payload) => {
     try {
       const { roomId, message, username, authId } = SendMessagePayloadSchema.parse(payload);
@@ -549,21 +585,34 @@ io.on('connection', (socket) => {
       }
 
       let senderUsername = 'Stranger';
-      let senderDisplayNameColor = '#ff0000';
+      let senderDisplayNameColor = '#ff6b6b'; // FIXED: Better default color
       let senderDisplayNameAnimation = 'none';
       let senderRainbowSpeed = 3;
 
       if (authId) {
         if (username) {
           senderUsername = username;
+        }
+        
+        // ALWAYS fetch fresh profile data for each message to ensure styling is current
+        const profile = await fetchUserProfile(authId);
+        if (profile) {
+          senderUsername = profile.display_name || profile.username || 'Stranger';
+          // FIXED: Ensure colors are properly set and not null/undefined
+          senderDisplayNameColor = profile.display_name_color || '#ff6b6b';
+          senderDisplayNameAnimation = profile.display_name_animation || 'none';
+          senderRainbowSpeed = profile.rainbow_speed || 3;
+          
+          // DEBUGGING: Log the styling data being sent
+          console.log(`[MESSAGE_STYLE] Sending message with styling:`, {
+            authId,
+            username: senderUsername,
+            color: senderDisplayNameColor,
+            animation: senderDisplayNameAnimation,
+            speed: senderRainbowSpeed
+          });
         } else {
-          const profile = await fetchUserProfile(authId);
-          if (profile) {
-            senderUsername = profile.display_name || profile.username || 'Stranger';
-            senderDisplayNameColor = profile.display_name_color || '#ff0000';
-            senderDisplayNameAnimation = profile.display_name_animation || 'none';
-            senderRainbowSpeed = profile.rainbow_speed || 3;
-          }
+          console.warn(`[MESSAGE_STYLE] No profile found for ${authId}, using defaults`);
         }
       }
 
@@ -579,15 +628,20 @@ io.on('connection', (socket) => {
 
       const partnerId = roomDetails.users.find((id: string) => id !== socket.id);
       if (partnerId) {
-        console.log(`[MESSAGE_RELAY] ${socket.id} → ${partnerId} in room ${roomId}`);
+        console.log(`[MESSAGE_RELAY] ${socket.id} → ${partnerId} in room ${roomId}`, {
+          styling: {
+            color: senderDisplayNameColor,
+            animation: senderDisplayNameAnimation,
+            username: senderUsername
+          }
+        });
         io.to(partnerId).emit('receiveMessage', messagePayload);
       }
     } catch (error: any) {
       console.warn(`[VALIDATION_FAIL] Invalid sendMessage from ${socket.id}:`, error.message);
       socket.emit('error', { message: 'Invalid payload for sendMessage.' });
     }
-  });
-
+  }); 
   socket.on('typing_start', (payload) => {
     try {
       const { roomId } = RoomIdPayloadSchema.parse(payload);

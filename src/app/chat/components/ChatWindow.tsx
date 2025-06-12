@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import MessageRow from './MessageRow';
 import PartnerTypingIndicator from './PartnerTypingIndicator';
@@ -61,12 +61,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  
+  // NEW: Track the most recent partner message data for typing indicator
+  const [recentPartnerData, setRecentPartnerData] = useState<{
+    senderUsername?: string;
+    senderDisplayNameColor?: string;
+    senderDisplayNameAnimation?: string;
+    senderRainbowSpeed?: number;
+  } | null>(null);
 
   const currentInputAreaHeight = isMobile ? INPUT_AREA_HEIGHT_MOBILE : INPUT_AREA_HEIGHT;
   const messagesContainerComputedHeight = useMemo(() => 
     `calc(100% - ${currentInputAreaHeight}px)`, 
     [currentInputAreaHeight]
   );
+
+  // NEW: Update recent partner data when messages change
+  useEffect(() => {
+    // Find the most recent partner message to get latest styling data
+    const partnerMessages = messages.filter(msg => msg.sender === 'partner');
+    if (partnerMessages.length > 0) {
+      const latestPartnerMessage = partnerMessages[partnerMessages.length - 1];
+      if (latestPartnerMessage.senderUsername || latestPartnerMessage.senderDisplayNameColor) {
+        setRecentPartnerData({
+          senderUsername: latestPartnerMessage.senderUsername,
+          senderDisplayNameColor: latestPartnerMessage.senderDisplayNameColor,
+          senderDisplayNameAnimation: latestPartnerMessage.senderDisplayNameAnimation,
+          senderRainbowSpeed: latestPartnerMessage.senderRainbowSpeed
+        });
+      }
+    }
+  }, [messages]);
 
   // Check if pink theme is active by looking for the CSS file in the DOM
   const isPinkThemeActive = useMemo(() => {
@@ -178,6 +203,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
               theme={theme}
               partnerInfo={partnerInfo}
+              recentPartnerData={recentPartnerData} // NEW: Pass recent partner data
             />
           )}
           

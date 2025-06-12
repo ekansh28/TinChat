@@ -19,7 +19,11 @@ import MatchStatus from './components/MatchStatus';
 // Import hooks and utilities
 import { useChatSocket, useChatState } from './hooks/useChatSocket';
 import { PartnerInfo, Message, changeFavicon } from './utils/ChatHelpers';
-
+interface DebugConsoleProps {
+  messages: any[];
+  partnerInfo: any;
+  isVisible?: boolean;
+}
 // Constants
 const FAVICON_IDLE = '/Idle.ico';
 const FAVICON_SEARCHING = '/Searching.ico';
@@ -35,6 +39,118 @@ const SYS_MSG_PARTNER_DISCONNECTED = 'Your partner has disconnected.';
 const SYS_MSG_COMMON_INTERESTS_PREFIX = 'You both like ';
 
 const LOG_PREFIX = "ChatPageClientContent";
+
+const DebugConsole: React.FC<DebugConsoleProps> = ({ 
+  messages, 
+  partnerInfo, 
+  isVisible = false 
+}) => {
+  const [debugVisible, setDebugVisible] = useState(isVisible);
+  const [lastPartnerMessage, setLastPartnerMessage] = useState<any>(null);
+
+  useEffect(() => {
+    const partnerMessages = messages.filter(msg => msg.sender === 'partner');
+    if (partnerMessages.length > 0) {
+      setLastPartnerMessage(partnerMessages[partnerMessages.length - 1]);
+    }
+  }, [messages]);
+
+  if (!debugVisible) {
+    return (
+      <button 
+        onClick={() => setDebugVisible(true)}
+        className="fixed bottom-4 right-4 bg-blue-500 text-white px-3 py-1 rounded text-xs z-50"
+      >
+        Debug
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 bg-black bg-opacity-90 text-white p-4 rounded-lg max-w-md z-50 text-xs font-mono">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-bold">Message Debug Console</h3>
+        <button 
+          onClick={() => setDebugVisible(false)}
+          className="text-red-400 hover:text-red-200"
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        <div>
+          <strong className="text-green-400">Partner Info (Cached):</strong>
+          <pre className="text-gray-300 ml-2">
+            {JSON.stringify({
+              username: partnerInfo?.username,
+              displayName: partnerInfo?.displayName,
+              displayNameColor: partnerInfo?.displayNameColor,
+              displayNameAnimation: partnerInfo?.displayNameAnimation,
+              rainbowSpeed: partnerInfo?.rainbowSpeed,
+              authId: partnerInfo?.authId
+            }, null, 2)}
+          </pre>
+        </div>
+
+        <div>
+          <strong className="text-blue-400">Last Partner Message:</strong>
+          <pre className="text-gray-300 ml-2">
+            {lastPartnerMessage ? JSON.stringify({
+              content: lastPartnerMessage.content?.substring(0, 50) + '...',
+              senderUsername: lastPartnerMessage.senderUsername,
+              senderDisplayNameColor: lastPartnerMessage.senderDisplayNameColor,
+              senderDisplayNameAnimation: lastPartnerMessage.senderDisplayNameAnimation,
+              senderRainbowSpeed: lastPartnerMessage.senderRainbowSpeed,
+              senderAuthId: lastPartnerMessage.senderAuthId
+            }, null, 2) : 'No partner messages yet'}
+          </pre>
+        </div>
+
+        <div>
+          <strong className="text-yellow-400">Recent Partner Messages:</strong>
+          <div className="ml-2 space-y-1">
+            {messages
+              .filter(msg => msg.sender === 'partner')
+              .slice(-3)
+              .map((msg, idx) => (
+                <div key={idx} className="text-gray-300">
+                  <div>Color: {msg.senderDisplayNameColor || 'undefined'}</div>
+                  <div>Username: {msg.senderUsername || 'undefined'}</div>
+                  <div>Animation: {msg.senderDisplayNameAnimation || 'none'}</div>
+                  <hr className="border-gray-600 my-1" />
+                </div>
+              ))
+            }
+          </div>
+        </div>
+
+        <div>
+          <strong className="text-purple-400">Color Comparison:</strong>
+          <div className="ml-2 space-y-1">
+            <div className="flex items-center gap-2">
+              <span>Cached:</span>
+              <div 
+                className="w-4 h-4 border border-white"
+                style={{ backgroundColor: partnerInfo?.displayNameColor || '#ff0000' }}
+              />
+              <span>{partnerInfo?.displayNameColor || 'undefined'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Latest Msg:</span>
+              <div 
+                className="w-4 h-4 border border-white"
+                style={{ backgroundColor: lastPartnerMessage?.senderDisplayNameColor || '#ff0000' }}
+              />
+              <span>{lastPartnerMessage?.senderDisplayNameColor || 'undefined'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
@@ -127,6 +243,7 @@ const ChatPageClientContent: React.FC = () => {
     return { width: '600px', height: '600px' };
   }, [isMobile]);
 
+  
   // CSS for display name animations - always included since we support these features
   const displayNameAnimationCSS = `
     .display-name-rainbow {

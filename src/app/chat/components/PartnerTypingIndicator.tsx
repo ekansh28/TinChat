@@ -13,6 +13,13 @@ interface PartnerTypingIndicatorProps {
     displayNameAnimation?: string;
     rainbowSpeed?: number;
   };
+  // NEW: Add these props to get the most recent partner data
+  recentPartnerData?: {
+    senderUsername?: string;
+    senderDisplayNameColor?: string;
+    senderDisplayNameAnimation?: string;
+    senderRainbowSpeed?: number;
+  };
   className?: string;
 }
 
@@ -21,6 +28,7 @@ const PartnerTypingIndicator: React.FC<PartnerTypingIndicatorProps> = ({
   partnerName = 'Partner',
   theme,
   partnerInfo,
+  recentPartnerData, // NEW
   className 
 }) => {
   const [dots, setDots] = useState('.');
@@ -40,8 +48,25 @@ const PartnerTypingIndicator: React.FC<PartnerTypingIndicatorProps> = ({
 
   if (!isTyping) return null;
 
-  const displayName = partnerInfo?.displayName || partnerInfo?.username || partnerName;
-  const displayNameClass = getDisplayNameClass(partnerInfo?.displayNameAnimation);
+  // FIXED: Prioritize recent message data over cached partner info
+  const displayName = recentPartnerData?.senderUsername || 
+                     partnerInfo?.displayName || 
+                     partnerInfo?.username || 
+                     partnerName;
+  
+  const displayNameColor = recentPartnerData?.senderDisplayNameColor || 
+                          partnerInfo?.displayNameColor || 
+                          '#ff6b6b'; // Better fallback color (more visible than #ff0000)
+  
+  const displayNameAnimation = recentPartnerData?.senderDisplayNameAnimation || 
+                              partnerInfo?.displayNameAnimation || 
+                              'none';
+  
+  const rainbowSpeed = recentPartnerData?.senderRainbowSpeed || 
+                      partnerInfo?.rainbowSpeed || 
+                      3;
+
+  const displayNameClass = getDisplayNameClass(displayNameAnimation);
 
   return (
     <div className={cn(
@@ -52,10 +77,10 @@ const PartnerTypingIndicator: React.FC<PartnerTypingIndicatorProps> = ({
       <span 
         className={cn(displayNameClass)}
         style={{ 
-          color: partnerInfo?.displayNameAnimation === 'rainbow' || partnerInfo?.displayNameAnimation === 'gradient'
+          color: displayNameAnimation === 'rainbow' || displayNameAnimation === 'gradient'
             ? undefined 
-            : (partnerInfo?.displayNameColor || '#999999'),
-          animationDuration: partnerInfo?.displayNameAnimation === 'rainbow' ? `${partnerInfo?.rainbowSpeed || 3}s` : undefined
+            : displayNameColor,
+          animationDuration: displayNameAnimation === 'rainbow' ? `${rainbowSpeed}s` : undefined
         }}
       >
         {displayName}
