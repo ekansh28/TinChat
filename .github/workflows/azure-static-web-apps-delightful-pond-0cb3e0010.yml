@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     permissions:
-      id-token: write
+      id-token: write  # Required for OIDC token
       contents: read
     steps:
       - uses: actions/checkout@v3
@@ -23,14 +23,14 @@ jobs:
           submodules: true
           lfs: false
 
-
-      - name: Get Id Token
-        uses: actions/github-script@v7
+      - name: Get OIDC Token
         id: idtoken
+        uses: actions/github-script@v7
         with:
           script: |
-            const coredemo = require('@actions/core')
-            return await coredemo.getIDToken()
+            const core = require('@actions/core');
+            const idToken = await core.getIDToken();
+            return idToken;
           result-encoding: string
 
       - name: Build And Deploy
@@ -39,9 +39,9 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_DELIGHTFUL_POND_0CB3E0010 }}
           action: "upload"
-          app_location: "/" # Path to Next.js app
-          api_location: "" # If using Azure Functions API, add the path here
-          output_location: "" # Leave blank for Next.js – it auto-detects
+          app_location: "/"
+          api_location: ""
+          output_location: ""
           github_id_token: ${{ steps.idtoken.outputs.result }}
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -49,8 +49,6 @@ jobs:
           NEXT_PUBLIC_SOCKET_SERVER_URL: ${{ secrets.NEXT_PUBLIC_SOCKET_SERVER_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-
-  # Optional: Closes preview environments for closed PRs
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
