@@ -52,8 +52,8 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return (
       <div className={cn(
         "mb-2 message-row",
-        // MOBILE: Adjust margin for bottom-to-top flow
-        isMobile && "mb-1 mt-2"
+        // MOBILE: Normal margin for chronological order
+        isMobile && "mb-1"
       )}>
         <div className={cn(
           "text-center w-full text-xs italic",
@@ -67,25 +67,14 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  // MOBILE: For bottom-to-top messaging, we need to adjust divider logic
+  // FIXED: Normal divider logic for chronological order
   const showDivider = useMemo(() => {
-    if (isMobile) {
-      // On mobile with reversed order, we show dividers differently
-      // Since messages are reversed, we check if the NEXT message (in display order) is different
-      return theme === 'theme-7' &&
-        previousMessageSender &&
-        ['self', 'partner'].includes(previousMessageSender) &&
-        ['self', 'partner'].includes(message.sender) &&
-        message.sender !== previousMessageSender;
-    } else {
-      // Desktop: normal divider logic
-      return theme === 'theme-7' &&
-        previousMessageSender &&
-        ['self', 'partner'].includes(previousMessageSender) &&
-        ['self', 'partner'].includes(message.sender) &&
-        message.sender !== previousMessageSender;
-    }
-  }, [theme, previousMessageSender, message.sender, isMobile]);
+    return theme === 'theme-7' &&
+      previousMessageSender &&
+      ['self', 'partner'].includes(previousMessageSender) &&
+      ['self', 'partner'].includes(message.sender) &&
+      message.sender !== previousMessageSender;
+  }, [theme, previousMessageSender, message.sender]);
 
   const messageContent = useMemo(() => (
     theme === 'theme-98'
@@ -217,19 +206,16 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   return (
     <>
-      {/* MOBILE: Divider positioning adjusted for bottom-to-top */}
+      {/* FIXED: Normal divider positioning for chronological order */}
       {showDivider && (
         <div
-          className={cn(
-            "h-[2px] border border-[#CEDCE5] bg-[#64B2CF]",
-            isMobile ? "mt-1 mb-1" : "mb-1"
-          )}
+          className="h-[2px] border border-[#CEDCE5] bg-[#64B2CF] mb-1"
           aria-hidden="true"
         ></div>
       )}
       <div className={cn(
         "break-words message-row", 
-        // MOBILE: Optimized spacing and text size for bottom-to-top flow
+        // MOBILE: Optimized spacing and text size for normal chronological order
         isMobile ? "mb-1 text-sm leading-relaxed py-0.5" : "mb-1",
         // Add sender-specific styling for better visual separation on mobile
         isMobile && message.sender === 'self' && "ml-2",

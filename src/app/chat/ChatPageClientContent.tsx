@@ -608,7 +608,7 @@ const ChatPageClientContent: React.FC = () => {
     }
   }, [isConnected, isAuthLoading, isPartnerConnected, isFindingPartner, interests, authId, emitFindPartner, setIsFindingPartner, addSystemMessage]);
 
-  // Advanced favicon and system message effects
+  // FIXED: Advanced favicon and system message effects - Clean version
   useEffect(() => {
     if (successTransitionIntervalRef.current) clearInterval(successTransitionIntervalRef.current);
     if (successTransitionEndTimeoutRef.current) clearTimeout(successTransitionEndTimeoutRef.current);
@@ -861,7 +861,9 @@ const ChatPageClientContent: React.FC = () => {
       {/* Hide HomeButton on mobile to save space */}
       {!isMobile && <HomeButton />}
       
+      {/* ADDED: Scoping wrapper for mobile CSS */}
       <div className={cn(
+        "chat-page-container", // This scopes all mobile CSS
         "flex flex-col items-center justify-center",
         isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
       )}>

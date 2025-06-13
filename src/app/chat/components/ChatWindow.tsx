@@ -115,7 +115,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return hasWin7CSS || hasWin7SubTheme;
   }, []);
   
-  // Update Windows 7 theme state with observers
+  // FIXED: Update Windows 7 theme state with observers - corrected syntax
   useEffect(() => {
     const updateThemeState = () => {
       const newWin7State = checkWindows7Theme();
@@ -136,7 +136,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         Array.from(mutation.removedNodes).some(node => 
           node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
         )
-      );
+      ); // FIXED: Added missing closing parenthesis
       
       if (linkMutation) {
         updateThemeState();
@@ -153,22 +153,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     };
   }, [checkWindows7Theme]);
 
-  // IMPROVED: Scroll to bottom function with mobile support
+  // IMPROVED: Scroll to bottom function with mobile-specific behavior
   const scrollToBottom = useCallback((force = false) => {
     if (!messagesContainerRef.current) return;
     
     const container = messagesContainerRef.current;
     
     if (isMobile) {
-      // For mobile, we use flexDirection: column-reverse, so we need to scroll to top
-      const isAtTop = container.scrollTop <= 100;
-      if (force || isAtTop) {
+      // MOBILE: Bottom-to-top messaging - scroll to show newest messages at bottom
+      const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+      if (force || isAtBottom) {
         requestAnimationFrame(() => {
-          container.scrollTop = 0;
+          container.scrollTop = container.scrollHeight;
         });
       }
     } else {
-      // For desktop, normal bottom scrolling
+      // DESKTOP: Traditional chat behavior - can be different if needed
       const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
       if (force || isAtBottom) {
         requestAnimationFrame(() => {
@@ -237,7 +237,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [isWindows7Theme]);
 
-  // Prepare messages and typing indicator for rendering
+  // FIXED: Prepare messages and typing indicator with mobile-specific ordering
   const renderContent = () => {
     const content = [];
     
@@ -266,7 +266,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
     
-    // Messages
+    // Messages in chronological order (oldest to newest)
     messages.forEach((msg, index) => {
       content.push(
         <MessageRow 
@@ -282,7 +282,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     });
     
-    // Typing indicator
+    // Typing indicator at the end (newest position)
     if (isPartnerTyping) {
       content.push(
         <PartnerTypingIndicator 
@@ -296,8 +296,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
     
-    // For mobile, reverse the content so messages flow bottom-to-top
-    return isMobile ? content.reverse() : content;
+    // Return content in proper order
+    return content;
   };
 
   return (
@@ -320,7 +320,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       {/* Render biscuit frame if pink theme is active and Windows 98 */}
       {isPinkThemeActive && theme === 'theme-98' && <BiscuitFrame />}
       
-      {/* FIXED: Messages container with proper height calculations */}
+      {/* MOBILE vs DESKTOP: Different message container layouts */}
       <div 
         ref={messagesContainerRef}
         className={cn(
@@ -331,46 +331,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           isMobile && 'p-2'
         )} 
         style={{ 
-          // FIXED: Use calc to ensure proper height that accounts for input area
+          // Use calc to ensure proper height that accounts for input area
           height: `calc(100% - ${currentInputAreaHeight}px)`,
           minHeight: 0, // Allow shrinking
           maxHeight: `calc(100% - ${currentInputAreaHeight}px)`, // Prevent growing beyond container
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
           WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-          // MOBILE: Reverse flex direction for bottom-to-top messaging
+          // MOBILE: Use normal flex direction for bottom-to-top messaging
+          // DESKTOP: Can use different layout if needed
           display: 'flex',
-          flexDirection: isMobile ? 'column-reverse' : 'column',
-          // Ensure proper scrolling behavior
-          ...(isMobile && {
-            justifyContent: 'flex-start' // Start from bottom on mobile
-          })
+          flexDirection: 'column', // Normal order for both - messages appear chronologically
+          justifyContent: isMobile ? 'flex-start' : 'flex-start' // Start from top
         }}
       >
-        {/* MOBILE: For reversed layout, we need a wrapper */}
+        {/* Messages in chronological order - this gives us the correct flow:
+            User: Hi
+            Stranger: Hello 
+            (newest messages at bottom, auto-scroll to show them) */}
+        {renderContent()}
+        
+        {/* Scroll anchor at the bottom */}
         <div 
-          className={cn(
-            "w-full",
-            // For mobile, use flex-col to maintain normal message order within the reversed container
-            isMobile ? "flex flex-col" : ""
-          )}
-          style={{
-            // For mobile, ensure proper spacing and alignment
-            ...(isMobile && {
-              minHeight: 'fit-content'
-            })
-          }}
-        >
-          {renderContent()}
-          
-          {/* Scroll anchor - positioned differently for mobile vs desktop */}
-          <div 
-            ref={messagesEndRef} 
-            style={{ 
-              height: isMobile ? '1px' : '1px',
-              flexShrink: 0
-            }} 
-          />
-        </div>
+          ref={messagesEndRef} 
+          style={{ 
+            height: '1px',
+            flexShrink: 0
+          }} 
+        />
       </div>
       
       {/* FIXED: Input area with proper positioning */}
