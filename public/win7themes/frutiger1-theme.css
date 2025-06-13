@@ -1,5 +1,5 @@
 /* Windows 7 Frutiger Aero Theme - frutiger1-theme.css */
-/* UPDATED: 50% more transparent + fixed background */
+/* UPDATED: 50% more transparent + fixed background + coral overlay */
 
 /* Frutiger Aero background with wallpaper - HIGHER SPECIFICITY */
 html.subtheme-frutiger1-theme,
@@ -21,8 +21,23 @@ body.subtheme-frutiger1-theme,
   background-image: url('/win7wallpapers/frutiger1.jpeg') !important;
 }
 
-
-
+/* Coral overlay images in bottom corners that cursor goes behind */
+.subtheme-frutiger1-theme::before {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    url('/win7wallpapers/frutiger1coralleft.png'),
+    url('/win7wallpapers/frutiger1coralright.png');
+  background-size: 13%, 13%; /* Reduced by 30% */
+  background-position: bottom left, bottom right;
+  background-repeat: no-repeat, no-repeat;
+  pointer-events: none;
+  z-index: 9999;
+}
 /* Glass window styling with cyan theme - 50% more transparent */
 .subtheme-frutiger1-theme .window.glass.active {
   background: rgba(0, 255, 255, 0.075) !important;
@@ -62,6 +77,46 @@ body.subtheme-frutiger1-theme,
   color: #003d4d !important;
   font-weight: 500 !important;
   text-shadow: 0 1px 3px rgba(255, 255, 255, 0.45) !important;
+}
+
+
+
+
+/* Goldfish bubble - right side with proper scaling */
+.subtheme-frutiger1-theme .title-bar {
+  position: relative;
+  overflow: visible;
+  padding-right: 60px !important; /* Space for bubble */
+}
+
+/* Goldfish bubble for specific chat window */
+.subtheme-frutiger1-theme .window.flex.flex-col.relative .title-bar::after {
+  content: '';
+  position: absolute;
+  right: -66px;
+  top: -120px;
+  width: 100px;
+  height: 100px;
+  background-image: url('/icons/goldfishbubble.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  z-index: 9998;
+  animation: gentleBob 3s ease-in-out infinite;
+  transform: scale(1.8);
+  transform-origin: right top;
+}
+
+@keyframes gentleBob {
+  0%, 100% { transform: scale(1.8) translateY(-3px); }
+  50% { transform: scale(1.8) translateY(3px); }
+}
+
+/* Remove any previous positioning adjustments */
+.subtheme-frutiger1-theme .window::after {
+  display: none; /* Disables any previous window-level bubble */
 }
 
 /* Window body glass effect - 50% more transparent */
@@ -241,6 +296,11 @@ body.subtheme-frutiger1-theme,
   0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.2; }
   33% { transform: rotate(120deg) scale(1.1); opacity: 0.3; }
   66% { transform: rotate(240deg) scale(0.9); opacity: 0.25; }
+}
+
+@keyframes orbsFloat {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.1) rotate(180deg); }
 }
 
 /* Ensure text remains readable */
