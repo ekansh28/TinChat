@@ -382,3 +382,220 @@ html.theme-transitioning * {
   visibility: visible !important;
   opacity: 1 !important;
 }
+
+
+/* MOBILE RESPONSIVE CSS */
+
+/* Mobile Chat CSS Fixes - Add this to your global CSS */
+
+/* Ensure proper height constraints for chat containers */
+.window-body-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Mobile-specific chat styling */
+@media (max-width: 768px) {
+  /* Prevent viewport resizing issues */
+  html, body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Chat window takes full viewport */
+  .window {
+    height: 100vh !important;
+    height: 100dvh !important; /* Use dynamic viewport height if supported */
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    overflow: hidden;
+  }
+  
+  /* Ensure messages container respects height */
+  .window-body-content {
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+  }
+  
+  /* Mobile message container styling */
+  .mobile-messages-container {
+    /* For bottom-to-top messaging */
+    display: flex !important;
+    flex-direction: column-reverse !important;
+    justify-content: flex-start !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+  }
+  
+  /* Messages wrapper for proper ordering */
+  .mobile-messages-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: fit-content;
+    width: 100%;
+  }
+  
+  /* Prevent input zoom on iOS */
+  input[type="text"], 
+  input[type="search"], 
+  textarea {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    border-radius: 0;
+  }
+  
+  /* Prevent keyboard from pushing content */
+  .mobile-input-area {
+    position: relative;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+  }
+  
+  /* Handle virtual keyboard viewport changes */
+  .mobile-viewport-adjust {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height */
+  }
+  
+  /* Smooth transitions for keyboard opening/closing */
+  .mobile-chat-transition {
+    transition: height 0.3s ease-in-out;
+  }
+  
+  /* Ensure proper spacing for safe areas */
+  .mobile-safe-area {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Desktop-specific optimizations */
+@media (min-width: 769px) {
+  /* Standard desktop scrolling behavior */
+  .desktop-messages-container {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Fixed chat window dimensions */
+  .window {
+    width: 600px !important;
+    height: 600px !important;
+    min-height: 600px !important;
+    max-height: 600px !important;
+  }
+}
+
+/* Common scroll optimizations */
+.messages-scroll-container {
+  /* Optimize scrolling performance */
+  will-change: scroll-position;
+  transform: translateZ(0); /* Force hardware acceleration */
+  
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+  
+  /* Hide scrollbar on mobile while keeping functionality */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+}
+
+@media (max-width: 768px) {
+  .messages-scroll-container {
+    /* Hide scrollbar on mobile */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  .messages-scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Message row optimizations */
+.message-row {
+  /* Prevent layout shift */
+  contain: layout style;
+  
+  /* Optimize rendering */
+  will-change: transform;
+}
+
+/* Input area optimizations */
+.input-area {
+  /* Prevent layout shift */
+  contain: layout;
+  
+  /* Ensure proper stacking */
+  position: relative;
+  z-index: 10;
+}
+
+/* Typing indicator optimization */
+.typing-indicator {
+  /* Smooth animations */
+  will-change: opacity, transform;
+  
+  /* Prevent layout shift */
+  contain: layout style;
+}
+
+/* Windows 7 theme mobile adjustments */
+@media (max-width: 768px) {
+  .glass-window-body {
+    /* Reduce glass effects on mobile for performance */
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+  }
+  
+  .glass-input-area {
+    backdrop-filter: blur(3px) !important;
+    -webkit-backdrop-filter: blur(3px) !important;
+  }
+}
+
+/* Performance optimizations */
+* {
+  /* Prevent unnecessary repaints */
+  -webkit-transform-style: preserve-3d;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Ensure proper flexbox behavior */
+.flex-container {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.flex-1 {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Fix for chat window height issues */
+.chat-window-fixed {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-messages-fixed {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.chat-input-fixed {
+  flex-shrink: 0;
+  flex-grow: 0;
+}

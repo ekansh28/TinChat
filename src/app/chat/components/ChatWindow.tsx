@@ -71,10 +71,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   } | null>(null);
 
   const currentInputAreaHeight = isMobile ? INPUT_AREA_HEIGHT_MOBILE : INPUT_AREA_HEIGHT;
-  const messagesContainerComputedHeight = useMemo(() => 
-    `calc(100% - ${currentInputAreaHeight}px)`, 
-    [currentInputAreaHeight]
-  );
 
   // Update recent partner data when messages change
   useEffect(() => {
@@ -157,20 +153,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     };
   }, [checkWindows7Theme]);
 
-  // Improved scroll to bottom function
+  // IMPROVED: Scroll to bottom function with mobile support
   const scrollToBottom = useCallback((force = false) => {
-    if (messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
+    if (!messagesContainerRef.current) return;
+    
+    const container = messagesContainerRef.current;
+    
+    if (isMobile) {
+      // For mobile, we use flexDirection: column-reverse, so we need to scroll to top
+      const isAtTop = container.scrollTop <= 100;
+      if (force || isAtTop) {
+        requestAnimationFrame(() => {
+          container.scrollTop = 0;
+        });
+      }
+    } else {
+      // For desktop, normal bottom scrolling
       const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-      
       if (force || isAtBottom) {
-        // Use requestAnimationFrame to ensure DOM has updated
         requestAnimationFrame(() => {
           container.scrollTop = container.scrollHeight;
         });
       }
     }
-  }, []);
+  }, [isMobile]);
 
   // Auto-scroll effect for new messages
   useEffect(() => { 
@@ -231,95 +237,164 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [isWindows7Theme]);
 
+  // Prepare messages and typing indicator for rendering
+  const renderContent = () => {
+    const content = [];
+    
+    // Empty state messages
+    if (!isConnected && messages.length === 0) {
+      content.push(
+        <div key="connecting" className={cn(
+          "text-center text-xs italic p-4",
+          isWindows7Theme 
+            ? 'text-gray-100 theme-7-text-shadow' 
+            : 'text-gray-500 dark:text-gray-400'
+        )}>
+          Connecting to chat server...
+        </div>
+      );
+    } else if (isConnected && messages.length === 0 && !isPartnerConnected) {
+      content.push(
+        <div key="waiting" className={cn(
+          "text-center text-xs italic p-4",
+          isWindows7Theme 
+            ? 'text-gray-100 theme-7-text-shadow' 
+            : 'text-gray-500 dark:text-gray-400'
+        )}>
+          Waiting for partner...
+        </div>
+      );
+    }
+    
+    // Messages
+    messages.forEach((msg, index) => {
+      content.push(
+        <MessageRow 
+          key={msg.id || index} 
+          message={msg} 
+          theme={theme} 
+          previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
+          ownInfo={ownInfo}
+          partnerInfo={partnerInfo}
+          onUsernameClick={onUsernameClick}
+          isMobile={isMobile}
+        />
+      );
+    });
+    
+    // Typing indicator
+    if (isPartnerTyping) {
+      content.push(
+        <PartnerTypingIndicator 
+          key="typing-indicator"
+          isTyping={isPartnerTyping} 
+          partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
+          theme={theme}
+          partnerInfo={partnerInfo}
+          recentPartnerData={recentPartnerData}
+        />
+      );
+    }
+    
+    // For mobile, reverse the content so messages flow bottom-to-top
+    return isMobile ? content.reverse() : content;
+  };
+
   return (
-    <div className={cn(
-      'window-body window-body-content flex-grow flex flex-col',
-      isWindows7Theme ? 'glass-body-padding has-space' : 'p-0.5',
-      isMobile && 'p-1',
-      // Add biscuit-frame class when pink theme is active (Windows 98 only)
-      isPinkThemeActive && theme === 'theme-98' && 'relative'
-    )} style={{ position: 'relative' }}>
+    <div 
+      className={cn(
+        'window-body window-body-content flex flex-col',
+        isWindows7Theme ? 'glass-body-padding has-space' : 'p-0.5',
+        isMobile && 'p-1',
+        // Add biscuit-frame class when pink theme is active (Windows 98 only)
+        isPinkThemeActive && theme === 'theme-98' && 'relative'
+      )} 
+      style={{ 
+        position: 'relative',
+        height: '100%',
+        minHeight: 0, // Important for flex children
+        overflow: 'hidden' // Prevent container from growing
+      }}
+    >
       
       {/* Render biscuit frame if pink theme is active and Windows 98 */}
       {isPinkThemeActive && theme === 'theme-98' && <BiscuitFrame />}
       
+      {/* FIXED: Messages container with proper height calculations */}
       <div 
         ref={messagesContainerRef}
         className={cn(
-          "flex-grow overflow-y-auto overscroll-contain",
+          "flex-1 overflow-y-auto overscroll-contain",
           isWindows7Theme 
             ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
             : 'sunken-panel tree-view p-1',
           isMobile && 'p-2'
         )} 
         style={{ 
-          height: messagesContainerComputedHeight, 
+          // FIXED: Use calc to ensure proper height that accounts for input area
+          height: `calc(100% - ${currentInputAreaHeight}px)`,
+          minHeight: 0, // Allow shrinking
+          maxHeight: `calc(100% - ${currentInputAreaHeight}px)`, // Prevent growing beyond container
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
-          WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
+          WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
+          // MOBILE: Reverse flex direction for bottom-to-top messaging
+          display: 'flex',
+          flexDirection: isMobile ? 'column-reverse' : 'column',
+          // Ensure proper scrolling behavior
+          ...(isMobile && {
+            justifyContent: 'flex-start' // Start from bottom on mobile
+          })
         }}
       >
-        <div>
-          {!isConnected && messages.length === 0 && (
-            <div className={cn(
-              "text-center text-xs italic p-4",
-              isWindows7Theme 
-                ? 'text-gray-100 theme-7-text-shadow' 
-                : 'text-gray-500 dark:text-gray-400'
-            )}>
-              Connecting to chat server...
-            </div>
+        {/* MOBILE: For reversed layout, we need a wrapper */}
+        <div 
+          className={cn(
+            "w-full",
+            // For mobile, use flex-col to maintain normal message order within the reversed container
+            isMobile ? "flex flex-col" : ""
           )}
+          style={{
+            // For mobile, ensure proper spacing and alignment
+            ...(isMobile && {
+              minHeight: 'fit-content'
+            })
+          }}
+        >
+          {renderContent()}
           
-          {isConnected && messages.length === 0 && !isPartnerConnected && (
-            <div className={cn(
-              "text-center text-xs italic p-4",
-              isWindows7Theme 
-                ? 'text-gray-100 theme-7-text-shadow' 
-                : 'text-gray-500 dark:text-gray-400'
-            )}>
-              Waiting for partner...
-            </div>
-          )}
-          
-          {messages.map((msg, index) => (
-            <MessageRow 
-              key={msg.id || index} 
-              message={msg} 
-              theme={theme} 
-              previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
-              ownInfo={ownInfo}
-              partnerInfo={partnerInfo}
-              onUsernameClick={onUsernameClick}
-              isMobile={isMobile}
-            />
-          ))}
-          
-          {isPartnerTyping && (
-            <PartnerTypingIndicator 
-              isTyping={isPartnerTyping} 
-              partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
-              theme={theme}
-              partnerInfo={partnerInfo}
-              recentPartnerData={recentPartnerData}
-            />
-          )}
-          
-          <div ref={messagesEndRef} />
+          {/* Scroll anchor - positioned differently for mobile vs desktop */}
+          <div 
+            ref={messagesEndRef} 
+            style={{ 
+              height: isMobile ? '1px' : '1px',
+              flexShrink: 0
+            }} 
+          />
         </div>
       </div>
       
-      <InputArea
-        value={inputValue}
-        onChange={onInputChange}
-        onSend={onSendMessage}
-        disabled={inputAndSendDisabled}
-        theme={theme}
-        isMobile={isMobile}
-        onScrollToBottom={() => scrollToBottom(true)}
-        onFindOrDisconnect={onFindOrDisconnect}
-        findOrDisconnectDisabled={findOrDisconnectDisabled}
-        findOrDisconnectText={findOrDisconnectText}
-      />
+      {/* FIXED: Input area with proper positioning */}
+      <div 
+        className="flex-shrink-0 w-full"
+        style={{ 
+          height: `${currentInputAreaHeight}px`,
+          minHeight: `${currentInputAreaHeight}px`,
+          maxHeight: `${currentInputAreaHeight}px`
+        }}
+      >
+        <InputArea
+          value={inputValue}
+          onChange={onInputChange}
+          onSend={onSendMessage}
+          disabled={inputAndSendDisabled}
+          theme={theme}
+          isMobile={isMobile}
+          onScrollToBottom={() => scrollToBottom(true)}
+          onFindOrDisconnect={onFindOrDisconnect}
+          findOrDisconnectDisabled={findOrDisconnectDisabled}
+          findOrDisconnectText={findOrDisconnectText}
+        />
+      </div>
     </div>
   );
 };

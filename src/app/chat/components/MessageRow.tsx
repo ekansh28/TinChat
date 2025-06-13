@@ -50,10 +50,16 @@ const MessageRow: React.FC<MessageRowProps> = ({
 }) => {
   if (message.sender === 'system') {
     return (
-      <div className="mb-2">
+      <div className={cn(
+        "mb-2 message-row",
+        // MOBILE: Adjust margin for bottom-to-top flow
+        isMobile && "mb-1 mt-2"
+      )}>
         <div className={cn(
           "text-center w-full text-xs italic",
-           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400'
+           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
+           // MOBILE: Better visibility and spacing
+           isMobile && "py-1 px-2 bg-black bg-opacity-10 rounded"
         )}>
           {message.content}
         </div>
@@ -61,12 +67,25 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  const showDivider =
-    theme === 'theme-7' &&
-    previousMessageSender &&
-    ['self', 'partner'].includes(previousMessageSender) &&
-    ['self', 'partner'].includes(message.sender) &&
-    message.sender !== previousMessageSender;
+  // MOBILE: For bottom-to-top messaging, we need to adjust divider logic
+  const showDivider = useMemo(() => {
+    if (isMobile) {
+      // On mobile with reversed order, we show dividers differently
+      // Since messages are reversed, we check if the NEXT message (in display order) is different
+      return theme === 'theme-7' &&
+        previousMessageSender &&
+        ['self', 'partner'].includes(previousMessageSender) &&
+        ['self', 'partner'].includes(message.sender) &&
+        message.sender !== previousMessageSender;
+    } else {
+      // Desktop: normal divider logic
+      return theme === 'theme-7' &&
+        previousMessageSender &&
+        ['self', 'partner'].includes(previousMessageSender) &&
+        ['self', 'partner'].includes(message.sender) &&
+        message.sender !== previousMessageSender;
+    }
+  }, [theme, previousMessageSender, message.sender, isMobile]);
 
   const messageContent = useMemo(() => (
     theme === 'theme-98'
@@ -165,7 +184,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
             className,
             displayNameClass,
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
-            isMobile && "active:underline"
+            isMobile && "active:underline active:scale-105 touch-manipulation"
           )}
           style={getDisplayNameStyle()}
           role="link"
@@ -198,22 +217,40 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   return (
     <>
+      {/* MOBILE: Divider positioning adjusted for bottom-to-top */}
       {showDivider && (
         <div
-          className="h-[2px] mb-1 border border-[#CEDCE5] bg-[#64B2CF]"
+          className={cn(
+            "h-[2px] border border-[#CEDCE5] bg-[#64B2CF]",
+            isMobile ? "mt-1 mb-1" : "mb-1"
+          )}
           aria-hidden="true"
         ></div>
       )}
       <div className={cn(
-        "mb-1 break-words", 
-        isMobile && "text-sm leading-relaxed"
+        "break-words message-row", 
+        // MOBILE: Optimized spacing and text size for bottom-to-top flow
+        isMobile ? "mb-1 text-sm leading-relaxed py-0.5" : "mb-1",
+        // Add sender-specific styling for better visual separation on mobile
+        isMobile && message.sender === 'self' && "ml-2",
+        isMobile && message.sender === 'partner' && "mr-2"
       )}>
         <div className="flex items-start gap-2">
           <div className="flex-1">
-            <UsernameComponent className="font-bold mr-1">
+            <UsernameComponent className={cn(
+              "font-bold mr-1",
+              // MOBILE: Slightly smaller username for space efficiency
+              isMobile && "text-sm"
+            )}>
               {displayName}:
             </UsernameComponent>
-            <span className={cn(theme === 'theme-7' && 'theme-7-text-shadow')}>{messageContent}</span>
+            <span className={cn(
+              theme === 'theme-7' && 'theme-7-text-shadow',
+              // MOBILE: Ensure good readability
+              isMobile && "break-words hyphens-auto"
+            )}>
+              {messageContent}
+            </span>
           </div>
         </div>
       </div>

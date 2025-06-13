@@ -47,6 +47,10 @@ const InputArea: React.FC<InputAreaProps> = ({
   const [pickerEmojiFilenames, setPickerEmojiFilenames] = useState<string[]>([]);
   const [emojisLoading, setEmojisLoading] = useState(true);
   
+  // MOBILE: Track keyboard state
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [initialViewportHeight, setInitialViewportHeight] = useState(0);
+  
   // Check if Windows 7 theme is active (same logic as ChatWindow)
   const [isWindows7Theme, setIsWindows7Theme] = useState(false);
   
@@ -97,6 +101,45 @@ const InputArea: React.FC<InputAreaProps> = ({
       headObserver.disconnect();
     };
   }, [checkWindows7Theme]);
+
+  // MOBILE: Track keyboard visibility
+  useEffect(() => {
+    if (!isMobile) return;
+    
+    // Store initial viewport height
+    if (window.visualViewport) {
+      setInitialViewportHeight(window.visualViewport.height);
+    } else {
+      setInitialViewportHeight(window.innerHeight);
+    }
+    
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        const currentHeight = window.visualViewport.height;
+        const heightDifference = initialViewportHeight - currentHeight;
+        
+        // Keyboard is visible if viewport shrunk significantly (more than 150px)
+        const keyboardNowVisible = heightDifference > 150;
+        
+        if (keyboardNowVisible !== keyboardVisible) {
+          setKeyboardVisible(keyboardNowVisible);
+          console.log('Keyboard visibility changed:', keyboardNowVisible);
+          
+          // Scroll to bottom when keyboard opens/closes
+          setTimeout(() => {
+            onScrollToBottom();
+          }, 100);
+        }
+      }
+    };
+    
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      return () => {
+        window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      };
+    }
+  }, [isMobile, initialViewportHeight, keyboardVisible, onScrollToBottom]);
 
   // Function to add glass active classes to parent window
   useEffect(() => {
@@ -166,18 +209,40 @@ const InputArea: React.FC<InputAreaProps> = ({
     if (trimmed.length > 0 && !disabled) {
       onSend(trimmed);
       onChange('');
-      // Force scroll to bottom after sending message
+      // MOBILE: Force scroll to bottom after sending message
       setTimeout(() => onScrollToBottom(), 50);
     }
   }, [value, disabled, onSend, onChange, onScrollToBottom]);
 
-  // Handle input focus on mobile to prevent viewport issues
+  // IMPROVED: Handle input focus on mobile with better keyboard support
   const handleInputFocus = useCallback(() => {
     if (isMobile && inputRef.current) {
+      // Prevent zoom on iOS by ensuring font-size is 16px
+      inputRef.current.style.fontSize = '16px';
+      
       // Scroll to bottom when input is focused on mobile
       setTimeout(() => onScrollToBottom(), 300);
+      
+      // For bottom-to-top messaging, we might want to scroll to top instead
+      // depending on the layout
+      if (keyboardVisible) {
+        setTimeout(() => onScrollToBottom(), 100);
+      }
     }
-  }, [isMobile, onScrollToBottom]);
+  }, [isMobile, onScrollToBottom, keyboardVisible]);
+
+  // MOBILE: Handle input blur
+  const handleInputBlur = useCallback(() => {
+    if (isMobile) {
+      // Small delay to allow keyboard to close
+      setTimeout(() => {
+        if (window.visualViewport) {
+          // Reset viewport
+          window.scrollTo(0, 0);
+        }
+      }, 150);
+    }
+  }, [isMobile]);
 
   const handleEmojiIconHover = useCallback(() => {
     if (hoverIntervalRef.current) clearInterval(hoverIntervalRef.current);
@@ -200,11 +265,16 @@ const InputArea: React.FC<InputAreaProps> = ({
     <div className={cn(
       "flex-shrink-0 w-full",
       isWindows7Theme ? 'input-area border-t dark:border-gray-600 glass-input-area' : 'input-area status-bar',
-      isMobile ? "p-2" : "p-2"
+      isMobile ? "p-2 mobile-input-area" : "p-2",
+      // MOBILE: Add extra padding for keyboard visibility
+      isMobile && keyboardVisible && "pb-4"
     )} 
     style={{ 
       height: `${isMobile ? 70 : 60}px`,
-      paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined,
+      minHeight: `${isMobile ? 70 : 60}px`,
+      maxHeight: `${isMobile ? 70 : 60}px`,
+      // MOBILE: Handle safe area and keyboard
+      paddingBottom: isMobile ? (keyboardVisible ? '1rem' : 'env(safe-area-inset-bottom)') : undefined,
       // Force transparency for Windows 7 glass theme
       ...(isWindows7Theme && {
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -221,7 +291,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             className={cn(
               isWindows7Theme ? 'glass-button-styled glass-button' : '',
               isMobile 
-                ? 'text-xs px-2 py-1 min-w-[50px] flex-shrink-0' 
+                ? 'text-xs px-2 py-1 min-w-[50px] flex-shrink-0 touch-manipulation' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
             style={{
@@ -247,6 +317,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               value={value} 
               onChange={(e) => onChange(e.target.value)}
               onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
               placeholder={isMobile ? "Type message..." : "Type a message..."} 
               className={cn(
                 "w-full h-full",
@@ -254,6 +325,8 @@ const InputArea: React.FC<InputAreaProps> = ({
                 isWindows7Theme && "glass-input" // Add glass input class
               )} 
               style={{
+                // MOBILE: Prevent zoom on iOS
+                fontSize: isMobile ? '16px' : undefined,
                 // Force transparency for Windows 7 glass theme
                 ...(isWindows7Theme && {
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -267,6 +340,11 @@ const InputArea: React.FC<InputAreaProps> = ({
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="sentences"
+              // MOBILE: Additional attributes for better experience
+              {...(isMobile && {
+                inputMode: 'text',
+                enterKeyHint: 'send'
+              })}
             />
             
             {/* Emoji Picker - Only on desktop theme-98 */}
@@ -338,7 +416,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             className={cn(
               isWindows7Theme ? 'glass-button-styled glass-button' : '',
               isMobile 
-                ? 'text-xs px-2 py-1 min-w-[45px] flex-shrink-0' 
+                ? 'text-xs px-2 py-1 min-w-[45px] flex-shrink-0 touch-manipulation' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
             style={{

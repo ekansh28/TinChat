@@ -1,4 +1,4 @@
-// src/app/chat/ChatPageClientContent.tsx - Updated theme integration
+// src/app/chat/ChatPageClientContent.tsx - Updated with fixed height constraints
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
@@ -19,11 +19,13 @@ import MatchStatus from './components/MatchStatus';
 // Import hooks and utilities
 import { useChatSocket, useChatState } from './hooks/useChatSocket';
 import { PartnerInfo, Message, changeFavicon } from './utils/ChatHelpers';
+
 interface DebugConsoleProps {
   messages: any[];
   partnerInfo: any;
   isVisible?: boolean;
 }
+
 // Constants
 const FAVICON_IDLE = '/Idle.ico';
 const FAVICON_SEARCHING = '/Searching.ico';
@@ -151,7 +153,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({
   );
 };
 
-
 const ChatPageClientContent: React.FC = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -230,18 +231,24 @@ const ChatPageClientContent: React.FC = () => {
     return username || "You";
   }, [username]);
 
-  // Chat window style
+  // FIXED: Chat window style with proper mobile viewport handling
   const chatWindowStyle = useMemo(() => {
     if (isMobile) {
       return { 
         width: '100vw', 
-        height: '100vh',
+        height: viewportHeight > 0 ? `${viewportHeight}px` : '100vh',
         maxWidth: '100vw',
-        maxHeight: '100vh'
+        maxHeight: viewportHeight > 0 ? `${viewportHeight}px` : '100vh',
+        minHeight: viewportHeight > 0 ? `${viewportHeight}px` : '100vh'
       };
     }
-    return { width: '600px', height: '600px' };
-  }, [isMobile]);
+    return { 
+      width: '600px', 
+      height: '600px',
+      minHeight: '600px',
+      maxHeight: '600px'
+    };
+  }, [isMobile, viewportHeight]);
 
   
   // CSS for display name animations - always included since we support these features
@@ -341,15 +348,17 @@ const ChatPageClientContent: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
-  // Handle mobile detection and viewport changes
+  // IMPROVED: Handle mobile detection and viewport changes with better height tracking
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       
       if (mobile) {
+        // Use visual viewport for better mobile support
         const height = window.visualViewport?.height || window.innerHeight;
         setViewportHeight(height);
+        console.log(`${LOG_PREFIX}: Mobile viewport height:`, height);
       } else {
         setViewportHeight(window.innerHeight);
       }
@@ -359,21 +368,28 @@ const ChatPageClientContent: React.FC = () => {
 
     const handleVisualViewportChange = () => {
       if (isMobile && window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
+        const height = window.visualViewport.height;
+        setViewportHeight(height);
+        console.log(`${LOG_PREFIX}: Visual viewport changed:`, height);
       }
     };
 
+    // Initial check
     checkMobile();
+    
+    // Add event listeners
     window.addEventListener('resize', handleResize);
     
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+      window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+        window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
       }
     };
   }, [isMobile]);
@@ -847,21 +863,19 @@ const ChatPageClientContent: React.FC = () => {
       
       <div className={cn(
         "flex flex-col items-center justify-center",
-        isMobile ? "h-screen w-screen p-0" : "h-full p-4"
+        isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
       )}>
         <div className={cn(
           'window flex flex-col relative',
           // Add biscuit frame when pink theme is active
           pinkThemeActive && 'biscuit-frame',
           // Windows 98 theme - no special glass effects since we're not using theme-7
-          isMobile ? 'h-full w-full' : ''
+          isMobile ? 'h-full w-full overflow-hidden' : ''
         )} style={chatWindowStyle}>
-          
-          {/* No goldfish image since we're always theme-98 */}
           
           {/* Header - Windows 98 styling with TopBar */}
           <div className={cn(
-            "title-bar",
+            "title-bar flex-shrink-0",
             isMobile && "text-sm h-8 min-h-8"
           )}>
             <div className="flex items-center justify-between w-full">
@@ -880,8 +894,8 @@ const ChatPageClientContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Chat Window */}
-          <div className="flex-1 flex flex-col">
+          {/* FIXED: Chat Window with proper flex constraints */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <ChatWindow
               messages={messages.map(msg => ({
                 id: msg.id,
@@ -934,7 +948,7 @@ const ChatPageClientContent: React.FC = () => {
 
           {/* Connection status */}
           {connectionError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm flex-shrink-0">
               Connection Error: {connectionError}
             </div>
           )}
