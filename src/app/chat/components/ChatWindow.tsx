@@ -62,7 +62,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
-  // NEW: Track the most recent partner message data for typing indicator
+  // Track the most recent partner message data for typing indicator
   const [recentPartnerData, setRecentPartnerData] = useState<{
     senderUsername?: string;
     senderDisplayNameColor?: string;
@@ -76,7 +76,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     [currentInputAreaHeight]
   );
 
-  // NEW: Update recent partner data when messages change
+  // Update recent partner data when messages change
   useEffect(() => {
     // Find the most recent partner message to get latest styling data
     const partnerMessages = messages.filter(msg => msg.sender === 'partner');
@@ -99,6 +99,63 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     const themeLink = document.getElementById('dynamic-win98-theme-style') as HTMLLinkElement;
     return themeLink && themeLink.href.includes('pink-theme.css');
   }, []);
+
+  // Check if Windows 7 theme is active by looking at the actual DOM state like TopBar does
+  const [isWindows7Theme, setIsWindows7Theme] = useState(false);
+  
+  // Function to check Windows 7 theme state (same logic as TopBar)
+  const checkWindows7Theme = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
+    // Check if Windows 7 CSS is loaded (same ID as TopBar uses)
+    const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
+    const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
+    
+    // Check for Windows 7 sub-theme CSS links (from /win7themes/ folder)
+    const win7SubThemeLink = document.querySelector('link[href*="/win7themes/"]') as HTMLLinkElement;
+    const hasWin7SubTheme = win7SubThemeLink !== null;
+    
+    // A window is in Windows 7 mode if it has the Win7 CSS loaded OR Win7 subthemes
+    return hasWin7CSS || hasWin7SubTheme;
+  }, []);
+  
+  // Update Windows 7 theme state with observers
+  useEffect(() => {
+    const updateThemeState = () => {
+      const newWin7State = checkWindows7Theme();
+      setIsWindows7Theme(newWin7State);
+      console.log("ChatWindow: Windows 7 theme detected:", newWin7State);
+    };
+    
+    // Check initially
+    updateThemeState();
+    
+    // Watch for changes to the head element (when CSS links are added/removed)
+    const headObserver = new MutationObserver((mutations) => {
+      // Check if any mutations involve link elements
+      const linkMutation = mutations.some(mutation => 
+        Array.from(mutation.addedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        ) ||
+        Array.from(mutation.removedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        )
+      );
+      
+      if (linkMutation) {
+        updateThemeState();
+      }
+    });
+    
+    headObserver.observe(document.head, {
+      childList: true,
+      subtree: true
+    });
+    
+    return () => {
+      headObserver.disconnect();
+    };
+  }, [checkWindows7Theme]);
 
   // Improved scroll to bottom function
   const scrollToBottom = useCallback((force = false) => {
@@ -125,7 +182,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     [isConnected, isPartnerConnected]
   );
 
-  // Biscuit Frame Component with proper slicing
+  // Biscuit Frame Component with proper slicing (for Windows 98 pink theme only)
   const BiscuitFrame: React.FC = () => (
     <div className="biscuit-frame-overlay">
       {/* Edges - these will repeat the appropriate slices */}
@@ -141,26 +198,56 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     </div>
   );
 
-  // Add this at the top to check theme
-  const isGlassTheme = theme === 'theme-7';
+  // Function to add glass active classes to parent window
+  useEffect(() => {
+    if (isWindows7Theme) {
+      // Find ALL window-related elements and add glass active classes
+      const windowElements = document.querySelectorAll('.window, .window-body, .title-bar, .input-area, form');
+      windowElements.forEach(element => {
+        if (!element.classList.contains('glass')) {
+          element.classList.add('glass');
+        }
+        if (!element.classList.contains('active')) {
+          element.classList.add('active');
+        }
+      });
+      
+      console.log("ChatWindow: Added glass active classes to all window elements");
+      
+      // Also ensure the main chat container gets proper glass styling
+      const chatContainer = document.querySelector('.window-body-content');
+      if (chatContainer) {
+        chatContainer.classList.add('glass-window-body', 'glass', 'active');
+        console.log("ChatWindow: Added glass active classes to chat container");
+      }
+    } else {
+      // Remove glass classes when not Windows 7 theme
+      const glassElements = document.querySelectorAll('.glass');
+      glassElements.forEach(element => {
+        element.classList.remove('glass');
+        element.classList.remove('active');
+      });
+      console.log("ChatWindow: Removed glass active classes from all elements");
+    }
+  }, [isWindows7Theme]);
 
   return (
     <div className={cn(
       'window-body window-body-content flex-grow flex flex-col',
-      theme === 'theme-7' ? 'glass-body-padding' : 'p-0.5',
+      isWindows7Theme ? 'glass-body-padding has-space' : 'p-0.5',
       isMobile && 'p-1',
-      // Add biscuit-frame class when pink theme is active
-      isPinkThemeActive && 'relative'
+      // Add biscuit-frame class when pink theme is active (Windows 98 only)
+      isPinkThemeActive && theme === 'theme-98' && 'relative'
     )} style={{ position: 'relative' }}>
       
-      {/* Render biscuit frame if pink theme is active */}
-      {isPinkThemeActive && <BiscuitFrame />}
+      {/* Render biscuit frame if pink theme is active and Windows 98 */}
+      {isPinkThemeActive && theme === 'theme-98' && <BiscuitFrame />}
       
       <div 
         ref={messagesContainerRef}
         className={cn(
           "flex-grow overflow-y-auto overscroll-contain",
-          theme === 'theme-7' 
+          isWindows7Theme 
             ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
             : 'sunken-panel tree-view p-1',
           isMobile && 'p-2'
@@ -173,13 +260,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       >
         <div>
           {!isConnected && messages.length === 0 && (
-            <div className="text-center text-xs italic p-4 text-gray-500 dark:text-gray-400">
+            <div className={cn(
+              "text-center text-xs italic p-4",
+              isWindows7Theme 
+                ? 'text-gray-100 theme-7-text-shadow' 
+                : 'text-gray-500 dark:text-gray-400'
+            )}>
               Connecting to chat server...
             </div>
           )}
           
           {isConnected && messages.length === 0 && !isPartnerConnected && (
-            <div className="text-center text-xs italic p-4 text-gray-500 dark:text-gray-400">
+            <div className={cn(
+              "text-center text-xs italic p-4",
+              isWindows7Theme 
+                ? 'text-gray-100 theme-7-text-shadow' 
+                : 'text-gray-500 dark:text-gray-400'
+            )}>
               Waiting for partner...
             </div>
           )}
@@ -203,7 +300,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
               theme={theme}
               partnerInfo={partnerInfo}
-              recentPartnerData={recentPartnerData} // NEW: Pass recent partner data
+              recentPartnerData={recentPartnerData}
             />
           )}
           

@@ -21,6 +21,14 @@
         {
             "folderPath": "chat\\src\\components\\ProfileCustomizer\\",
             "color": "foldercolorizer.color_66cc33"
+        },
+        {
+            "folderPath": "chat\\src\\components\\top-bar.tsx\\",
+            "color": "foldercolorizer.color_cc0033"
+        },
+        {
+            "folderPath": "chat\\src\\components\\home\\",
+            "color": "foldercolorizer.color_9966ff"
         }
     ]
 }

@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 
-// Only Windows 98 theme now
-type Theme = 'theme-98';
+// Support both Windows 98 and Windows 7 themes
+type Theme = 'theme-98' | 'theme-7';
 
 interface ThemeProviderProps {
   children: ReactNode;
@@ -23,23 +23,37 @@ interface ThemeProviderContextState {
 const ThemeProviderContext = createContext<ThemeProviderContextState | undefined>(undefined);
 
 const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
+const WIN7_CSS_LINK_ID = 'win7-css-link';
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'theme-98', // Always default to Windows 98
+  defaultTheme = 'theme-98',
   storageKey = 'tinchat-theme',
 }: ThemeProviderProps) {
   const pathname = usePathname();
 
-  // Always use Windows 98 theme
+  // Start with Windows 98 but allow switching to Windows 7
   const [userSelectedTheme, setUserSelectedTheme] = useState<Theme>('theme-98');
 
-  // Always apply Windows 98 theme
-  const currentAppliedTheme = useMemo(() => {
-    return 'theme-98'; // Force Windows 98 everywhere
-  }, []);
+  // Load saved theme from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTheme = localStorage.getItem(storageKey) as Theme;
+        if (savedTheme === 'theme-7' || savedTheme === 'theme-98') {
+          setUserSelectedTheme(savedTheme);
+        }
+      } catch (e) {
+        console.error("ThemeProvider: Error loading from localStorage:", e);
+      }
+    }
+  }, [storageKey]);
 
-  // Apply theme classes (Windows 98 only)
+  const currentAppliedTheme = useMemo(() => {
+    return userSelectedTheme;
+  }, [userSelectedTheme]);
+
+  // Apply theme classes and CSS
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -50,12 +64,33 @@ export function ThemeProvider({
     // Remove any existing theme classes
     root.classList.remove('theme-98', 'theme-7');
     
-    // Always add Windows 98 theme
-    root.classList.add('theme-98');
+    // Add current theme class
+    root.classList.add(currentAppliedTheme);
 
-    // Save preference to localStorage (always Windows 98)
+    // Handle Windows 7 CSS loading
+    let win7Link = document.getElementById(WIN7_CSS_LINK_ID) as HTMLLinkElement | null;
+    
+    if (currentAppliedTheme === 'theme-7') {
+      // Load Windows 7 CSS
+      if (!win7Link) {
+        win7Link = document.createElement('link');
+        win7Link.id = WIN7_CSS_LINK_ID;
+        win7Link.rel = 'stylesheet';
+        win7Link.href = 'https://unpkg.com/7.css';
+        document.head.appendChild(win7Link);
+        console.log("ThemeProvider: Loaded Windows 7 CSS");
+      }
+    } else {
+      // Remove Windows 7 CSS if present
+      if (win7Link) {
+        win7Link.remove();
+        console.log("ThemeProvider: Removed Windows 7 CSS");
+      }
+    }
+
+    // Save preference to localStorage
     try {
-      localStorage.setItem(storageKey, 'theme-98');
+      localStorage.setItem(storageKey, currentAppliedTheme);
     } catch (e) {
       console.error("ThemeProvider: Error setting localStorage:", e);
     }
@@ -65,7 +100,7 @@ export function ThemeProvider({
     }, 150); 
 
     return () => clearTimeout(timer);
-  }, [storageKey]);
+  }, [currentAppliedTheme, storageKey]);
 
   // Force clear sub-themes when on home page
   useEffect(() => {
@@ -74,14 +109,19 @@ export function ThemeProvider({
       
       const htmlElement = document.documentElement;
       
-      // Remove any existing subtheme classes
-      const availableStamps = [
+      // Remove any existing subtheme classes (both 98 and 7)
+      const available98Stamps = [
         { cssFile: 'pink-theme.css' },
         { cssFile: 'starpattern-theme.css' },
-        { cssFile: 'dark-theme.css' }
+        { cssFile: 'dark-theme.css' },
+        { cssFile: '666-theme.css' }
       ];
       
-      availableStamps.forEach(stamp => {
+      const available7Stamps = [
+        { cssFile: 'frutiger1-theme.css' }
+      ];
+      
+      [...available98Stamps, ...available7Stamps].forEach(stamp => {
         if (stamp.cssFile) {
           const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
           if (htmlElement.classList.contains(existingSubThemeClass)) {
@@ -101,17 +141,14 @@ export function ThemeProvider({
   }, [pathname]);
 
   const setThemeCallback = useCallback((newTheme: Theme) => {
-    // Only allow Windows 98 theme
-    if (newTheme === 'theme-98') {
-      setUserSelectedTheme(newTheme);
-    }
+    setUserSelectedTheme(newTheme);
   }, []);
 
   const value = useMemo(() => ({
-    currentTheme: 'theme-98' as Theme, // Always Windows 98
-    selectedTheme: 'theme-98' as Theme, // Always Windows 98
+    currentTheme: currentAppliedTheme,
+    selectedTheme: currentAppliedTheme,
     setTheme: setThemeCallback,
-  }), [setThemeCallback]);
+  }), [currentAppliedTheme, setThemeCallback]);
 
   return (
     <ThemeProviderContext.Provider value={value}>

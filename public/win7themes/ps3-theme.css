@@ -1,0 +1,433 @@
+/* Windows 7 Frutiger Aero Theme - ps3-theme.css */
+/* Neutral glass theme with ps3 background */
+
+/* Frutiger Aero background with wallpaper - HIGHER SPECIFICITY */
+html.subtheme-ps3-theme,
+body.subtheme-ps3-theme,
+.subtheme-ps3-theme {
+  background-image: url('/win7wallpapers/ps3.jpeg') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Override any existing background */
+.subtheme-ps3-theme * {
+  background-image: none;
+}
+
+.subtheme-ps3-theme {
+  background-image: url('/win7wallpapers/ps3.jpeg') !important;
+}
+
+
+
+/* Glass window styling with neutral theme */
+.subtheme-ps3-theme .window.glass.active {
+  background: rgba(255, 255, 255, 0.075) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  --window-background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Regular windows also get glass effect in this theme */
+.subtheme-ps3-theme .window.glass {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(15px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.125) !important;
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.075) !important;
+}
+
+/* Neutral title bar styling */
+.subtheme-ps3-theme .title-bar.glass.active {
+  background: linear-gradient(90deg, 
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(240, 240, 240, 0.125) 50%,
+    rgba(255, 255, 255, 0.15) 100%) !important;
+
+  box-shadow: inset 0 1px 0 #ffffff00, inset 1px 0 0 #ffffff00, inset -1px 0 0 #ffffff00;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #000 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Title bar text enhancement */
+.subtheme-ps3-theme .title-bar-text {
+  color: #333 !important;
+  font-weight: 500 !important;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.45) !important;
+}
+
+/* Window body glass effect */
+.subtheme-ps3-theme .window-body.glass.active {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(8px) !important;
+  color: #333 !important;
+}
+
+.subtheme-ps3-theme .window-body.has-space.glass.active {
+  background: rgba(255, 255, 255, 0.075) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Aero button styling for glass theme - neutral colors */
+.subtheme-ps3-theme button.glass.active {
+  /* Neutral aero colors */
+  --hue: 0;
+  --button-background: rgba(255, 255, 255, 0.15) !important;
+  --bg-dark: rgba(240, 240, 240, 0.125) !important;
+  --button-foreground: #333 !important;
+  --bottom-glow: radial-gradient(farthest-corner at bottom center, rgba(255, 255, 255, 0.2), transparent) !important;
+  
+  /* Aero styling */
+  background-color: var(--button-background) !important;
+  background: var(--bottom-glow), linear-gradient(to bottom, var(--bg-dark), var(--button-background)) !important;
+  backdrop-filter: blur(10px) !important;
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  margin: 0.2em 0.1em !important;
+  padding: 0.4em 0.8em !important;
+  position: relative !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+  transition: all 300ms ease !important;
+  
+  /* Text styling */
+  color: var(--button-foreground) !important;
+  font-family: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", sans-serif !important;
+  font-weight: 500 !important;
+  font-size: 0.9em !important;
+}
+
+.subtheme-ps3-theme button.glass.active::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 4% !important;
+  left: 0.5em !important;
+  width: calc(100% - 1em) !important;
+  height: 40% !important;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.025)) !important;
+  border-radius: 2px !important;
+  transition: background 400ms ease !important;
+  pointer-events: none !important;
+}
+
+.subtheme-ps3-theme button.glass.active:hover,
+.subtheme-ps3-theme button.glass.active:focus {
+  --button-background: rgba(255, 255, 255, 0.2) !important;
+  --bg-dark: rgba(240, 240, 240, 0.175) !important;
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+.subtheme-ps3-theme button.glass.active:hover::after,
+.subtheme-ps3-theme button.glass.active:focus::after {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.05)) !important;
+}
+
+.subtheme-ps3-theme button.glass.active:active {
+  --button-background: rgba(240, 240, 240, 0.25) !important;
+  --bg-dark: rgba(220, 220, 220, 0.2) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(0) !important;
+}
+
+.subtheme-ps3-theme button.glass.active:active::after {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.025)) !important;
+}
+
+/* Input field glass styling - neutral colors */
+.subtheme-ps3-theme input[type="text"].glass.active,
+.subtheme-ps3-theme textarea.glass.active {
+
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+  color: #333 !important;
+}
+
+.subtheme-ps3-theme input[type="text"].glass.active:focus,
+.subtheme-ps3-theme textarea.glass.active:focus {
+    
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.05),
+    0 0 12px rgba(255, 255, 255, 0.2) !important;
+  outline: none !important;
+}
+
+/* Chat message styling */
+.subtheme-ps3-theme .sunken-panel.glass.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.025) !important;
+}
+
+/* Enhanced scrollbar for glass theme - neutral colors */
+.subtheme-ps3-theme ::-webkit-scrollbar {
+  width: 12px !important;
+}
+
+.subtheme-ps3-theme ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(5px) !important;
+  border-radius: 6px !important;
+}
+
+.subtheme-ps3-theme ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(240, 240, 240, 0.15) 100%) !important;
+  border-radius: 6px !important;
+  border: 2px solid transparent !important;
+  background-clip: content-box !important;
+}
+
+.subtheme-ps3-theme ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(240, 240, 240, 0.25) 100%) !important;
+}
+
+/* Menu and dropdown styling */
+.subtheme-ps3-theme .menu.glass.active,
+.subtheme-ps3-theme .dropdown.glass.active {
+  background: rgba(255, 255, 255, 0.125) !important;
+  backdrop-filter: blur(15px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Title bar controls styling */
+.subtheme-ps3-theme .title-bar-controls button.glass.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(5px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.subtheme-ps3-theme .title-bar-controls button.glass.active:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Ambient light effect - neutral colors */
+.subtheme-ps3-theme::after {
+  content: '' !important;
+  position: fixed !important;
+  top: -50% !important;
+  left: -50% !important;
+  width: 200% !important;
+  height: 200% !important;
+  background: radial-gradient(circle, 
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(240, 240, 240, 0.015) 30%,
+    transparent 70%) !important;
+  animation: ambientGlow 25s ease-in-out infinite !important;
+  pointer-events: none !important;
+  z-index: -2 !important;
+}
+
+@keyframes ambientGlow {
+  0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.2; }
+  33% { transform: rotate(120deg) scale(1.1); opacity: 0.3; }
+  66% { transform: rotate(240deg) scale(0.9); opacity: 0.25; }
+}
+
+/* Ensure text remains readable */
+.subtheme-ps3-theme * {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Special handling for dark elements */
+.subtheme-ps3-theme .window-body p,
+.subtheme-ps3-theme .window-body div,
+.subtheme-ps3-theme .window-body span {
+  color: #333 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Force background override for any conflicting styles */
+.subtheme-ps3-theme body,
+.subtheme-ps3-theme html {
+  background: url('/win7wallpapers/ps3.jpeg') center/cover fixed no-repeat !important;
+}
+
+*,
+::before,
+::after {
+  box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb00; /* 2 */
+}
+
+
+
+
+
+
+
+
+
+/* Input Area Glass Styling with Rounded Corners */
+
+/* Main input area container */
+.input-area.glass.active {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+ 
+  height: 60px !important;
+  padding: 8px !important;
+}
+
+/* Form container */
+.input-area form.glass.active {
+  width: 100% !important;
+  height: 100% !important;
+
+}
+
+/* Buttons in input area */
+.input-area button.glass.active {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+
+  color: #000 !important;
+  cursor: pointer !important;
+  font-size: 0.875rem !important;
+  padding: 0.25rem 0.75rem !important;
+  min-width: 60px !important;
+  flex-shrink: 0 !important;
+  transition: all 300ms ease !important;
+  font-weight: 500 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Button hover states */
+.input-area button.glass.active:hover {
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Button active/pressed state */
+.input-area button.glass.active:active {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Button disabled state */
+.input-area button.glass.active:disabled {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(0, 0, 0, 0.5) !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Text input field with rounded corners */
+.input-area input.glass.active {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(5px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 12px !important; /* Changed from 50% to 12px for pill-shaped rounding */
+  color: #000 !important;
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 0.875rem !important;
+  padding: 0 0.75rem !important;
+  transition: all 300ms ease !important;
+}
+/* Input field focus state */
+.input-area input.glass.active:focus {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  outline: none !important;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Input field disabled state */
+.input-area input.glass.active:disabled {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(0, 0, 0, 0.5) !important;
+  cursor: not-allowed !important;
+}
+
+/* Input field placeholder */
+.input-area input.glass.active::placeholder {
+  color: rgba(0, 0, 0, 0.6) !important;
+  opacity: 1 !important;
+}
+
+/* Emoji button styling */
+.input-area img[data-ai-hint="emoji icon"] {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: pointer !important;
+  transition: transform 200ms ease !important;
+  border-radius: 30% !important;
+}
+
+.input-area img[data-ai-hint="emoji icon"]:hover {
+  transform: scale(1.1) !important;
+}
+
+/* Container for input and emoji */
+.input-area .flex-1 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  flex: 1 !important;
+}
+
+/* Flex container for all input area elements */
+.input-area .flex.items-center.gap-1 {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  gap: 0.25rem !important;
+}
+
+/* Optional: Enhanced styling for Frutiger theme specifically */
+.subtheme-ps3-theme .input-area.glass.active {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.12) 100%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    0 -2px 8px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.subtheme-ps3-theme .input-area button.glass.active {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.25) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #333 !important;
+}
+
+.subtheme-ps3-theme .input-area input.glass.active {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.2) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: #333 !important;
+}

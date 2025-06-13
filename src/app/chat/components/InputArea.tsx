@@ -46,6 +46,83 @@ const InputArea: React.FC<InputAreaProps> = ({
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [pickerEmojiFilenames, setPickerEmojiFilenames] = useState<string[]>([]);
   const [emojisLoading, setEmojisLoading] = useState(true);
+  
+  // Check if Windows 7 theme is active (same logic as ChatWindow)
+  const [isWindows7Theme, setIsWindows7Theme] = useState(false);
+  
+  const checkWindows7Theme = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
+    // Check if Windows 7 CSS is loaded (same ID as TopBar uses)
+    const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
+    const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
+    
+    // Check for Windows 7 sub-theme CSS links (from /win7themes/ folder)
+    const win7SubThemeLink = document.querySelector('link[href*="/win7themes/"]') as HTMLLinkElement;
+    const hasWin7SubTheme = win7SubThemeLink !== null;
+    
+    return hasWin7CSS || hasWin7SubTheme;
+  }, []);
+  
+  // Update Windows 7 theme state
+  useEffect(() => {
+    const updateThemeState = () => {
+      const newWin7State = checkWindows7Theme();
+      setIsWindows7Theme(newWin7State);
+    };
+    
+    updateThemeState();
+    
+    const headObserver = new MutationObserver((mutations) => {
+      const linkMutation = mutations.some(mutation => 
+        Array.from(mutation.addedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        ) ||
+        Array.from(mutation.removedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        )
+      );
+      
+      if (linkMutation) {
+        updateThemeState();
+      }
+    });
+    
+    headObserver.observe(document.head, {
+      childList: true,
+      subtree: true
+    });
+    
+    return () => {
+      headObserver.disconnect();
+    };
+  }, [checkWindows7Theme]);
+
+  // Function to add glass active classes to parent window
+  useEffect(() => {
+    if (isWindows7Theme) {
+      // Find ALL window-related elements and add glass active classes
+      const windowElements = document.querySelectorAll('.window, .window-body, .title-bar, .input-area, form, .themed-input');
+      windowElements.forEach(element => {
+        if (!element.classList.contains('glass')) {
+          element.classList.add('glass');
+        }
+        if (!element.classList.contains('active')) {
+          element.classList.add('active');
+        }
+      });
+      
+      console.log("InputArea: Added glass active classes to all elements");
+    } else {
+      // Remove glass class when not Windows 7 theme
+      const glassElements = document.querySelectorAll('.glass');
+      glassElements.forEach(element => {
+        element.classList.remove('glass');
+        element.classList.remove('active');
+      });
+      console.log("InputArea: Removed glass active classes from all elements");
+    }
+  }, [isWindows7Theme]);
 
   // Load emojis for theme-98
   useEffect(() => {
@@ -122,12 +199,18 @@ const InputArea: React.FC<InputAreaProps> = ({
   return (
     <div className={cn(
       "flex-shrink-0 w-full",
-      theme === 'theme-7' ? 'input-area border-t dark:border-gray-600' : 'input-area status-bar',
+      isWindows7Theme ? 'input-area border-t dark:border-gray-600 glass-input-area' : 'input-area status-bar',
       isMobile ? "p-2" : "p-2"
     )} 
     style={{ 
       height: `${isMobile ? 70 : 60}px`,
-      paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined
+      paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined,
+      // Force transparency for Windows 7 glass theme
+      ...(isWindows7Theme && {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.2)'
+      })
     }}>
       <form onSubmit={handleSubmit} className="w-full h-full">
         <div className="flex items-center w-full h-full gap-1">
@@ -136,11 +219,20 @@ const InputArea: React.FC<InputAreaProps> = ({
             onClick={onFindOrDisconnect} 
             disabled={findOrDisconnectDisabled} 
             className={cn(
-              theme === 'theme-7' ? 'glass-button-styled' : '',
+              isWindows7Theme ? 'glass-button-styled glass-button' : '',
               isMobile 
                 ? 'text-xs px-2 py-1 min-w-[50px] flex-shrink-0' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
+            style={{
+              // Force transparency for Windows 7 glass theme
+              ...(isWindows7Theme && {
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                color: '#000'
+              })
+            }}
             aria-label={findOrDisconnectText}
             type="button"
           >
@@ -158,8 +250,18 @@ const InputArea: React.FC<InputAreaProps> = ({
               placeholder={isMobile ? "Type message..." : "Type a message..."} 
               className={cn(
                 "w-full h-full",
-                isMobile ? "text-base px-2" : "text-sm px-3" // Prevent zoom on iOS
+                isMobile ? "text-base px-2" : "text-sm px-3",
+                isWindows7Theme && "glass-input" // Add glass input class
               )} 
+              style={{
+                // Force transparency for Windows 7 glass theme
+                ...(isWindows7Theme && {
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  backdropFilter: 'blur(5px)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  color: '#000'
+                })
+              }}
               disabled={disabled} 
               aria-label="Chat message input"
               autoComplete="off"
@@ -234,11 +336,20 @@ const InputArea: React.FC<InputAreaProps> = ({
             type="submit"
             disabled={disabled || !value.trim()} 
             className={cn(
-              theme === 'theme-7' ? 'glass-button-styled' : '',
+              isWindows7Theme ? 'glass-button-styled glass-button' : '',
               isMobile 
                 ? 'text-xs px-2 py-1 min-w-[45px] flex-shrink-0' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
+            style={{
+              // Force transparency for Windows 7 glass theme
+              ...(isWindows7Theme && {
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                color: '#000'
+              })
+            }}
             aria-label="Send message"
           >
             {isMobile ? '→' : 'Send'}

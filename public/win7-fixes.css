@@ -1,0 +1,56 @@
+/* public/win7-fixes.css */
+.win7-customizer-wrapper {
+  all: initial !important;
+  position: fixed !important;
+  z-index: 999999 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Reset for Windows 98 mode */
+.win98-customizer .window {
+  width: 300px !important;
+  height: 400px !important;
+  position: absolute !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 3px solid !important;
+  border-color: #dfdfdf #404040 #404040 #dfdfdf !important;
+  background: silver !important;
+}
+
+.win98-customizer .title-bar {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 3px 2px 3px 3px !important;
+  background: linear-gradient(90deg, navy, #1084d0) !important;
+  color: white !important;
+  font-weight: bold !important;
+  font-size: 12px !important;
+  height: 18px !important;
+}
+
+.win98-customizer .title-bar-controls {
+  display: flex !important;
+  gap: 2px !important;
+}
+
+.win98-customizer .title-bar-controls button {
+  width: 16px !important;
+  height: 14px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid !important;
+  border-color: #fff #808080 #808080 #fff !important;
+  background: silver !important;
+  font-family: 'MS Sans Serif', sans-serif !important;
+  font-size: 8px !important;
+  line-height: 14px !important;
+  text-align: center !important;
+}
