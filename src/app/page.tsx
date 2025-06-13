@@ -124,11 +124,7 @@ export default function SelectionLobby() {
 
   return (
     <>
-      {/* Move OnlineUsersWindow outside of scrollable container - render at root level */}
-      <OnlineUsersWindow 
-        onlineUsersData={onlineUsersData}
-        isMobile={isMobile}
-      />
+
 
       <div className={styles.homePageContainer}>
         {/* Header with AuthButtons that now handles Profile Customizer button */}

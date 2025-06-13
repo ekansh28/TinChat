@@ -1,0 +1,199 @@
+/* Teal Windows Sub-theme for Windows 98 Theme */
+
+/* Main background */
+.theme-98 body {
+  background-image: url('/wallpapers/WaterColor.jpg') !important;
+  background-repeat: repeat !important;
+  background-attachment: fixed !important;
+  background-size: auto !important;
+}
+
+/* Window itself (outer border/background) */
+.theme-98 .window {
+  background-color: #3b8b8a !important; /* Medium teal background */
+  border-top: 1px solid #4da6a5 !important; /* Lighter teal */
+  border-left: 1px solid #4da6a5 !important; /* Lighter teal */
+  border-right: 1px solid #115c5b !important; /* Darker teal */
+  border-bottom: 1px solid #115c5b !important; /* Darker teal */
+  box-shadow: inset 1px 1px 0px #4da6a5, inset -1px -1px 0px #156f6f !important; /* Teal inset shadows */
+}
+
+/* Chat Window with Biscuit Frame */
+.theme-98 .window.biscuit-frame {
+  position: relative;
+  overflow: visible;
+}
+
+/* Window Body */
+.theme-98 .window-body {
+  background-color: #e0f2f1 !important; /* Very light teal for content area */
+  color: #115c5b !important; /* Dark teal text for readability */
+  border-top: 1px solid #115c5b !important;
+  border-left: 1px solid #115c5b !important;
+  border-right: 1px solid #4da6a5 !important;
+  border-bottom: 1px solid #4da6a5 !important;
+  box-shadow: inset 1px 1px 0px #156f6f, inset -1px -1px 0px #3b8b8a !important;
+}
+
+/* Title Bar - Inactive */
+.theme-98 .title-bar {
+  background: linear-gradient(to right, #3b8b8a, #156f6f) !important; /* Teal gradient */
+  color: #FFFFFF !important; /* White text */
+  padding: 2px 3px !important;
+  text-shadow: 1px 1px #115c5b !important; /* Darker teal shadow for text */
+}
+
+/* Title Bar - Active Window */
+.theme-98 .window.active > .title-bar {
+  background: linear-gradient(to right, #156f6f, #115c5b) !important; /* Darker teal gradient */
+  color: #FFFFFF !important; /* White text */
+  text-shadow: 1px 1px #0c4544 !important; /* Darkest teal shadow for text */
+}
+
+.theme-98 .title-bar-text {
+  color: #FFFFFF !important;
+}
+
+/* Buttons */
+.theme-98 button,
+.theme-98 .button {
+  background-color: #88c7c6 !important; /* Light teal */
+  color: #115c5b !important; /* Dark teal text */
+  border-top: 1px solid #a3d6d5 !important; /* Lighter teal */
+  border-left: 1px solid #a3d6d5 !important; /* Lighter teal */
+  border-right: 1px solid #115c5b !important; /* Darker teal */
+  border-bottom: 1px solid #115c5b !important; /* Darker teal */
+  box-shadow: inset 1px 1px 0px #4da6a5, 1px 1px 0px #0c4544 !important; /* Teal shadows */
+}
+
+.theme-98 button:focus,
+.theme-98 .button:focus {
+  outline: 1px dotted #115c5b !important;
+  outline-offset: -3px !important;
+}
+
+.theme-98 button:active,
+.theme-98 .button:active,
+.theme-98 button.active,
+.theme-98 .button.active {
+  background-color: #3b8b8a !important; /* Medium teal */
+  color: #FFFFFF !important; /* White text */
+  border-top: 1px solid #115c5b !important;
+  border-left: 1px solid #115c5b !important;
+  border-right: 1px solid #a3d6d5 !important;
+  border-bottom: 1px solid #a3d6d5 !important;
+  box-shadow: inset 1px 1px 0px #156f6f !important; /* Darker teal inset */
+}
+
+/* Input fields */
+.theme-98 input[type="text"],
+.theme-98 input[type="password"],
+.theme-98 textarea,
+.theme-98 .themed-input {
+  background-color: #e0f2f1 !important; /* Very light teal */
+  color: #115c5b !important; /* Dark teal text */
+  border: 1px solid #156f6f !important; /* Medium teal border */
+  box-shadow: inset 1px 1px 1px #88c7c6, inset -1px -1px 1px #a3d6d5 !important; /* Teal sunken effect */
+  padding: 2px 3px !important;
+}
+.theme-98 .themed-input-inner {
+  background-color: transparent !important;
+  color: #115c5b !important;
+}
+
+/* Sunken Panels */
+.theme-98 .sunken-panel,
+.theme-98 .tree-view {
+  background-color: #e8f5f5 !important; /* Lightest teal */
+  border-top: 1px solid #115c5b !important; /* Dark teal */
+  border-left: 1px solid #115c5b !important; /* Dark teal */
+  border-right: 1px solid #4da6a5 !important; /* Light teal */
+  border-bottom: 1px solid #4da6a5 !important; /* Light teal */
+  box-shadow: none !important;
+  padding: 2px !important;
+}
+
+/* Select element (dropdown) */
+.theme-98 select,
+.theme-98 .themed-select-trigger {
+  background-color: #e0f2f1 !important; /* Very light teal */
+  color: #115c5b !important; /* Dark teal */
+  border-top: 1px solid #a3d6d5 !important;
+  border-left: 1px solid #a3d6d5 !important;
+  border-right: 1px solid #115c5b !important;
+  border-bottom: 1px solid #115c5b !important;
+}
+.theme-98 .themed-select-trigger.button {
+  background-color: #88c7c6 !important;
+  color: #115c5b !important;
+  border-top: 1px solid #a3d6d5 !important;
+  border-left: 1px solid #a3d6d5 !important;
+  border-right: 1px solid #115c5b !important;
+  border-bottom: 1px solid #115c5b !important;
+  box-shadow: inset 1px 1px 0px #4da6a5, 1px 1px 0px #0c4544 !important;
+}
+
+.theme-98 .select-content.themed-select-content,
+.theme-98 .menu {
+  background-color: #88c7c6 !important; /* Light teal */
+  border-color: #156f6f !important; /* Medium teal */
+}
+
+.theme-98 .select-item.themed-select-item:hover,
+.theme-98 .select-item.themed-select-item[data-highlighted] {
+  background-color: #156f6f !important; /* Medium teal */
+  color: white !important;
+}
+
+/* Scrollbars */
+.theme-98 .themed-scrollbar-98 {
+  background-color: #88c7c6 !important; /* Light teal track */
+}
+.theme-98 .themed-scrollbar-98 > [data-radix-scroll-area-thumb] {
+  background-color: #156f6f !important; /* Medium teal thumb */
+  border-top: 1px solid #4da6a5 !important; /* Lighter teal highlight */
+  border-left: 1px solid #4da6a5 !important; /* Lighter teal highlight */
+  border-right: 1px solid #115c5b !important; /* Darker teal shadow */
+  border-bottom: 1px solid #115c5b !important; /* Darker teal shadow */
+  box-shadow: inset 1px 1px #3b8b8a, inset -1px -1px #0c4544 !important; /* Teal inset effect */
+}
+
+/* Tab controls */
+.theme-98 [role="tab"] {
+  background-color: #88c7c6 !important;
+  border-color: #4da6a5 #4da6a5 #115c5b #4da6a5 !important;
+}
+.theme-98 [role="tab"][aria-selected="true"] {
+  background-color: #e0f2f1 !important;
+  border-bottom-color: #e0f2f1 !important;
+}
+
+/* Labels */
+.theme-98 label, .theme-98 .label, .theme-98 .themed-label {
+    color: #115c5b !important; /* Dark teal */
+}
+
+/* Links */
+.theme-98 a {
+    color: #156f6f !important; /* Medium teal */
+}
+.theme-98 a:hover {
+    color: #0c4544 !important; /* Darkest teal */
+}
+
+/* Card components */
+.theme-98 .card-title {
+  color: #FFFFFF !important;
+}
+.theme-98 .card-description {
+  color: #115c5b !important;
+}
+
+/* Status bar */
+.theme-98 .status-bar, .theme-98 .input-area.status-bar {
+  color: #115c5b !important;
+  border-top: 1px solid #115c5b !important;
+}
+.theme-98 .status-bar-field {
+  border-right: 1px solid #115c5b !important;
+}

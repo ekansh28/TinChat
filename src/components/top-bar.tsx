@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
 const WIN7_CSS_LINK_ID = 'win7-css-link';
+const WINXP_CSS_LINK_ID = 'winxp-css-link';
 
 interface ThemeStamp {
   name: string;
@@ -15,6 +16,7 @@ interface ThemeStamp {
 }
 
 const availableStamps: ThemeStamp[] = [
+  { name: 'Water Color', imageUrl: '/theme_stamps/watercolor.png', cssFile: 'watercolor-theme.css', dataAiHint: 'watercolor theme stamp' },
   { name: 'Pink Windows', imageUrl: '/theme_stamps/coquette.png', cssFile: 'pink-theme.css', dataAiHint: 'pink theme stamp' },
   { name: 'Star Pattern', imageUrl: '/theme_stamps/starpattern.png', cssFile: 'starpattern-theme.css', dataAiHint: 'star pattern theme stamp' },
   { name: 'Dark Theme', imageUrl: '/theme_stamps/darktheme.png', cssFile: 'dark-theme.css', dataAiHint: 'dark theme stamp' },
@@ -35,20 +37,26 @@ const available7Stamps: ThemeStamp[] = [
   { name: 'Default 7', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp' },
 ];
 
+const availableXPStamps: ThemeStamp[] = [
+  { name: 'Bliss Theme', imageUrl: '/theme_stamps/bliss.png', cssFile: 'bliss-theme.css', dataAiHint: 'bliss xp theme stamp' },
+  { name: 'Default XP', imageUrl: 'https://placehold.co/100x75/0066CC/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default winxp theme stamp' },
+];
+
 export function TopBar() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [customizerPosition, setCustomizerPosition] = useState({ top: 0, left: 0 });
   const [isWin7Mode, setIsWin7Mode] = useState(false);
+  const [isWinXPMode, setIsWinXPMode] = useState(false);
 
   const themeIconRef = useRef<HTMLImageElement>(null);
   const customizerWindowRef = useRef<HTMLDivElement>(null);
 
-  const currentStamps = isWin7Mode ? available7Stamps : availableStamps;
+  const currentStamps = isWinXPMode ? availableXPStamps : (isWin7Mode ? available7Stamps : availableStamps);
 
   // Helper function for title button styles
-  const getTitleButtonStyle = useCallback((isWin7: boolean, isClose = false) => {
+  const getTitleButtonStyle = useCallback((currentMode: 'win98' | 'win7' | 'winxp', isClose = false) => {
     const baseStyle = {
       width: '18px',
       height: '18px',
@@ -66,7 +74,7 @@ export function TopBar() {
       userSelect: 'none' as const,
     };
 
-    if (isWin7) {
+    if (currentMode === 'win7') {
       return {
         ...baseStyle,
         backgroundColor: isClose ? '#ff6b6b' : '#f0f0f0',
@@ -74,6 +82,17 @@ export function TopBar() {
         borderRadius: '3px',
         '&:hover': {
           backgroundColor: isClose ? '#ff5252' : '#e0e0e0'
+        }
+      };
+    } else if (currentMode === 'winxp') {
+      return {
+        ...baseStyle,
+        backgroundColor: isClose ? '#ff6b6b' : '#ece9d8',
+        border: '1px solid #0054e3',
+        borderRadius: '2px',
+        color: '#000',
+        '&:hover': {
+          backgroundColor: isClose ? '#ff5252' : '#ddd9c3'
         }
       };
     } else {
@@ -88,14 +107,15 @@ export function TopBar() {
     }
   }, []);
 
-  const applySubTheme = useCallback((cssFile: string | null, forceWin7Mode?: boolean) => {
+  const applySubTheme = useCallback((cssFile: string | null, forceMode?: 'win98' | 'win7' | 'winxp') => {
     if (typeof window === 'undefined') return;
     
-    const currentWin7Mode = forceWin7Mode !== undefined ? forceWin7Mode : isWin7Mode;
+    const currentMode = forceMode || (isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98'));
     const htmlElement = document.documentElement;
     const subThemeClassName = cssFile ? `subtheme-${cssFile.replace('.css', '')}` : null;
 
-    [...availableStamps, ...available7Stamps].forEach(stamp => {
+    // Remove all existing sub-theme classes
+    [...availableStamps, ...available7Stamps, ...availableXPStamps].forEach(stamp => {
       if (stamp.cssFile) {
         const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
         htmlElement.classList.remove(existingSubThemeClass);
@@ -111,7 +131,10 @@ export function TopBar() {
     let link = document.getElementById(DYNAMIC_THEME_STYLE_ID) as HTMLLinkElement | null;
 
     if (cssFile) {
-      const folderPrefix = currentWin7Mode ? 'win7themes' : 'win98themes';
+      let folderPrefix = 'win98themes';
+      if (currentMode === 'win7') folderPrefix = 'win7themes';
+      else if (currentMode === 'winxp') folderPrefix = 'winxpthemes';
+      
       const newHref = `/${folderPrefix}/${cssFile}`;
       
       if (link) {
@@ -127,7 +150,7 @@ export function TopBar() {
       }
       
       if (pathname !== '/') {
-        const storageKey = currentWin7Mode ? 'selectedWin7SubTheme' : 'selectedWin98SubTheme';
+        const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
         localStorage.setItem(storageKey, cssFile);
       }
     } else {
@@ -136,7 +159,7 @@ export function TopBar() {
       }
       
       if (pathname !== '/') {
-        const storageKey = currentWin7Mode ? 'selectedWin7SubTheme' : 'selectedWin98SubTheme';
+        const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
         localStorage.removeItem(storageKey);
       }
     }
@@ -144,7 +167,7 @@ export function TopBar() {
     setTimeout(() => {
       htmlElement.classList.remove('theme-transitioning');
     }, 150);
-  }, [pathname, isWin7Mode]);
+  }, [pathname, isWin7Mode, isWinXPMode]);
 
   const loadWin7CSS = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -160,11 +183,32 @@ export function TopBar() {
     }
   }, []);
 
+  const loadWinXPCSS = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    
+    let winxpLink = document.getElementById(WINXP_CSS_LINK_ID) as HTMLLinkElement | null;
+    
+    if (!winxpLink) {
+      winxpLink = document.createElement('link');
+      winxpLink.id = WINXP_CSS_LINK_ID;
+      winxpLink.rel = 'stylesheet';
+      winxpLink.href = 'https://unpkg.com/xp.css';
+      document.head.appendChild(winxpLink);
+    }
+  }, []);
+
   const removeWin7CSS = useCallback(() => {
     if (typeof window === 'undefined') return;
     
     const win7Link = document.getElementById(WIN7_CSS_LINK_ID);
     if (win7Link) win7Link.remove();
+  }, []);
+
+  const removeWinXPCSS = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    
+    const winxpLink = document.getElementById(WINXP_CSS_LINK_ID);
+    if (winxpLink) winxpLink.remove();
   }, []);
 
   const calculateCustomizerPosition = useCallback(() => {
@@ -175,7 +219,7 @@ export function TopBar() {
     try {
       const iconRect = themeIconRef.current.getBoundingClientRect();
       const windowWidth = 300;
-      const windowHeight = Math.min(400, window.innerHeight * 0.8); // Ensure it fits viewport
+      const windowHeight = Math.min(400, window.innerHeight * 0.8);
       const margin = 20;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -216,63 +260,94 @@ export function TopBar() {
     }
   }, []);
 
-  const handleMaximize = useCallback(() => {
-    if (!isWin7Mode) {
-      const wasCustomizerOpen = isCustomizerOpen;
-      setIsCustomizerOpen(false);
-      setIsWin7Mode(true);
-      loadWin7CSS();
-      
-      if (wasCustomizerOpen) {
-        setTimeout(() => {
-          setIsCustomizerOpen(true);
-          setCustomizerPosition(calculateCustomizerPosition());
-        }, 300);
-      }
-      
-      setTimeout(() => {
-        const storedWin7SubTheme = localStorage.getItem('selectedWin7SubTheme');
-        applySubTheme(storedWin7SubTheme || null, true);
-      }, 400);
-    }
-  }, [isWin7Mode, isCustomizerOpen, loadWin7CSS, applySubTheme, calculateCustomizerPosition]);
-
+  // Handle minimize (Windows 98)
   const handleMinimize = useCallback(() => {
-    if (isWin7Mode) {
-      const wasCustomizerOpen = isCustomizerOpen;
-      setIsCustomizerOpen(false);
-      setIsWin7Mode(false);
-      removeWin7CSS();
-      
-      if (wasCustomizerOpen) {
-        setTimeout(() => {
-          setIsCustomizerOpen(true);
-          setCustomizerPosition(calculateCustomizerPosition());
-        }, 200);
-      }
-      
-      const storedWin98SubTheme = localStorage.getItem('selectedWin98SubTheme');
-      applySubTheme(storedWin98SubTheme || null, false);
+    const wasCustomizerOpen = isCustomizerOpen;
+    setIsCustomizerOpen(false);
+    setIsWin7Mode(false);
+    setIsWinXPMode(false);
+    removeWin7CSS();
+    removeWinXPCSS();
+    
+    if (wasCustomizerOpen) {
+      setTimeout(() => {
+        setIsCustomizerOpen(true);
+        setCustomizerPosition(calculateCustomizerPosition());
+      }, 200);
     }
-  }, [isWin7Mode, isCustomizerOpen, removeWin7CSS, applySubTheme, calculateCustomizerPosition]);
+    
+    const storedWin98SubTheme = localStorage.getItem('selectedWin98SubTheme');
+    applySubTheme(storedWin98SubTheme || null, 'win98');
+  }, [isCustomizerOpen, removeWin7CSS, removeWinXPCSS, applySubTheme, calculateCustomizerPosition]);
+
+  // Handle maximize (Windows 7)
+  const handleMaximize = useCallback(() => {
+    const wasCustomizerOpen = isCustomizerOpen;
+    setIsCustomizerOpen(false);
+    setIsWin7Mode(true);
+    setIsWinXPMode(false);
+    removeWinXPCSS();
+    loadWin7CSS();
+    
+    if (wasCustomizerOpen) {
+      setTimeout(() => {
+        setIsCustomizerOpen(true);
+        setCustomizerPosition(calculateCustomizerPosition());
+      }, 300);
+    }
+    
+    setTimeout(() => {
+      const storedWin7SubTheme = localStorage.getItem('selectedWin7SubTheme');
+      applySubTheme(storedWin7SubTheme || null, 'win7');
+    }, 400);
+  }, [isCustomizerOpen, loadWin7CSS, removeWinXPCSS, applySubTheme, calculateCustomizerPosition]);
+
+  // Handle close (Windows XP)
+  const handleClose = useCallback(() => {
+    const wasCustomizerOpen = isCustomizerOpen;
+    setIsCustomizerOpen(false);
+    setIsWin7Mode(false);
+    setIsWinXPMode(true);
+    removeWin7CSS();
+    loadWinXPCSS();
+    
+    if (wasCustomizerOpen) {
+      setTimeout(() => {
+        setIsCustomizerOpen(true);
+        setCustomizerPosition(calculateCustomizerPosition());
+      }, 300);
+    }
+    
+    setTimeout(() => {
+      const storedWinXPSubTheme = localStorage.getItem('selectedWinxpSubTheme');
+      applySubTheme(storedWinXPSubTheme || null, 'winxp');
+    }, 400);
+  }, [isCustomizerOpen, loadWinXPCSS, removeWin7CSS, applySubTheme, calculateCustomizerPosition]);
 
   useEffect(() => {
     if (!mounted) return;
     
     if (pathname === '/') {
       setIsWin7Mode(false);
+      setIsWinXPMode(false);
       removeWin7CSS();
-      applySubTheme(null, false);
+      removeWinXPCSS();
+      applySubTheme(null, 'win98');
     } else {
-      const storedSubTheme = isWin7Mode 
-        ? localStorage.getItem('selectedWin7SubTheme')
-        : localStorage.getItem('selectedWin98SubTheme');
+      let storedSubTheme;
+      if (isWinXPMode) {
+        storedSubTheme = localStorage.getItem('selectedWinxpSubTheme');
+      } else if (isWin7Mode) {
+        storedSubTheme = localStorage.getItem('selectedWin7SubTheme');
+      } else {
+        storedSubTheme = localStorage.getItem('selectedWin98SubTheme');
+      }
       
       if (storedSubTheme) {
         applySubTheme(storedSubTheme);
       }
     }
-  }, [pathname, applySubTheme, mounted, isWin7Mode, removeWin7CSS]);
+  }, [pathname, applySubTheme, mounted, isWin7Mode, isWinXPMode, removeWin7CSS, removeWinXPCSS]);
 
   useEffect(() => {
     setMounted(true);
@@ -355,6 +430,8 @@ export function TopBar() {
   // Calculate if we need scrolling (more than 5 stamps)
   const needsScrolling = currentStamps.length > 5;
   const maxHeight = needsScrolling ? '300px' : 'auto';
+  
+  const currentMode = isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98');
 
   return (
     <div className="flex justify-end items-center p-2 space-x-2">
@@ -376,7 +453,8 @@ export function TopBar() {
           ref={customizerWindowRef}
           className={cn(
             "window fixed",
-            isWin7Mode && "glass active"
+            isWin7Mode && "glass active",
+            isWinXPMode && "xp-window"
           )}
           style={{
             position: 'fixed',
@@ -391,7 +469,12 @@ export function TopBar() {
             opacity: 1,
             transform: 'translateZ(0)',
             overflow: 'hidden',
-            ...(isWin7Mode ? {
+            ...(isWinXPMode ? {
+              background: '#ece9d8',
+              border: '1px solid #0054e3',
+              borderRadius: '8px 8px 0 0',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
+            } : isWin7Mode ? {
               background: 'rgba(240, 240, 240, 0.98)',
               border: '1px solid #999',
               borderRadius: '8px',
@@ -412,8 +495,13 @@ export function TopBar() {
               display: 'flex',
               alignItems: 'center',
               padding: '0 4px',
-              flexShrink: 0, // Prevent title bar from shrinking
-              ...(isWin7Mode ? {
+              flexShrink: 0,
+              ...(isWinXPMode ? {
+                background: 'linear-gradient(to bottom, #0054e3, #0040b3)',
+                color: '#fff',
+                borderTopLeftRadius: '6px',
+                borderTopRightRadius: '6px'
+              } : isWin7Mode ? {
                 background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
                 borderBottom: '1px solid #ccc',
                 borderTopLeftRadius: '6px',
@@ -427,7 +515,7 @@ export function TopBar() {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              ...(isWin7Mode ? { color: '#333' } : {})
+              ...(isWinXPMode ? { color: '#fff' } : isWin7Mode ? { color: '#333' } : {})
             }}>
               Theme Customizer {needsScrolling && `(${currentStamps.length} themes)`}
             </div>
@@ -440,19 +528,22 @@ export function TopBar() {
               <button 
                 aria-label="Minimize" 
                 onClick={handleMinimize}
-                style={getTitleButtonStyle(isWin7Mode)}
+                style={getTitleButtonStyle(currentMode)}
               >←</button>
               <button 
                 aria-label="Maximize" 
                 onClick={handleMaximize}
-                style={getTitleButtonStyle(isWin7Mode)}
+                style={getTitleButtonStyle(currentMode)}
               >→</button>
               <button 
                 aria-label="Close" 
-                onClick={() => setIsCustomizerOpen(false)}
+                onClick={handleClose}
                 style={{
-                  ...getTitleButtonStyle(isWin7Mode, true),
-                  ...(isWin7Mode ? {
+                  ...getTitleButtonStyle(currentMode, true),
+                  ...(isWinXPMode ? {
+                    backgroundColor: '#ff6b6b',
+                    ':hover': { backgroundColor: '#ff5252' }
+                  } : isWin7Mode ? {
                     backgroundColor: '#ff6b6b',
                     ':hover': { backgroundColor: '#ff5252' }
                   } : {})
@@ -465,14 +556,18 @@ export function TopBar() {
           <div 
             className={cn(
               "window-body p-2",
-              isWin7Mode && "has-space"
+              isWin7Mode && "has-space",
+              isWinXPMode && "xp-body"
             )} 
             style={{ 
-              overflow: 'hidden', // Prevent outer scroll
+              overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              maxHeight: 'calc(80vh - 24px)', // Account for title bar
-              ...(isWin7Mode ? {
+              maxHeight: 'calc(80vh - 24px)',
+              ...(isWinXPMode ? {
+                background: '#ece9d8',
+                color: '#000'
+              } : isWin7Mode ? {
                 background: 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(5px)',
                 color: '#333',
@@ -483,14 +578,14 @@ export function TopBar() {
           >
             {/* Header text - fixed at top */}
             <div style={{ flexShrink: 0 }}>
-              <p className="text-xs mb-2" style={isWin7Mode ? { color: '#333' } : {}}>
-                Select a theme stamp for {isWin7Mode ? 'Windows 7' : 'Windows 98'}:
+              <p className="text-xs mb-2" style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}>
+                Select a theme stamp for {isWinXPMode ? 'Windows XP' : isWin7Mode ? 'Windows 7' : 'Windows 98'}:
               </p>
-              <p className="text-xs mb-3 text-gray-600" style={isWin7Mode ? { color: '#666' } : {}}>
-                Use minimize (←) for Win98 themes, maximize (→) for Win7 themes
+              <p className="text-xs mb-3 text-gray-600" style={isWinXPMode ? { color: '#333' } : isWin7Mode ? { color: '#666' } : {}}>
+                Use minimize (←) for Win98, maximize (→) for Win7, close (×) for WinXP themes
               </p>
               {needsScrolling && (
-                <p className="text-xs mb-2 font-semibold" style={isWin7Mode ? { color: '#333' } : {}}>
+                <p className="text-xs mb-2 font-semibold" style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}>
                   📜 Scroll to see all {currentStamps.length} themes
                 </p>
               )}
@@ -502,9 +597,8 @@ export function TopBar() {
                 overflowY: needsScrolling ? 'auto' : 'visible',
                 maxHeight: needsScrolling ? maxHeight : 'none',
                 flexGrow: 1,
-                // Custom scrollbar styling
                 scrollbarWidth: 'thin',
-                scrollbarColor: isWin7Mode ? '#ccc #f0f0f0' : '#808080 #c0c0c0',
+                scrollbarColor: isWinXPMode ? '#0054e3 #ece9d8' : isWin7Mode ? '#ccc #f0f0f0' : '#808080 #c0c0c0',
               }}
               className="theme-stamps-container"
             >
@@ -514,9 +608,11 @@ export function TopBar() {
                     key={stamp.name} 
                     className={cn(
                       "mb-2 p-1 cursor-pointer flex items-center transition-colors",
-                      isWin7Mode 
-                        ? "hover:bg-white hover:bg-opacity-60 rounded" 
-                        : "hover:bg-gray-300"
+                      isWinXPMode
+                        ? "hover:bg-blue-100 rounded"
+                        : isWin7Mode 
+                          ? "hover:bg-white hover:bg-opacity-60 rounded" 
+                          : "hover:bg-gray-300"
                     )}
                     onClick={() => handleSubThemeSelect(stamp.cssFile)}
                   >
@@ -527,7 +623,7 @@ export function TopBar() {
                       style={{ imageRendering: 'pixelated' }}
                       data-ai-hint={stamp.dataAiHint}
                     />
-                    <span className="text-sm" style={isWin7Mode ? { color: '#333' } : {}}>
+                    <span className="text-sm" style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}>
                       {stamp.name}
                     </span>
                   </li>
@@ -545,22 +641,22 @@ export function TopBar() {
         }
         
         .theme-stamps-container::-webkit-scrollbar-track {
-          background: ${isWin7Mode ? '#f0f0f0' : '#c0c0c0'};
-          border-radius: ${isWin7Mode ? '6px' : '0px'};
+          background: ${isWinXPMode ? '#ece9d8' : isWin7Mode ? '#f0f0f0' : '#c0c0c0'};
+          border-radius: ${isWinXPMode ? '3px' : isWin7Mode ? '6px' : '0px'};
         }
         
         .theme-stamps-container::-webkit-scrollbar-thumb {
-          background: ${isWin7Mode ? '#ccc' : '#808080'};
-          border-radius: ${isWin7Mode ? '6px' : '0px'};
-          border: ${isWin7Mode ? '1px solid #999' : '1px outset #808080'};
+          background: ${isWinXPMode ? '#0054e3' : isWin7Mode ? '#ccc' : '#808080'};
+          border-radius: ${isWinXPMode ? '3px' : isWin7Mode ? '6px' : '0px'};
+          border: ${isWinXPMode ? '1px solid #0040b3' : isWin7Mode ? '1px solid #999' : '1px outset #808080'};
         }
         
         .theme-stamps-container::-webkit-scrollbar-thumb:hover {
-          background: ${isWin7Mode ? '#bbb' : '#606060'};
+          background: ${isWinXPMode ? '#0040b3' : isWin7Mode ? '#bbb' : '#606060'};
         }
         
         .theme-stamps-container::-webkit-scrollbar-corner {
-          background: ${isWin7Mode ? '#f0f0f0' : '#c0c0c0'};
+          background: ${isWinXPMode ? '#ece9d8' : isWin7Mode ? '#f0f0f0' : '#c0c0c0'};
         }
       `}</style>
     </div>

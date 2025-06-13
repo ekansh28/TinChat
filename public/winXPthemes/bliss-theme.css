@@ -1,0 +1,87 @@
+/* Bliss Theme for Windows XP */
+/* This should be saved as: public/winxpthemes/bliss-theme.css */
+
+/* Main theme class */
+.subtheme-bliss-theme {
+  /* Set the Bliss wallpaper as background for the entire page */
+  background-image: url('/winXPwallpapers/bliss_uncropped_8k.png') !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  min-height: 100vh !important;
+}
+
+/* Apply background to body and html when theme is active */
+html.subtheme-bliss-theme,
+html.subtheme-bliss-theme body {
+  background-image: url('/winXPwallpapers/bliss_uncropped_8k.png') !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  min-height: 100vh !important;
+}
+
+
+
+
+
+/* XP Status bar styling */
+html.subtheme-bliss-theme .status-bar {
+  background-color: rgba(236, 233, 216, 0.95) !important;
+  border-top: 1px solid #0054e3 !important;
+}
+
+/* Specific chat window enhancements for better readability over Bliss */
+html.subtheme-bliss-theme .chat-page-container {
+  background: none !important;
+}
+
+/* Message area transparency */
+html.subtheme-bliss-theme .sunken-panel,
+html.subtheme-bliss-theme .tree-view {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(1px) !important;
+}
+
+/* Input area transparency */
+html.subtheme-bliss-theme .input-area {
+  background-color: rgba(236, 233, 216, 0.95) !important;
+  backdrop-filter: blur(2px) !important;
+}
+
+/* System messages styling for better visibility */
+html.subtheme-bliss-theme .message-row {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8) !important;
+}
+
+/* TopBar customizer window styling */
+html.subtheme-bliss-theme .window.fixed {
+  background-color: rgba(236, 233, 216, 0.98) !important;
+  backdrop-filter: blur(3px) !important;
+}
+
+/* Ensure text remains readable */
+html.subtheme-bliss-theme .title-bar-text {
+  color: white !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Profile cards and modals */
+html.subtheme-bliss-theme .ProfileCard,
+html.subtheme-bliss-theme .modal {
+  background-color: rgba(236, 233, 216, 0.98) !important;
+  backdrop-filter: blur(3px) !important;
+  border: 1px solid #0054e3 !important;
+  border-radius: 6px !important;
+}
+
+
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  html.subtheme-bliss-theme {
+    background-attachment: scroll !important;
+  }
+}
