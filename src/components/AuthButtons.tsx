@@ -1,4 +1,4 @@
-//src/components/AuthButtons.tsx
+//src/components/AuthButtons.tsx - FIXED VERSION
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button-themed';
 import { usePathname, useRouter } from 'next/navigation';
-import ProfileCustomizer from '@/components/ProfileCustomizer';
+// REMOVED: ProfileCustomizer import - let parent handle rendering
 import { cn } from '@/lib/utils';
 
 interface AuthButtonsProps {
@@ -19,7 +19,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
   const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
-  const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
+  // REMOVED: isCustomizerOpen state - parent handles this now
   const router = useRouter();
   const pathname = usePathname();
   
@@ -96,7 +96,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             console.error("AuthButtons: Profile fetch error:", profileError);
             setProfileUsername(null);
           } else if (profileData) {
-            // FIXED: Prioritize username over display_name, and show username not email
+            // Prioritize username over display_name
             const displayName = profileData.username || profileData.display_name;
             setProfileUsername(displayName);
             console.log("AuthButtons: Profile loaded:", displayName);
@@ -167,7 +167,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             console.error("AuthButtons: Profile error in auth change:", profileError);
             setProfileUsername(null);
           } else if (profileData) {
-            // FIXED: Prioritize username over display_name
+            // Prioritize username over display_name
             const displayName = profileData.username || profileData.display_name;
             setProfileUsername(displayName);
             console.log("AuthButtons: Profile updated via auth change:", displayName);
@@ -247,21 +247,14 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   };
 
+  // FIXED: Simplified handler - always use parent
   const handleOpenCustomizer = useCallback(() => {
-    if (mountedRef.current) {
-      if (onOpenProfileCustomizer) {
-        onOpenProfileCustomizer();
-      } else {
-        setIsCustomizerOpen(true);
-      }
+    if (mountedRef.current && onOpenProfileCustomizer) {
+      onOpenProfileCustomizer();
+    } else {
+      console.warn("AuthButtons: No onOpenProfileCustomizer handler provided");
     }
   }, [onOpenProfileCustomizer]);
-
-  const handleCloseCustomizer = useCallback(() => {
-    if (mountedRef.current) {
-      setIsCustomizerOpen(false);
-    }
-  }, []);
 
   // Show loading state with shorter timeout
   if (authLoading) {
@@ -270,13 +263,13 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
 
   // Show authenticated user UI
   if (user) {
-    // FIXED: Show username instead of email, fallback to email only if no username
+    // Show username instead of email, fallback to email only if no username
     const displayName = profileUsername || user.email;
     
     return (
-      <>
-        <div className="flex items-center space-x-2">
-          {/* Profile Customizer Button - Only one button shown */}
+      <div className="flex items-center space-x-2">
+        {/* Profile Customizer Button - Only show if handler provided */}
+        {onOpenProfileCustomizer && (
           <Button 
             onClick={handleOpenCustomizer}
             variant="outline"
@@ -292,34 +285,24 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
             <span className="text-sm">🎨</span>
             {!isMobile && <span>Profile</span>}
           </Button>
-
-          {/* REMOVED: The duplicate Settings button that was causing the extra profile customizer button */}
-
-          <span 
-            className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white" 
-            title={displayName ?? undefined}
-          >
-            {displayName}
-          </span>
-
-          <Button 
-            onClick={handleSignOut} 
-            className="text-xs p-1" 
-            variant="outline" 
-            disabled={signingOut}
-          >
-            {signingOut ? 'Signing Out...' : 'Sign Out'}
-          </Button>
-        </div>
-
-        {/* Profile Customizer Modal - only if not using parent's handler */}
-        {!onOpenProfileCustomizer && (
-          <ProfileCustomizer 
-            isOpen={isCustomizerOpen} 
-            onClose={handleCloseCustomizer} 
-          />
         )}
-      </>
+
+        <span 
+          className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white" 
+          title={displayName ?? undefined}
+        >
+          {displayName}
+        </span>
+
+        <Button 
+          onClick={handleSignOut} 
+          className="text-xs p-1" 
+          variant="outline" 
+          disabled={signingOut}
+        >
+          {signingOut ? 'Signing Out...' : 'Sign Out'}
+        </Button>
+      </div>
     );
   }
 

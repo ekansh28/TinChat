@@ -1,13 +1,15 @@
-// server/managers/SocketManager.ts
+// server/managers/SocketManager.ts - Handles ALL socket events
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ProfileManager, UserProfile } from './ProfileManager';
 import { MessageBatcher } from '../utils/MessageBatcher';
 import { PerformanceMonitor } from '../utils/PerformanceMonitor';
+import { ProfileCache } from '../utils/ProfileCache';
 import { ValidationSchemas } from '../validation/schemas';
 import { MatchmakingEngine } from '../services/MatchmakingEngine';
 import { RoomManager } from '../services/RoomManager';
 import { TypingManager } from '../services/TypingManager';
 import { logger } from '../utils/logger';
+import { UserStatus } from '../types/User';
 
 export interface User {
   id: string; // Socket ID
@@ -19,7 +21,7 @@ export interface User {
   avatarUrl?: string;
   bannerUrl?: string;
   pronouns?: string;
-  status?: 'online' | 'idle' | 'dnd' | 'offline';
+  status?: UserStatus;
   displayNameColor?: string;
   displayNameAnimation?: string;
   rainbowSpeed?: number;
@@ -31,6 +33,7 @@ export class SocketManager {
   private profileManager: ProfileManager;
   private messageBatcher: MessageBatcher;
   private performanceMonitor: PerformanceMonitor;
+  private profileCache: ProfileCache;
   private matchmakingEngine: MatchmakingEngine;
   private roomManager: RoomManager;
   private typingManager: TypingManager;
@@ -41,6 +44,7 @@ export class SocketManager {
   private lastMatchRequest: { [socketId: string]: number } = {};
   
   private readonly FIND_PARTNER_COOLDOWN_MS = 2000; // 2 seconds
+  private readonly DEFAULT_PROFILE_COLOR = '#667eea'; // Consistent with ProfileCustomizer
 
   constructor(
     io: SocketIOServer,
@@ -53,12 +57,15 @@ export class SocketManager {
     this.messageBatcher = messageBatcher;
     this.performanceMonitor = performanceMonitor;
     
+    this.profileCache = new ProfileCache();
     this.matchmakingEngine = new MatchmakingEngine();
     this.roomManager = new RoomManager();
     this.typingManager = new TypingManager(io);
     
     this.setupSocketHandlers();
     this.startPeriodicTasks();
+    
+    logger.info('🔌 SocketManager initialized successfully');
   }
 
   private setupSocketHandlers(): void {
@@ -74,12 +81,12 @@ export class SocketManager {
     this.io.emit('onlineUserCountUpdate', this.onlineUserCount);
     this.performanceMonitor.recordConnection();
 
-    // Set up event handlers
+    // Set up all event handlers for this socket
     this.setupUserEventHandlers(socket);
     this.setupChatEventHandlers(socket);
     this.setupStatusEventHandlers(socket);
+    this.setupOnlineUsersEventHandlers(socket);
     this.setupCleanupEventHandlers(socket);
-    this.setupOnlineUsersEventHandlers(socket); // NEW: Add online users handlers
   }
 
   private setupUserEventHandlers(socket: Socket): void {
@@ -108,6 +115,10 @@ export class SocketManager {
     socket.on('typing_stop', (payload: unknown) => {
       this.typingManager.handleTypingStop(socket, payload);
     });
+
+    socket.on('leaveChat', (payload: unknown) => {
+      this.handleLeaveChat(socket, payload);
+    });
   }
 
   private setupStatusEventHandlers(socket: Socket): void {
@@ -116,72 +127,20 @@ export class SocketManager {
     });
   }
 
-  private setupCleanupEventHandlers(socket: Socket): void {
-    socket.on('leaveChat', (payload: unknown) => {
-      this.handleLeaveChat(socket, payload);
-    });
-
-    socket.on('disconnect', async (reason) => {
-      await this.handleDisconnection(socket, reason);
-    });
-  }
-
-  // NEW: Setup online users event handlers
   private setupOnlineUsersEventHandlers(socket: Socket): void {
+    socket.on('getOnlineUsersData', async () => {
+      await this.handleGetOnlineUsersData(socket);
+    });
+
     socket.on('getOnlineUsersList', async () => {
       await this.handleGetOnlineUsersList(socket);
     });
   }
 
-  // NEW: Helper function to get online usernames
-  private async getOnlineUsernames(): Promise<string[]> {
-    const onlineUsernames: string[] = [];
-    
-    for (const [socketId, authId] of Object.entries(this.socketToAuthId)) {
-      try {
-        // Check if socket is still connected
-        const socket = this.io.sockets.sockets.get(socketId);
-        if (!socket?.connected) {
-          continue;
-        }
-
-        if (authId) {
-          // Fetch username from database
-          const profile = await this.profileManager.fetchUserProfile(authId);
-          if (profile && profile.username) {
-            onlineUsernames.push(profile.username);
-          }
-        }
-        // Note: We skip anonymous users (no authId) from the list
-      } catch (error) {
-        logger.warn(`Failed to fetch username for ${authId}:`, error);
-      }
-    }
-    
-    return onlineUsernames;
-  }
-
-  // NEW: Helper function to broadcast online users list to all clients
-  private async broadcastOnlineUsersList(): Promise<void> {
-    try {
-      const onlineUsernames = await this.getOnlineUsernames();
-      this.io.emit('onlineUsersList', onlineUsernames);
-      logger.debug(`📡 Broadcasted online users list: ${onlineUsernames.length} users - [${onlineUsernames.join(', ')}]`);
-    } catch (error) {
-      logger.error('Failed to broadcast online users list:', error);
-    }
-  }
-
-  // NEW: Handle getOnlineUsersList request
-  private async handleGetOnlineUsersList(socket: Socket): Promise<void> {
-    try {
-      const onlineUsernames = await this.getOnlineUsernames();
-      socket.emit('onlineUsersList', onlineUsernames);
-      logger.debug(`📋 Sent online users list to ${socket.id}: ${onlineUsernames.length} users`);
-    } catch (error) {
-      logger.error('Failed to get online users list:', error);
-      socket.emit('onlineUsersList', []);
-    }
+  private setupCleanupEventHandlers(socket: Socket): void {
+    socket.on('disconnect', async (reason) => {
+      await this.handleDisconnection(socket, reason);
+    });
   }
 
   private async handleFindPartner(socket: Socket, payload: unknown): Promise<void> {
@@ -198,7 +157,7 @@ export class SocketManager {
       }
       this.lastMatchRequest[socket.id] = now;
 
-      logger.info(`🔍 Find partner request: ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat, interests: [${interests.join(', ')}]`);
+      logger.info(`🔍 Find partner request: ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat, interests: [${interests?.join(', ') || 'none'}]`);
       
       // Set up auth mapping
       if (authId) {
@@ -206,7 +165,7 @@ export class SocketManager {
         this.authIdToSocketId[authId] = socket.id;
         await this.profileManager.updateUserStatus(authId, 'online');
         
-        // NEW: Broadcast updated online users list when someone authenticates
+        // Broadcast updated online users list when someone authenticates
         setTimeout(() => this.broadcastOnlineUsersList(), 500);
       }
 
@@ -223,7 +182,11 @@ export class SocketManager {
       
       // Fetch enhanced profile if authenticated
       if (authId) {
-        const profile = await this.profileManager.fetchUserProfile(authId);
+        const profile = await this.profileCache.getProfile(
+          authId, 
+          (id) => this.profileManager.fetchUserProfile(id)
+        );
+        
         if (profile) {
           this.enhanceUserWithProfile(currentUser, profile);
           logger.debug(`Enhanced profile loaded for ${authId}:`, {
@@ -233,7 +196,6 @@ export class SocketManager {
             badges: currentUser.badges?.length || 0
           });
         } else {
-          // Set defaults for new/missing profiles
           this.setDefaultUserProperties(currentUser);
         }
       } else {
@@ -245,11 +207,15 @@ export class SocketManager {
 
       if (matchedPartner) {
         await this.createChatRoom(currentUser, matchedPartner);
+        // Broadcast when people enter chat
+        setTimeout(() => this.broadcastOnlineUsersList(), 200);
       } else {
         // Add to waiting list
         this.matchmakingEngine.addToWaitingList(currentUser);
         logger.debug(`User ${socket.id} added to ${chatType} waiting list`);
         socket.emit('waitingForPartner');
+        // Broadcast queue changes
+        setTimeout(() => this.broadcastOnlineUsersList(), 200);
       }
     } catch (error: any) {
       logger.warn(`Invalid findPartner payload from ${socket.id}:`, error.message);
@@ -267,22 +233,38 @@ export class SocketManager {
         return;
       }
 
+      // FIXED: Use cached profile data for better performance
       let senderUsername = 'Stranger';
-      let senderDisplayNameColor = '#ff0000';
+      let senderDisplayNameColor = this.DEFAULT_PROFILE_COLOR;
       let senderDisplayNameAnimation = 'none';
       let senderRainbowSpeed = 3;
       
       if (authId) {
         if (username) {
           senderUsername = username;
+        }
+        
+        // Use profile cache instead of fetching every time
+        const profile = await this.profileCache.getProfile(
+          authId, 
+          (id) => this.profileManager.fetchUserProfile(id)
+        );
+        
+        if (profile) {
+          senderUsername = profile.display_name || profile.username || 'Stranger';
+          senderDisplayNameColor = profile.display_name_color || this.DEFAULT_PROFILE_COLOR;
+          senderDisplayNameAnimation = profile.display_name_animation || 'none';
+          senderRainbowSpeed = profile.rainbow_speed || 3;
+          
+          logger.debug(`💬 Message styling from cache:`, {
+            authId,
+            username: senderUsername,
+            color: senderDisplayNameColor,
+            animation: senderDisplayNameAnimation,
+            speed: senderRainbowSpeed
+          });
         } else {
-          const profile = await this.profileManager.fetchUserProfile(authId);
-          if (profile) {
-            senderUsername = profile.display_name || profile.username || 'Stranger';
-            senderDisplayNameColor = profile.display_name_color || '#ff0000';
-            senderDisplayNameAnimation = profile.display_name_animation || 'none';
-            senderRainbowSpeed = profile.rainbow_speed || 3;
-          }
+          logger.warn(`⚠️ No profile found for ${authId}, using defaults`);
         }
       }
       
@@ -296,10 +278,10 @@ export class SocketManager {
         senderRainbowSpeed
       };
       
-      // Use message batching for performance
+      // Send message to partner using message batching for performance
       const partnerId = room.users.find(id => id !== socket.id);
       if (partnerId) {
-        this.messageBatcher.queueMessage(partnerId, 'receiveMessage', messagePayload);
+        this.messageBatcher.queueMessage(partnerId, 'receiveMessage', messagePayload, 'high');
         this.performanceMonitor.recordMessage();
         
         logger.debug(`📨 Message relayed: ${socket.id} → ${partnerId} in room ${roomId}`);
@@ -339,10 +321,13 @@ export class SocketManager {
       if (authId) {
         const success = await this.profileManager.updateUserStatus(authId, status);
         if (success) {
+          // Invalidate cache when profile changes
+          this.profileCache.invalidate(authId);
+          
           // Broadcast status change to partner
           this.broadcastStatusToPartner(socket.id, status);
           socket.emit('statusUpdated', { status });
-          logger.debug(`📊 Status updated: ${authId} → ${status}`);
+          logger.debug(`📊 Status updated and cache invalidated: ${authId} → ${status}`);
         } else {
           socket.emit('error', { message: 'Failed to update status.' });
         }
@@ -374,6 +359,9 @@ export class SocketManager {
         this.typingManager.clearTyping(roomId);
         
         logger.info(`🚪 User ${socket.id} left room ${roomId}`);
+        
+        // Broadcast when people leave chat
+        setTimeout(() => this.broadcastOnlineUsersList(), 200);
       }
     } catch (error: any) {
       logger.warn(`Invalid leaveChat payload from ${socket.id}:`, error.message);
@@ -392,37 +380,31 @@ export class SocketManager {
     this.performanceMonitor.recordDisconnection();
   }
 
-  private async cleanupUser(socketId: string, reason: string): Promise<void> {
-    // Remove from waiting lists
-    this.matchmakingEngine.removeFromWaitingLists(socketId);
-    
-    // Clear rate limiting
-    delete this.lastMatchRequest[socketId];
-    
-    // Handle auth mapping cleanup
-    const authId = this.socketToAuthId[socketId];
-    if (authId) {
-      await this.profileManager.updateUserStatus(authId, 'offline');
-      delete this.socketToAuthId[socketId];
-      delete this.authIdToSocketId[authId];
-      
-      // NEW: Broadcast updated online users list when someone disconnects
-      setTimeout(() => this.broadcastOnlineUsersList(), 500);
+  private async handleGetOnlineUsersData(socket: Socket): Promise<void> {
+    try {
+      const onlineData = await this.getOnlineUsersData();
+      socket.emit('onlineUsersData', onlineData);
+      logger.debug(`📋 Sent complete online data to ${socket.id}:`, onlineData);
+    } catch (error) {
+      logger.error('Failed to get online users data:', error);
+      socket.emit('onlineUsersData', {
+        connectedUsers: [],
+        queueStats: { textQueue: 0, videoQueue: 0 },
+        activeChats: 0,
+        totalOnline: 0
+      });
     }
-    
-    // Clean up rooms
-    this.roomManager.cleanupUserRooms(socketId, (partnerId) => {
-      this.io.to(partnerId).emit('partnerLeft');
-      const partnerSocket = this.io.sockets.sockets.get(partnerId);
-      if (partnerSocket) {
-        partnerSocket.leave(socketId); // Leave any room with this socket
-      }
-    });
-    
-    // Clear typing indicators
-    this.typingManager.clearUserTyping(socketId);
-    
-    logger.debug(`🧹 Cleanup completed for ${socketId}`);
+  }
+
+  private async handleGetOnlineUsersList(socket: Socket): Promise<void> {
+    try {
+      const onlineData = await this.getOnlineUsersData();
+      socket.emit('onlineUsersList', onlineData.connectedUsers);
+      logger.debug(`📋 Sent online users list to ${socket.id}: ${onlineData.connectedUsers.length} users`);
+    } catch (error) {
+      logger.error('Failed to get online users list:', error);
+      socket.emit('onlineUsersList', []);
+    }
   }
 
   private async createChatRoom(currentUser: User, matchedPartner: User): Promise<void> {
@@ -441,6 +423,7 @@ export class SocketManager {
     const currentSocket = this.io.sockets.sockets.get(currentUser.id);
     if (currentSocket) currentSocket.join(roomId);
     partnerSocket.join(roomId);
+
     // Prepare partner info for both users
     const currentUserDisplayName = currentUser.displayName || currentUser.username || "Stranger";
     const partnerDisplayName = matchedPartner.displayName || matchedPartner.username || "Stranger";
@@ -456,7 +439,7 @@ export class SocketManager {
       partnerBannerUrl: matchedPartner.bannerUrl,
       partnerPronouns: matchedPartner.pronouns,
       partnerStatus: matchedPartner.status || 'online',
-      partnerDisplayNameColor: matchedPartner.displayNameColor || '#ffffff',
+      partnerDisplayNameColor: matchedPartner.displayNameColor || this.DEFAULT_PROFILE_COLOR,
       partnerDisplayNameAnimation: matchedPartner.displayNameAnimation || 'none',
       partnerRainbowSpeed: matchedPartner.rainbowSpeed || 3,
       partnerAuthId: matchedPartner.authId,
@@ -473,14 +456,13 @@ export class SocketManager {
       partnerBannerUrl: currentUser.bannerUrl,
       partnerPronouns: currentUser.pronouns,
       partnerStatus: currentUser.status || 'online',
-      partnerDisplayNameColor: currentUser.displayNameColor || '#ffffff',
+      partnerDisplayNameColor: currentUser.displayNameColor || this.DEFAULT_PROFILE_COLOR,
       partnerDisplayNameAnimation: currentUser.displayNameAnimation || 'none',
       partnerRainbowSpeed: currentUser.rainbowSpeed || 3,
       partnerAuthId: currentUser.authId,
       partnerBadges: currentUser.badges || [],
     });
 
-    // Fix the performance monitor call - provide required userId parameter
     this.performanceMonitor.recordMatch(currentUser.id, true);
     logger.info(`🎯 Match created: ${currentUser.id} ↔ ${matchedPartner.id} in room ${roomId}`);
   }
@@ -491,8 +473,8 @@ export class SocketManager {
     user.avatarUrl = profile.avatar_url;
     user.bannerUrl = profile.banner_url;
     user.pronouns = profile.pronouns;
-    user.status = profile.status || 'online'; // This now properly types to UserStatus
-    user.displayNameColor = profile.display_name_color || '#ffffff';
+    user.status = profile.status || 'online';
+    user.displayNameColor = profile.display_name_color || this.DEFAULT_PROFILE_COLOR;
     user.displayNameAnimation = profile.display_name_animation || 'none';
     user.rainbowSpeed = profile.rainbow_speed || 3;
     user.badges = profile.badges || [];
@@ -500,7 +482,7 @@ export class SocketManager {
 
   private setDefaultUserProperties(user: User): void {
     user.status = 'online';
-    user.displayNameColor = '#ffffff';
+    user.displayNameColor = this.DEFAULT_PROFILE_COLOR;
     user.displayNameAnimation = 'none';
     user.rainbowSpeed = 3;
     user.badges = [];
@@ -516,14 +498,118 @@ export class SocketManager {
     }
   }
 
+  private async cleanupUser(socketId: string, reason: string): Promise<void> {
+    // Remove from waiting lists
+    this.matchmakingEngine.removeFromWaitingLists(socketId);
+    
+    // Clear rate limiting
+    delete this.lastMatchRequest[socketId];
+    
+    // Handle auth mapping cleanup
+    const authId = this.socketToAuthId[socketId];
+    if (authId) {
+      await this.profileManager.updateUserStatus(authId, 'offline');
+      delete this.socketToAuthId[socketId];
+      delete this.authIdToSocketId[authId];
+      
+      // Broadcast updated online users list when someone disconnects
+      setTimeout(() => this.broadcastOnlineUsersList(), 500);
+    }
+    
+    // Clean up rooms
+    this.roomManager.cleanupUserRooms(socketId, (partnerId) => {
+      this.io.to(partnerId).emit('partnerLeft');
+      const partnerSocket = this.io.sockets.sockets.get(partnerId);
+      if (partnerSocket) {
+        partnerSocket.leave(socketId);
+      }
+    });
+    
+    // Clear typing indicators
+    this.typingManager.clearUserTyping(socketId);
+    
+    logger.debug(`🧹 Cleanup completed for ${socketId}`);
+  }
+
+  private async getOnlineUsersData(): Promise<{
+    connectedUsers: string[];
+    queueStats: { textQueue: number; videoQueue: number };
+    activeChats: number;
+    totalOnline: number;
+  }> {
+    const connectedUsers: string[] = [];
+    
+    // Get authenticated usernames
+    for (const [socketId, authId] of Object.entries(this.socketToAuthId)) {
+      try {
+        // Check if socket is still connected
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (!socket?.connected) {
+          continue;
+        }
+
+        if (authId) {
+          // Fetch username from cache/database
+          const profile = await this.profileCache.getProfile(
+            authId, 
+            (id) => this.profileManager.fetchUserProfile(id)
+          );
+          if (profile && profile.username) {
+            connectedUsers.push(profile.username);
+          }
+        }
+      } catch (error) {
+        logger.warn(`Failed to fetch username for ${authId}:`, error);
+      }
+    }
+
+    // Calculate queue stats
+    const queueStats = this.matchmakingEngine.getQueueStats();
+    const roomStats = this.roomManager.getStats();
+
+    return {
+      connectedUsers,
+      queueStats: {
+        textQueue: queueStats.text,
+        videoQueue: queueStats.video
+      },
+      activeChats: roomStats.totalRooms * 2, // Each room has 2 users
+      totalOnline: this.onlineUserCount
+    };
+  }
+
+  private async broadcastOnlineUsersList(): Promise<void> {
+    try {
+      const onlineData = await this.getOnlineUsersData();
+      
+      // Broadcast comprehensive data
+      this.io.emit('onlineUsersData', onlineData);
+      
+      // Also emit individual events for backward compatibility
+      this.io.emit('onlineUsersList', onlineData.connectedUsers);
+      this.io.emit('queueStatsUpdate', onlineData.queueStats);
+      this.io.emit('activeChatUpdate', onlineData.activeChats);
+      
+      logger.debug(`📡 Broadcasted online data:`, {
+        users: onlineData.connectedUsers.length,
+        total: onlineData.totalOnline,
+        textQueue: onlineData.queueStats.textQueue,
+        videoQueue: onlineData.queueStats.videoQueue,
+        activeChats: onlineData.activeChats
+      });
+    } catch (error) {
+      logger.error('Failed to broadcast online users list:', error);
+    }
+  }
+
   private startPeriodicTasks(): void {
     // Queue state logging
     setInterval(() => {
       const stats = this.matchmakingEngine.getQueueStats();
       const roomStats = this.roomManager.getStats();
-      const cacheStats = this.profileManager.getCacheStats();
+      const cacheStats = this.profileCache.getStats();
       
-      logger.debug('📊 Periodic stats:', {
+      logger.debug('📊 SocketManager periodic stats:', {
         online: this.onlineUserCount,
         queues: stats,
         rooms: roomStats,
@@ -541,12 +627,13 @@ export class SocketManager {
     }, 60000); // Every minute
   }
 
+  // Public API
   public getStats() {
     return {
       onlineUsers: this.onlineUserCount,
       queues: this.matchmakingEngine.getQueueStats(),
       rooms: this.roomManager.getStats(),
-      cache: this.profileManager.getCacheStats(),
+      cache: this.profileCache.getStats(),
       performance: this.performanceMonitor.getStats()
     };
   }

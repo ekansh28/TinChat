@@ -1,28 +1,24 @@
-// server/config/socketIO.ts
+// server/config/socketIO.ts - Socket.IO Configuration
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
 
-// High-performance Socket.IO configuration based on 2024-2025 best practices
 export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]): SocketIOServer {
   const io = new SocketIOServer(server, {
-    // Connection options
+    // Connection state recovery for better reliability
     connectionStateRecovery: {
-      maxDisconnectionDuration: 2 * 60 * 1000,
+      maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
       skipMiddlewares: true,
     },
     
     // Performance optimizations
     transports: ['websocket', 'polling'],
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 10000,
-    maxHttpBufferSize: 1e6,
+    pingTimeout: 60000,      // 60 seconds
+    pingInterval: 25000,     // 25 seconds
+    upgradeTimeout: 10000,   // 10 seconds
+    maxHttpBufferSize: 1e6,  // 1MB
     
-    // Remove compression from here - it's not a valid Socket.IO option
-    // compression: true, // REMOVE THIS LINE
-    
-    // CORS configuration
+    // CORS configuration for ProfileCustomizer integration
     cors: {
       origin: (origin, callback) => {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -36,13 +32,14 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
       credentials: true,
     },
     
-    allowEIO3: false,
-    serveClient: false,
+    // Security and performance settings
+    allowEIO3: false,        // Disable Engine.IO v3 for security
+    serveClient: false,      // Don't serve client files
   });
 
-  // Performance monitoring
+  // Enhanced error handling for better debugging
   io.engine.on('connection_error', (err) => {
-    logger.error('Engine.IO connection error:', {
+    logger.error('🔌 Engine.IO connection error:', {
       req: err.req?.url,
       code: err.code,
       message: err.message,
@@ -50,66 +47,25 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     });
   });
 
-  // Memory optimization for production
+  // Memory optimization - discard HTTP request after connection
   io.engine.on('connection', (rawSocket) => {
-    // Discard HTTP request reference to free memory
-    rawSocket.request = null;
+    rawSocket.request = null; // Free memory
   });
 
-  // Log connection statistics
+  // Connection statistics logging
   setInterval(() => {
     const stats = {
       connectedSockets: io.engine.clientsCount,
       rooms: io.sockets.adapter.rooms.size,
-      memory: process.memoryUsage(),
+      memoryUsage: {
+        heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`,
+        heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)}MB`
+      }
     };
-    logger.debug('📊 Server stats:', stats);
+    logger.debug('🔌 Socket.IO stats:', stats);
   }, 30000); // Every 30 seconds
 
-  logger.info('⚡ Socket.IO server configured with performance optimizations');
+  logger.info('⚡ Socket.IO server configured with ProfileCustomizer optimizations');
   
   return io;
-}
-
-// Advanced connection rate limiting (optional)
-export class ConnectionRateLimiter {
-  private connections = new Map<string, number[]>();
-  private readonly maxConnections: number;
-  private readonly windowMs: number;
-
-  constructor(maxConnections = 5, windowMs = 60000) {
-    this.maxConnections = maxConnections;
-    this.windowMs = windowMs;
-  }
-
-  isAllowed(ip: string): boolean {
-    const now = Date.now();
-    const windowStart = now - this.windowMs;
-    
-    const connections = this.connections.get(ip) || [];
-    const recentConnections = connections.filter(time => time > windowStart);
-    
-    if (recentConnections.length >= this.maxConnections) {
-      return false;
-    }
-    
-    recentConnections.push(now);
-    this.connections.set(ip, recentConnections);
-    
-    return true;
-  }
-
-  cleanup(): void {
-    const now = Date.now();
-    const windowStart = now - this.windowMs;
-    
-    for (const [ip, connections] of this.connections.entries()) {
-      const recentConnections = connections.filter(time => time > windowStart);
-      if (recentConnections.length === 0) {
-        this.connections.delete(ip);
-      } else {
-        this.connections.set(ip, recentConnections);
-      }
-    }
-  }
-}
+}4

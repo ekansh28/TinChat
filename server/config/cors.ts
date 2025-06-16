@@ -1,5 +1,4 @@
-// server/config/cors.ts
-
+// ===== server/config/cors.ts - CORS configuration =====
 export const allowedOrigins = [
   "https://studio--chitchatconnect-aqa0w.us-central1.hosted.app",
   "https://delightful-pond-0cb3e0010.6.azurestaticapps.net",
@@ -7,11 +6,10 @@ export const allowedOrigins = [
   "https://www.tinchat.online",
   "https://6000-idx-studio-1746229586647.cluster-73qgvk7hjjadkrjeyexca5ivva.cloudworkstations.dev",
   "http://localhost:9002",
-  "http://localhost:3000", // Common Next.js dev port
-  "http://localhost:3001", // Alternative dev port
+  "http://localhost:3000",
+  "http://localhost:3001"
 ];
 
-// Development mode - allow additional origins
 if (process.env.NODE_ENV === 'development') {
   allowedOrigins.push(
     "http://localhost:8080",
@@ -22,7 +20,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 export function isOriginAllowed(origin: string | undefined): boolean {
-  if (!origin) return true; // Allow requests without origin (e.g., mobile apps)
+  if (!origin) return true;
   return allowedOrigins.includes(origin);
 }
 
@@ -40,7 +38,8 @@ export function setCorsHeaders(res: any, requestOrigin?: string): string | undef
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   return originToAllow;
 }
+
