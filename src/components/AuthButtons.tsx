@@ -1,3 +1,4 @@
+//src/components/AuthButtons.tsx
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
