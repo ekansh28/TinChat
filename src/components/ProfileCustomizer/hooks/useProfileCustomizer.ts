@@ -1,266 +1,169 @@
 // src/components/ProfileCustomizer/hooks/useProfileCustomizer.ts
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { z } from 'zod';
-import { useTheme } from '@/components/theme-provider';
-import { generateEasyCSS } from '../utils/cssGenerator';
-import { getDefaultProfileCSS } from '@/lib/SafeCSS';
-import { DEFAULT_EASY_CUSTOMIZATION } from '../utils/constants';
-import type { 
-  EasyCustomization, 
-  Badge, 
-  StatusType, 
-  DisplayNameAnimation 
-} from '../types';
+import { useState, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import type { UserProfile, Badge } from '../types';
 
-// Add runtime validation schemas
-const ElementPropsSchema = z.object({
-  x: z.number().default(0),
-  y: z.number().default(0),
-  scale: z.number().min(0.1).max(5).default(1),
-  visible: z.boolean().default(true),
-  color: z.string().optional(),
-  fontFamily: z.string().optional(),
-  fontSize: z.number().positive().optional(),
-  width: z.number().positive().optional(),
-  height: z.number().positive().optional(),
-  background: z.string().optional(),
-  padding: z.string().optional(),
-  borderRadius: z.string().optional(),
-  border: z.string().optional(),
-  zIndex: z.number().optional()
-});
+interface UseProfileCustomizerReturn {
+  profile: UserProfile;
+  setProfile: React.Dispatch<React.SetStateAction<UserProfile>>;
+  badges: Badge[];
+  setBadges: React.Dispatch<React.SetStateAction<Badge[]>>;
+  customCSS: string;
+  setCustomCSS: React.Dispatch<React.SetStateAction<string>>;
+  saving: boolean;
+  loading: boolean;
+  saveProfile: (userId: string) => Promise<void>;
+  loadProfile: (userId: string) => Promise<void>;
+  resetToDefaults: () => void;
+}
 
-const EasyCustomizationSchema = z.object({
-  backgroundColor: z.string().default('#667eea'),
-  backgroundGradient: z.object({
-    enabled: z.boolean().default(true),
-    color1: z.string().default('#667eea'),
-    color2: z.string().default('#764ba2'),
-    direction: z.string().default('135deg')
-  }).optional(),
-  borderRadius: z.number().min(0).max(50).default(16),
-  bannerHeight: z.number().min(80).max(200).default(120),
-  avatarSize: z.number().min(60).max(120).default(80),
-  avatarFrame: z.enum(['circle', 'square']).default('circle'),
-  textShadow: z.boolean().default(false),
-  textGlow: z.boolean().default(false),
-  textBold: z.boolean().default(false),
-  fontFamily: z.string().default('MS Sans Serif'),
-  fontSize: z.number().min(8).max(24).default(14),
-  contentPadding: z.number().min(8).max(40).default(16),
-  shadow: z.boolean().default(true),
-  glow: z.boolean().default(false),
-  border: z.boolean().default(false),
-  elements: z.record(ElementPropsSchema).default({})
-});
+const DEFAULT_PROFILE: UserProfile = {
+  username: '',
+  display_name: '',
+  avatar_url: '',
+  banner_url: '',
+  pronouns: '',
+  bio: '',
+  status: 'online',
+  display_name_color: '#000000',
+  display_name_animation: 'none',
+  rainbow_speed: 3,
+  profile_complete: false,
+  badges: []
+};
 
-export const useProfileCustomizer = () => {
-  // CSS and mode states - Initialize with proper defaults
-  const [customCSS, setCustomCSS] = useState(() => getDefaultProfileCSS());
-  const [cssMode, setCSSMode] = useState<'custom' | 'easy'>('easy');
-  const [positionMode, setPositionMode] = useState<'normal' | 'grid'>('normal');
-  
-  // Easy customization state - Ensure proper initialization
-  const [easyCustomization, setEasyCustomization] = useState<EasyCustomization>(() => ({
-    ...DEFAULT_EASY_CUSTOMIZATION
-  }));
-  
-  // Profile data states
-  const [bio, setBio] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [pronouns, setPronouns] = useState('');
-  const [status, setStatus] = useState<StatusType>('online'); // Default to online
-  const [displayNameColor, setDisplayNameColor] = useState('#ffffff');
-  const [displayNameAnimation, setDisplayNameAnimation] = useState<DisplayNameAnimation>('none');
-  const [rainbowSpeed, setRainbowSpeed] = useState(3);
-  
-  // File states
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  
-  // Badge states
+export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [badges, setBadges] = useState<Badge[]>([]);
-  const [isBadgeManagerOpen, setIsBadgeManagerOpen] = useState(false);
-  
-  // Loading states
-  const [loading, setLoading] = useState(false);
+  const [customCSS, setCustomCSS] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [originalUsername, setOriginalUsername] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Refs
-  const mountedRef = useRef(true);
-  const avatarFileInputRef = useRef<HTMLInputElement>(null);
-  const bannerFileInputRef = useRef<HTMLInputElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const loadProfile = useCallback(async (userId: string) => {
+    if (!userId) return;
 
-  // Theme
-  const { currentTheme } = useTheme();
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-  // Component mounted state
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading profile:', error);
+        return;
+      }
 
-  // Safe customization setter with validation
-  const safeSetEasyCustomization = useCallback((
-    customization: EasyCustomization | ((prev: EasyCustomization) => EasyCustomization)
-  ) => {
-    if (typeof customization === 'function') {
-      setEasyCustomization(prev => {
-        try {
-          const result = customization(prev);
-          
-          // Validate with schema
-          const validated = EasyCustomizationSchema.parse({
-            ...DEFAULT_EASY_CUSTOMIZATION,
-            ...result,
-            elements: {
-              ...DEFAULT_EASY_CUSTOMIZATION.elements,
-              ...result.elements
-            }
-          });
-          
-          return validated;
-        } catch (error) {
-          console.error('Error in safeSetEasyCustomization:', error);
-          return prev;
-        }
-      });
-    } else {
-      try {
-        const validated = EasyCustomizationSchema.parse({
-          ...DEFAULT_EASY_CUSTOMIZATION,
-          ...customization,
-          elements: {
-            ...DEFAULT_EASY_CUSTOMIZATION.elements,
-            ...customization.elements
+      if (data) {
+        // Parse badges safely
+        let parsedBadges: Badge[] = [];
+        if (data.badges) {
+          try {
+            parsedBadges = typeof data.badges === 'string' 
+              ? JSON.parse(data.badges) 
+              : data.badges;
+            if (!Array.isArray(parsedBadges)) parsedBadges = [];
+          } catch (e) {
+            console.warn('Failed to parse badges:', e);
+            parsedBadges = [];
           }
-        });
-        setEasyCustomization(validated);
-      } catch (error) {
-        console.error('Error validating customization:', error);
-        setEasyCustomization(DEFAULT_EASY_CUSTOMIZATION);
-      }
-    }
-  }, []);
-
-  // Update custom CSS when easy customization changes - with proper safety checks
-  useEffect(() => {
-    if (cssMode === 'easy' && easyCustomization && easyCustomization.elements) {
-      try {
-        const generatedCSS = generateEasyCSS(easyCustomization, displayNameAnimation, rainbowSpeed);
-        if (generatedCSS) {
-          setCustomCSS(generatedCSS);
         }
-      } catch (error) {
-        console.error('Error generating CSS from easy customization:', error);
-        // Fallback to default CSS if generation fails
-        setCustomCSS(getDefaultProfileCSS());
+
+        setProfile({
+          ...data,
+          badges: undefined // Remove badges from profile object
+        });
+        setBadges(parsedBadges);
+        setCustomCSS(data.profile_card_css || '');
+      } else {
+        // No profile found, use defaults but keep the userId
+        setProfile({ ...DEFAULT_PROFILE, id: userId });
+        setBadges([]);
+        setCustomCSS('');
       }
-    }
-  }, [easyCustomization, cssMode, displayNameAnimation, rainbowSpeed]);
-
-  // Ensure CSS is never empty
-  useEffect(() => {
-    if (!customCSS || customCSS.trim() === '') {
-      console.log('Setting default CSS as customCSS was empty');
-      setCustomCSS(getDefaultProfileCSS());
-    }
-  }, [customCSS]);
-
-  // Safe state update functions with validation
-  const safeSetCustomCSS = useCallback((css: string) => {
-    if (typeof css === 'string' && css.trim()) {
-      setCustomCSS(css);
-    } else {
-      setCustomCSS(getDefaultProfileCSS());
+    } catch (error) {
+      console.error('Exception loading profile:', error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // Computed values with safe fallbacks
-  const safeCurrentTheme = currentTheme || 'default';
-  const isTheme98 = safeCurrentTheme === 'theme-98' || safeCurrentTheme === 'theme98';
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const saveProfile = useCallback(async (userId: string) => {
+    if (!userId) throw new Error('User ID is required');
+
+    setSaving(true);
+    try {
+      // Validate required fields
+      if (!profile.username?.trim()) {
+        throw new Error('Username is required');
+      }
+
+      if (profile.username.length < 3) {
+        throw new Error('Username must be at least 3 characters');
+      }
+
+      if (profile.username.length > 20) {
+        throw new Error('Username must be less than 20 characters');
+      }
+
+      // Prepare the profile data
+      const profileData = {
+        id: userId,
+        username: profile.username.trim(),
+        display_name: profile.display_name?.trim() || null,
+        avatar_url: profile.avatar_url?.trim() || null,
+        banner_url: profile.banner_url?.trim() || null,
+        pronouns: profile.pronouns?.trim() || null,
+        bio: profile.bio?.trim() || null,
+        status: profile.status || 'online',
+        display_name_color: profile.display_name_color || '#000000',
+        display_name_animation: profile.display_name_animation || 'none',
+        rainbow_speed: profile.rainbow_speed || 3,
+        profile_card_css: customCSS.trim() || null,
+        badges: badges.length > 0 ? JSON.stringify(badges) : null,
+        profile_complete: true,
+        updated_at: new Date().toISOString()
+      };
+
+      // Use upsert to handle both insert and update
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert(profileData, {
+          onConflict: 'id'
+        });
+
+      if (error) {
+        console.error('Error saving profile:', error);
+        throw new Error(error.message || 'Failed to save profile');
+      }
+
+      console.log('Profile saved successfully');
+    } catch (error) {
+      console.error('Exception saving profile:', error);
+      throw error;
+    } finally {
+      setSaving(false);
+    }
+  }, [profile, badges, customCSS]);
+
+  const resetToDefaults = useCallback(() => {
+    setProfile(DEFAULT_PROFILE);
+    setBadges([]);
+    setCustomCSS('');
+  }, []);
 
   return {
-    // CSS and mode states
-    customCSS,
-    setCustomCSS: safeSetCustomCSS,
-    cssMode,
-    setCSSMode,
-    positionMode,
-    setPositionMode,
-    
-    // Easy customization
-    easyCustomization,
-    setEasyCustomization: safeSetEasyCustomization,
-    
-    // Profile data
-    bio,
-    setBio,
-    displayName,
-    setDisplayName,
-    username,
-    setUsername,
-    pronouns,
-    setPronouns,
-    status,
-    setStatus,
-    displayNameColor,
-    setDisplayNameColor,
-    displayNameAnimation,
-    setDisplayNameAnimation,
-    rainbowSpeed,
-    setRainbowSpeed,
-    
-    // Files
-    avatarFile,
-    setAvatarFile,
-    avatarPreview,
-    setAvatarPreview,
-    avatarUrl,
-    setAvatarUrl,
-    bannerFile,
-    setBannerFile,
-    bannerPreview,
-    setBannerPreview,
-    bannerUrl,
-    setBannerUrl,
-    
-    // Badges
+    profile,
+    setProfile,
     badges,
     setBadges,
-    isBadgeManagerOpen,
-    setIsBadgeManagerOpen,
-    
-    // Loading states
-    loading,
-    setLoading,
+    customCSS,
+    setCustomCSS,
     saving,
-    setSaving,
-    currentUser,
-    setCurrentUser,
-    originalUsername,
-    setOriginalUsername,
-    
-    // Refs
-    mountedRef,
-    avatarFileInputRef,
-    bannerFileInputRef,
-    previewRef,
-    
-    // Computed
-    isTheme98,
-    isMobile,
+    loading,
+    saveProfile,
+    loadProfile,
+    resetToDefaults
   };
 };

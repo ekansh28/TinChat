@@ -1,349 +1,251 @@
-// src/components/ProfileCustomizer/index.ts - Fixed Export Structure
-import React from 'react';
+// src/components/ProfileCustomizer/index.tsx
+'use client';
 
-// FIXED: Import and export ProfileCustomizer correctly
-import ProfileCustomizer from './ProfileCustomizer';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Button } from '@/components/ui/button-themed';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { ProfileCard } from './components/ProfileCard';
+import { CustomizerPanel } from './components/CustomizerPanel';
+import { Modal } from './components/Modal';
+import { useProfileCustomizer } from './hooks/useProfileCustomizer';
+import type { UserProfile } from './types';
 
-// Enhanced preview component
-export { EnhancedProfilePreview } from './EnhancedProfilePreview';
+export interface ProfileCustomizerProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
-// Core components
-export { BasicInfoSection } from './components/BasicInfoSection';
-export { DisplayNameStyling } from './components/DisplayNameStyling';
-export { ImageUploadSection } from './components/ImageUploadSection';
-export { BadgeManager } from './components/BadgeManager';
-export { ContextMenu } from './components/ContextMenu';
-export { TypographyPopup } from './components/TypographyPopup';
+export interface Profile {
+  id: string;
+  bio: string;
+  displayName: string;
+  username: string;
+  pronouns: string;
+  status: StatusType;
+  displayNameColor: string;
+  displayNameAnimation: DisplayNameAnimation;
+  rainbowSpeed: number;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+}
 
-// Advanced components
-export { AdvancedCustomization } from './components/AdvancedCustomization';
-export { ThemeSelector } from './components/ThemeSelector';
-export { LayoutPresets } from './components/LayoutPresets';
-export { AnimationControls } from './components/AnimationControls';
+export interface EasyCustomization {
+  backgroundColor: string;
+  backgroundGradient?: {
+    enabled: boolean;
+    color1: string;
+    color2: string;
+    direction: string;
+  };
+  borderRadius: number;
+  bannerHeight: number;
+  avatarSize: number;
+  avatarFrame: 'circle' | 'square';
+  textShadow: boolean;
+  textGlow: boolean;
+  textBold: boolean;
+  fontFamily: string;
+  fontSize: number;
+  contentPadding: number;
+  shadow: boolean;
+  glow: boolean;
+  border: boolean;
+  elements: Record<string, ElementProps>;
+}
 
-// Error handling
-export { 
-  ProfileCustomizerErrorBoundary, 
-  withErrorBoundary, 
-  useErrorHandler 
-} from './components/ErrorBoundary';
+export interface ElementProps {
+  x: number;
+  y: number;
+  scale: number;
+  visible: boolean;
+  color?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  width?: number;
+  height?: number;
+  background?: string;
+  padding?: string;
+  borderRadius?: string;
+  border?: string;
+  zIndex?: number;
+}
 
-// Hooks
-export { useProfileCustomizer } from './hooks/useProfileCustomizer';
-export { useProfileData } from './hooks/useProfileData';
-export { useEasyMode } from './hooks/useEasyMode';
-export { useBadgeManager } from './hooks/useBadgeManager';
-
-// Types
-export type { 
-  ProfileCustomizerProps,
-  EasyCustomization,
-  Badge,
-  TypographyOptions,
-  ContextMenuState,
-  TypographyPopupState,
-  DragState,
-  StatusType,
-  DisplayNameAnimation,
-  ResizeHandle
-} from './types';
-
-// Utilities
-export { 
-  generateEasyCSS, 
-  clearCSSCache, 
-  getCSSCacheStats 
-} from './utils/cssGenerator';
-
-export { 
-  uploadFile, 
-  validateImageFile, 
-  createFilePreview, 
-  validateImageUrl 
-} from './utils/fileHandlers';
-
-export {
-  STATUS_OPTIONS,
-  DISPLAY_NAME_ANIMATIONS,
-  FONT_FAMILIES,
-  GRADIENT_DIRECTIONS,
-  AVATAR_FRAMES,
-  TEXT_ELEMENTS,
-  PROFILE_ELEMENTS,
-  GRID_SIZE,
-  DEFAULT_EASY_CUSTOMIZATION
-} from './utils/constants';
-
-// Performance and utility exports
-export type { Theme } from '@/components/theme-provider';
-
-// Re-export UI components for external use
-export { Button } from '@/components/ui/button-themed';
-export { Input } from '@/components/ui/input-themed';
-export { Label } from '@/components/ui/label-themed';
-export { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select-themed';
-
-// Enhanced features
-export const PROFILE_CUSTOMIZER_VERSION = '2.0.0';
-
-export const FEATURE_FLAGS = {
-  PERFORMANCE_MONITORING: true,
-  ADVANCED_ANIMATIONS: true,
-  PARTICLE_EFFECTS: true,
-  THEME_PRESETS: true,
-  LAYOUT_PRESETS: true,
-  DISCORD_STYLE: true,
-  MOBILE_OPTIMIZED: true,
-  ACCESSIBILITY_ENHANCED: true,
-  REAL_TIME_PREVIEW: true,
-  DRAG_AND_DROP: true,
-  MULTI_SELECT: true,
-  KEYBOARD_SHORTCUTS: true,
-  AUTO_SAVE: false, // Could be enabled in future
-  COLLABORATION: false, // Future feature
-  TEMPLATE_SHARING: false, // Future feature
-} as const;
-
-// Configuration options
-export const CUSTOMIZER_CONFIG = {
-  MAX_BADGES: 10,
-  MAX_BIO_LENGTH: 500,
-  MAX_USERNAME_LENGTH: 20,
-  MAX_DISPLAY_NAME_LENGTH: 32,
-  MAX_PRONOUNS_LENGTH: 20,
-  MAX_BADGE_NAME_LENGTH: 30,
+export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizerProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   
-  // File upload limits
-  MAX_AVATAR_SIZE_MB: 2,
-  MAX_BANNER_SIZE_MB: 5,
-  MAX_BADGE_SIZE_MB: 1,
-  
-  // Animation settings
-  DEFAULT_RAINBOW_SPEED: 3,
-  MIN_RAINBOW_SPEED: 1,
-  MAX_RAINBOW_SPEED: 10,
-  
-  // Layout constraints
-  MIN_AVATAR_SIZE: 60,
-  MAX_AVATAR_SIZE: 120,
-  MIN_BANNER_HEIGHT: 80,
-  MAX_BANNER_HEIGHT: 200,
-  MIN_BORDER_RADIUS: 0,
-  MAX_BORDER_RADIUS: 50,
-  MIN_PADDING: 12,
-  MAX_PADDING: 40,
-  
-  // Performance settings
-  CACHE_SIZE: 5,
-  DEBOUNCE_DELAY: 500,
-  COOLDOWN_MS: 2000,
-  
-  // Grid settings
-  GRID_SIZE: 10,
-  SNAP_THRESHOLD: 5,
-  
-  // Animation frame budget
-  MAX_FPS: 60,
-  FRAME_BUDGET_MS: 16,
-  
-  // Supported file types
-  SUPPORTED_IMAGE_TYPES: [
-    'image/jpeg',
-    'image/jpg', 
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'image/svg+xml'
-  ] as const,
-  
-  // Supported image extensions
-  SUPPORTED_IMAGE_EXTENSIONS: [
-    '.jpg',
-    '.jpeg',
-    '.png', 
-    '.gif',
-    '.webp',
-    '.svg'
-  ] as const,
-  
-  // Theme settings
-  DEFAULT_THEMES: [
-    'discord-dark',
-    'ocean-breeze',
-    'sunset-glow',
-    'forest-green',
-    'purple-haze',
-    'midnight-blue'
-  ] as const,
-  
-  // Accessibility settings
-  ACCESSIBILITY: {
-    MIN_CONTRAST_RATIO: 4.5,
-    FOCUS_RING_WIDTH: 2,
-    REDUCED_MOTION_DURATION: 0.01,
-    HIGH_CONTRAST_MODE: false,
-    SCREEN_READER_ANNOUNCEMENTS: true
-  }
-} as const;
+  const {
+    profile,
+    setProfile,
+    badges,
+    setBadges,
+    customCSS,
+    setCustomCSS,
+    saving,
+    loading,
+    saveProfile,
+    loadProfile,
+    resetToDefaults
+  } = useProfileCustomizer();
 
-// Utility functions for external use
-export const getProfileCustomizerInfo = () => ({
-  version: PROFILE_CUSTOMIZER_VERSION,
-  features: FEATURE_FLAGS,
-  config: CUSTOMIZER_CONFIG,
-  buildDate: new Date().toISOString(),
-  environment: process.env.NODE_ENV || 'development'
-});
-
-// Performance utilities
-export const createPerformanceMonitor = () => {
-  let frameCount = 0;
-  let lastTime = performance.now();
-  let fps = 60;
-  
-  return {
-    startFrame: () => {
-      frameCount++;
-    },
-    
-    endFrame: () => {
-      const now = performance.now();
-      if (now - lastTime >= 1000) {
-        fps = Math.round((frameCount * 1000) / (now - lastTime));
-        frameCount = 0;
-        lastTime = now;
-      }
-    },
-    
-    getFPS: () => fps,
-    
-    isPerformanceGood: () => fps >= 30,
-    
-    reset: () => {
-      frameCount = 0;
-      lastTime = performance.now();
-      fps = 60;
+  // Load profile when component mounts and user is available
+  useEffect(() => {
+    if (isOpen && user?.id && !loading) {
+      loadProfile(user.id);
     }
-  };
-};
+  }, [isOpen, user?.id, loading, loadProfile]);
 
-// Validation utilities
-export const validateProfileData = (data: any) => {
-  const errors: string[] = [];
-  
-  if (data.username && data.username.length < 3) {
-    errors.push('Username must be at least 3 characters long');
-  }
-  
-  if (data.username && data.username.length > CUSTOMIZER_CONFIG.MAX_USERNAME_LENGTH) {
-    errors.push(`Username must be less than ${CUSTOMIZER_CONFIG.MAX_USERNAME_LENGTH} characters`);
-  }
-  
-  if (data.displayName && data.displayName.length > CUSTOMIZER_CONFIG.MAX_DISPLAY_NAME_LENGTH) {
-    errors.push(`Display name must be less than ${CUSTOMIZER_CONFIG.MAX_DISPLAY_NAME_LENGTH} characters`);
-  }
-  
-  if (data.bio && data.bio.length > CUSTOMIZER_CONFIG.MAX_BIO_LENGTH) {
-    errors.push(`Bio must be less than ${CUSTOMIZER_CONFIG.MAX_BIO_LENGTH} characters`);
-  }
-  
-  if (data.pronouns && data.pronouns.length > CUSTOMIZER_CONFIG.MAX_PRONOUNS_LENGTH) {
-    errors.push(`Pronouns must be less than ${CUSTOMIZER_CONFIG.MAX_PRONOUNS_LENGTH} characters`);
-  }
-  
-  if (data.badges && data.badges.length > CUSTOMIZER_CONFIG.MAX_BADGES) {
-    errors.push(`Maximum ${CUSTOMIZER_CONFIG.MAX_BADGES} badges allowed`);
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
-};
+  const handleSave = useCallback(async () => {
+    if (!user?.id) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to save your profile",
+        variant: "destructive"
+      });
+      return;
+    }
 
-// Theme utilities
-export const getThemePreview = (themeName: string) => {
-  const themeMap = {
-    'discord-dark': 'linear-gradient(135deg, #36393f, #2f3136)',
-    'ocean-breeze': 'linear-gradient(135deg, #667eea, #764ba2)',
-    'sunset-glow': 'linear-gradient(135deg, #ff6b6b, #ffa726)',
-    'forest-green': 'linear-gradient(135deg, #56ab2f, #a8e6cf)',
-    'purple-haze': 'linear-gradient(135deg, #8360c3, #2ebf91)',
-    'midnight-blue': 'linear-gradient(135deg, #2c3e50, #3498db)'
-  };
-  
-  return themeMap[themeName as keyof typeof themeMap] || themeMap['ocean-breeze'];
-};
+    try {
+      await saveProfile(user.id);
+      toast({
+        title: "Profile Saved",
+        description: "Your profile has been updated successfully!",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({
+        title: "Save Failed",
+        description: "Failed to save your profile. Please try again.",
+        variant: "destructive"
+      });
+    }
+  }, [user?.id, saveProfile, toast]);
 
-// Accessibility utilities
-export const checkContrast = (foreground: string, background: string): number => {
-  // Simple contrast calculation (in real implementation, would use proper color library)
-  const rgb1 = hexToRgb(foreground);
-  const rgb2 = hexToRgb(background);
-  
-  if (!rgb1 || !rgb2) return 0;
-  
-  const luminance1 = getLuminance(rgb1);
-  const luminance2 = getLuminance(rgb2);
-  
-  const brighter = Math.max(luminance1, luminance2);
-  const darker = Math.min(luminance1, luminance2);
-  
-  return (brighter + 0.05) / (darker + 0.05);
-};
-
-const hexToRgb = (hex: string) => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
-};
-
-const getLuminance = (rgb: { r: number; g: number; b: number }) => {
-  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map(c => {
-    c = c / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  });
-  
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
-
-// Debug utilities (development only)
-export const debug = process.env.NODE_ENV === 'development' ? {
-  logProfileData: (data: any) => {
-    console.group('🎨 Profile Customizer Debug');
-    console.log('Profile Data:', data);
-    console.log('Validation:', validateProfileData(data));
-    console.log('Performance:', createPerformanceMonitor());
-    console.groupEnd();
-  },
-  
-  logPerformanceStats: () => {
-    const monitor = createPerformanceMonitor();
-    console.log('📊 Performance Stats:', {
-      fps: monitor.getFPS(),
-      isGood: monitor.isPerformanceGood(),
-      memory: (performance as any).memory ? {
-        used: Math.round(((performance as any).memory.usedJSHeapSize / 1048576)),
-        total: Math.round(((performance as any).memory.totalJSHeapSize / 1048576))
-      } : 'N/A'
+  const handleReset = useCallback(() => {
+    resetToDefaults();
+    toast({
+      title: "Profile Reset",
+      description: "Profile has been reset to default settings",
+      variant: "default"
     });
-  },
-  
-  enableVerboseLogging: () => {
-    (window as any).__PROFILE_CUSTOMIZER_DEBUG__ = true;
-    console.log('🔧 Profile Customizer verbose logging enabled');
-  }
-} : {};
+  }, [resetToDefaults, toast]);
 
-// FIXED: Export ProfileCustomizer as both named and default export
-export { ProfileCustomizer };
-export default ProfileCustomizer;
+  if (!user) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Profile Customizer">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-center">
+            <h3 className="text-lg font-medium mb-2">Authentication Required</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">Please sign in to customize your profile</p>
+            <Button onClick={onClose}>Close</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Customize Your Profile">
+      <div className="flex flex-col space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex-1">
+            <CustomizerPanel
+              profile={profile}
+              setProfile={setProfile}
+              badges={badges}
+              setBadges={setBadges}
+              customCSS={customCSS}
+              setCustomCSS={setCustomCSS}
+              saving={saving}
+              loading={loading}
+            />
+          </div>
+
+          <div className="lg:w-96">
+            <div className="sticky top-0">
+              <div className="bg-card rounded-lg p-4">
+                <h3 className="text-lg font-medium mb-4">Live Preview</h3>
+                <div className="space-y-4">
+                  <ProfileCard
+                    profile={profile}
+                    badges={badges}
+                    customCSS={customCSS}
+                    isPreview={true}
+                  />
+                  
+                  <div className="bg-background rounded-lg p-3">
+                    <div className="text-sm font-medium mb-2">Chat Preview</div>
+                    <div className="flex items-start gap-2 p-2 rounded border">
+                      <img
+                        src={profile.avatar_url || '/default-avatar.png'}
+                        alt="Avatar"
+                        className="w-8 h-8 rounded-full"
+                      />
+                      <div>
+                        <div 
+                          className="text-sm font-medium"
+                          style={{ 
+                            color: profile.display_name_color || 'inherit',
+                            animation: profile.display_name_animation === 'rainbow' ? 
+                              `rainbow ${profile.rainbow_speed || 3}s linear infinite` : 'none'
+                          }}
+                        >
+                          {profile.display_name || profile.username || 'Unknown User'}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Hello! This is how your name appears in chat.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={saving || loading}
+          >
+            Reset to Defaults
+          </Button>
+          
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || loading}
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes rainbow {
+          0% { color: #ff0000; }
+          17% { color: #ff8000; }
+          33% { color: #ffff00; }
+          50% { color: #00ff00; }
+          67% { color: #0080ff; }
+          83% { color: #8000ff; }
+          100% { color: #ff0000; }
+        }
+      `}</style>
+    </Modal>
+  );
+}

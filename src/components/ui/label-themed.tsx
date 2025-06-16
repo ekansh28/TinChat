@@ -1,19 +1,26 @@
-'use client';
-
-import * as React from 'react';
-import * as LabelPrimitive from '@radix-ui/react-label';
+// src/components/ui/label-themed.tsx
+import React from 'react';
 import { cn } from '@/lib/utils';
 
-const LabelThemed = React.forwardRef<
-  React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <LabelPrimitive.Root
-    ref={ref}
-    className={cn('themed-label', className)} // Basic class, relies on global theme
-    {...props}
-  />
-));
-LabelThemed.displayName = LabelPrimitive.Root.displayName;
+export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
+  className?: string;
+}
 
-export { LabelThemed as Label };
+const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <label
+        ref={ref}
+        className={cn(
+          "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+          "text-gray-900 dark:text-gray-100",
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+Label.displayName = "Label";
+
+export { Label };

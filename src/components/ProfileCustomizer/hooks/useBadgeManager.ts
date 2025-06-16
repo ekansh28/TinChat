@@ -1,16 +1,14 @@
 // src/components/ProfileCustomizer/hooks/useBadgeManager.ts
-import { useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { validateImageUrl } from '../utils/fileHandlers';
+import { useState, useCallback } from 'react';
 import type { Badge } from '../types';
 
-// Simple UUID generator using crypto.randomUUID() or fallback
-const generateId = (): string => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  // Fallback for older browsers
-  return 'badge-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+// Simple UUID generator (replace with uuid package if available)
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 };
 
 interface UseBadgeManagerProps {
@@ -18,75 +16,72 @@ interface UseBadgeManagerProps {
   setBadges: React.Dispatch<React.SetStateAction<Badge[]>>;
 }
 
-export const useBadgeManager = ({ badges, setBadges }: UseBadgeManagerProps) => {
+interface UseBadgeManagerReturn {
+  newBadgeUrl: string;
+  setNewBadgeUrl: React.Dispatch<React.SetStateAction<string>>;
+  newBadgeName: string;
+  setNewBadgeName: React.Dispatch<React.SetStateAction<string>>;
+  addBadge: () => void;
+  removeBadge: (badgeId: string) => void;
+  reorderBadges: (startIndex: number, endIndex: number) => void;
+  clearAllBadges: () => void;
+  duplicateBadge: (badgeId: string) => void;
+}
+
+export const useBadgeManager = ({
+  badges,
+  setBadges
+}: UseBadgeManagerProps): UseBadgeManagerReturn => {
   const [newBadgeUrl, setNewBadgeUrl] = useState('');
   const [newBadgeName, setNewBadgeName] = useState('');
-  const { toast } = useToast();
 
-  const addBadge = () => {
-    if (!newBadgeUrl.trim()) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid image URL"
-      });
-      return;
-    }
-
-    if (badges.length >= 10) {
-      toast({
-        title: "Maximum badges reached",
-        description: "You can only have up to 10 badges"
-      });
-      return;
-    }
-
-    const validation = validateImageUrl(newBadgeUrl);
-    if (!validation.valid) {
-      toast({
-        title: "Invalid Image",
-        description: validation.error
-      });
-      return;
-    }
+  const addBadge = useCallback(() => {
+    if (!newBadgeUrl.trim() || badges.length >= 10) return;
 
     const newBadge: Badge = {
-      id: generateId(),
+      id: generateUUID(),
       url: newBadgeUrl.trim(),
-      name: newBadgeName.trim() || `Badge ${badges.length + 1}`
+      name: newBadgeName.trim() || undefined
     };
 
     setBadges(prev => [...prev, newBadge]);
     setNewBadgeUrl('');
     setNewBadgeName('');
-    
-    toast({
-      title: "Badge Added",
-      description: "Badge has been added to your profile"
-    });
-  };
+  }, [newBadgeUrl, newBadgeName, badges.length, setBadges]);
 
-  const removeBadge = (badgeId: string) => {
+  const removeBadge = useCallback((badgeId: string) => {
     setBadges(prev => prev.filter(badge => badge.id !== badgeId));
-    toast({
-      title: "Badge Removed",
-      description: "Badge has been removed from your profile"
-    });
-  };
+  }, [setBadges]);
 
-  const updateBadge = (badgeId: string, updates: Partial<Badge>) => {
-    setBadges(prev => prev.map(badge => 
-      badge.id === badgeId ? { ...badge, ...updates } : badge
-    ));
-  };
-
-  const reorderBadges = (startIndex: number, endIndex: number) => {
+  const reorderBadges = useCallback((startIndex: number, endIndex: number) => {
     setBadges(prev => {
       const result = Array.from(prev);
       const [removed] = result.splice(startIndex, 1);
       result.splice(endIndex, 0, removed);
       return result;
     });
-  };
+  }, [setBadges]);
+
+  const clearAllBadges = useCallback(() => {
+    setBadges([]);
+    setNewBadgeUrl('');
+    setNewBadgeName('');
+  }, [setBadges]);
+
+  const duplicateBadge = useCallback((badgeId: string) => {
+    if (badges.length >= 10) return;
+
+    const badgeToDuplicate = badges.find(badge => badge.id === badgeId);
+    if (!badgeToDuplicate) return;
+
+    const duplicatedBadge: Badge = {
+      id: generateUUID(),
+      url: badgeToDuplicate.url,
+      name: badgeToDuplicate.name ? `${badgeToDuplicate.name} (Copy)` : undefined
+    };
+
+    setBadges(prev => [...prev, duplicatedBadge]);
+  }, [badges, setBadges]);
 
   return {
     newBadgeUrl,
@@ -95,7 +90,8 @@ export const useBadgeManager = ({ badges, setBadges }: UseBadgeManagerProps) => 
     setNewBadgeName,
     addBadge,
     removeBadge,
-    updateBadge,
     reorderBadges,
+    clearAllBadges,
+    duplicateBadge
   };
 };
