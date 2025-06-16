@@ -1,0 +1,144 @@
+/* src/components/ProfilePopup/profile-popup.css */
+
+/* Profile popup overlay - doesn't block interactions except for the popup itself */
+.profile-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1040;
+  pointer-events: none; /* Allow clicks to pass through overlay */
+}
+
+/* Profile popup content */
+.profile-popup {
+  pointer-events: auto; /* Re-enable pointer events for popup content */
+  transform-origin: top left;
+}
+
+/* Discord-style animations */
+@keyframes profilePopupEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.profile-popup {
+  animation: profilePopupEnter 200ms ease-out;
+}
+
+/* Mobile slide-up animation */
+@media (max-width: 767px) {
+  .profile-popup {
+    animation: profilePopupSlideUp 250ms ease-out;
+  }
+  
+  @keyframes profilePopupSlideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .profile-popup {
+    animation: none;
+  }
+}
+
+/* Username button styling for clickable usernames */
+.username-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-weight: inherit;
+  font-size: inherit;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  transition: all 0.1s ease;
+  text-decoration: none;
+  display: inline;
+}
+
+.username-button:hover {
+  text-decoration: underline;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
+.dark .username-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.username-button:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.username-button:active {
+  transform: translateY(1px);
+}
+
+/* Accessible focus styles */
+.username-button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Loading state for profile popup */
+.profile-popup-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  min-height: 200px;
+}
+
+.profile-popup-loading .spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error state */
+.profile-popup-error {
+  padding: 1rem;
+  text-align: center;
+  color: #ef4444;
+}
+
+/* Theme compatibility */
+.theme-98 .username-button:hover {
+  background-color: #c0c0c0;
+  border: 1px inset #c0c0c0;
+  padding: 1px 3px;
+  margin: -1px -3px;
+}
+
+.theme-7 .username-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+  border-radius: 6px;
+}

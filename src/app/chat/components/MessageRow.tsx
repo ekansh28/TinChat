@@ -1,5 +1,7 @@
-import React, { useMemo } from 'react';
+// src/app/chat/components/MessageRow.tsx - Fixed version
+import React, { useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
 import { getDisplayNameClass, renderMessageWithEmojis } from '../utils/ChatHelpers';
 
 interface MessageRowProps {
@@ -48,18 +50,26 @@ const MessageRow: React.FC<MessageRowProps> = ({
   onUsernameClick,
   isMobile
 }) => {
+  const { showProfile } = useProfilePopup();
+
+  // Prefetch profile data on hover
+  const handleMouseEnter = useCallback(() => {
+    if (message.sender === 'partner' && message.senderAuthId) {
+      // Implement your prefetch logic here
+      console.log('Prefetching profile for', message.senderAuthId);
+    }
+  }, [message.sender, message.senderAuthId]);
+
   if (message.sender === 'system') {
     return (
       <div className={cn(
         "mb-2 message-row",
-        // MOBILE: Normal margin for chronological order
         isMobile && "mb-1"
       )}>
         <div className={cn(
           "text-center w-full text-xs italic",
-           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
-           // MOBILE: Better visibility and spacing
-           isMobile && "py-1 px-2 bg-black bg-opacity-10 rounded"
+          theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
+          isMobile && "py-1 px-2 bg-black bg-opacity-10 rounded"
         )}>
           {message.content}
         </div>
@@ -67,7 +77,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  // FIXED: Normal divider logic for chronological order
+  // Divider logic for chronological order
   const showDivider = useMemo(() => {
     return theme === 'theme-7' &&
       previousMessageSender &&
@@ -82,121 +92,127 @@ const MessageRow: React.FC<MessageRowProps> = ({
     : [message.content]
   ), [message.content, theme]);
 
-  // IMPROVED: Better display name and styling logic with proper fallbacks
-  let displayName: string;
-  let displayNameColor: string;
-  let displayNameAnimation: string;
-  let rainbowSpeed: number;
-  let authIdToUse: string | null;
+  // Display name and styling logic
+  const isSelf = message.sender === 'self';
+  const displayName = isSelf 
+    ? ownInfo.username 
+    : message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
+  
+  const displayNameColor = isSelf
+    ? ownInfo.displayNameColor
+    : message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#ff6b6b';
+  
+  const displayNameAnimation = isSelf
+    ? ownInfo.displayNameAnimation
+    : message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none';
+  
+  const rainbowSpeed = isSelf
+    ? 3 // Default for own messages
+    : message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3;
 
-  if (message.sender === 'self') {
-    displayName = ownInfo.username;
-    displayNameColor = ownInfo.displayNameColor || '#0066cc';
-    displayNameAnimation = ownInfo.displayNameAnimation || 'none';
-    rainbowSpeed = 3; // Default for own messages
-    authIdToUse = ownInfo.authId;
-  } else {
-    // FIXED: For partner messages, prioritize message data over cached partner info
-    // This ensures the most recent styling is always used
-    displayName = message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || "Stranger";
-    
-    // FIXED: Ensure proper color fallback and better default colors
-    if (message.senderDisplayNameColor) {
-      displayNameColor = message.senderDisplayNameColor;
-    } else if (partnerInfo?.displayNameColor) {
-      displayNameColor = partnerInfo.displayNameColor;
-    } else {
-      // Better fallback color that's more visible
-      displayNameColor = '#ff6b6b'; // Softer red that's more visible
-    }
-    
-    displayNameAnimation = message.senderDisplayNameAnimation || 
-                          partnerInfo?.displayNameAnimation || 
-                          'none';
-    
-    rainbowSpeed = message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3;
-    authIdToUse = message.senderAuthId || partnerInfo?.authId || null;
-  }
+  const authId = isSelf 
+    ? ownInfo.authId 
+    : message.senderAuthId || partnerInfo?.authId || null;
 
-  // DEBUGGING: Log color values to help troubleshoot
-  if (message.sender === 'partner') {
-    console.log('MessageRow Partner Color Debug:', {
-      messageColor: message.senderDisplayNameColor,
-      partnerInfoColor: partnerInfo?.displayNameColor,
-      finalColor: displayNameColor,
-      username: displayName
-    });
-  }
-
-  const isClickable = authIdToUse && authIdToUse !== 'anonymous' && authIdToUse !== null;
+  const isClickable = !!authId && authId !== 'anonymous';
   const displayNameClass = getDisplayNameClass(displayNameAnimation);
 
-  // Enhanced styling logic to ensure colors are always visible and properly applied
-  const getDisplayNameStyle = () => {
+  // Handle username click
+  const handleUsernameClick = useCallback((e: React.MouseEvent) => {
+    if (!isClickable || !authId) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickPosition = {
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 5
+    };
+    
+    // Call the original onUsernameClick handler for backwards compatibility
+    onUsernameClick(authId, clickPosition);
+    
+    // Show the profile popup using the new system (only 2 parameters)
+    showProfile(authId, e);
+  }, [isClickable, authId, showProfile, onUsernameClick]);
+
+  // Handle keyboard interaction
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!isClickable || !authId) return;
+    
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickPosition = {
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 5
+      };
+      
+      onUsernameClick(authId, clickPosition);
+      
+      // For keyboard events, we'll simulate a click at the calculated position
+      // Create a more targeted approach - just trigger the popup with position data
+      const fakeEvent = {
+        target: e.currentTarget,
+        currentTarget: e.currentTarget,
+        preventDefault: () => {},
+        stopPropagation: () => {}
+      };
+      
+      // Cast to unknown first, then to the expected type to avoid TypeScript errors
+      showProfile(authId, fakeEvent as unknown as React.MouseEvent);
+    }
+  }, [isClickable, authId, showProfile, onUsernameClick]);
+
+  // Display name style with proper fallbacks
+  const getDisplayNameStyle = (): React.CSSProperties => {
     const baseStyle: React.CSSProperties = {};
     
-    // FIXED: Ensure colors are properly applied for all animation types
     if (displayNameAnimation === 'rainbow') {
       baseStyle.animationDuration = `${rainbowSpeed}s`;
       // For rainbow, we don't set color as it's handled by CSS animation
-      // But we ensure the animation class is applied
     } else if (displayNameAnimation === 'gradient') {
       baseStyle.animationDuration = `4s`;
       // For gradient, we don't set color as it's handled by CSS animation
     } else {
-      // FIXED: For non-animated names, ALWAYS use the specified color
-      baseStyle.color = displayNameColor;
-      
-      // Ensure the color is valid and visible
-      if (!displayNameColor || displayNameColor === 'undefined') {
-        baseStyle.color = message.sender === 'self' ? '#0066cc' : '#ff6b6b';
-      }
+      baseStyle.color = displayNameColor || (isSelf ? '#0066cc' : '#ff6b6b');
     }
     
     return baseStyle;
   };
 
-  const UsernameComponent = ({ children, className }: { children: React.ReactNode, className: string }) => {
-    if (isClickable && authIdToUse) {
+  // Username component that handles clickable vs non-clickable states
+  const UsernameComponent = ({ children }: { children: React.ReactNode }) => {
+    if (isClickable) {
       return (
-        <span
-          onClick={(e) => {
-            e.preventDefault();
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickPosition = {
-              x: rect.left + rect.width / 2,
-              y: rect.bottom + 5
-            };
-            onUsernameClick(authIdToUse, clickPosition);
-          }}
+        <button
+          onClick={handleUsernameClick}
+          onKeyDown={handleKeyDown}
+          onMouseEnter={handleMouseEnter}
           className={cn(
-            className,
+            "font-bold mr-1",
             displayNameClass,
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded",
             isMobile && "active:underline active:scale-105 touch-manipulation"
           )}
           style={getDisplayNameStyle()}
-          role="link"
+          aria-label={`View ${displayName}'s profile`}
+          data-user-id={authId}
+          type="button"
           tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              const rect = e.currentTarget.getBoundingClientRect();
-              const clickPosition = {
-                x: rect.left + rect.width / 2,
-                y: rect.bottom + 5
-              };
-              onUsernameClick(authIdToUse, clickPosition);
-            }
-          }}
         >
           {children}
-        </span>
+        </button>
       );
     }
+    
     return (
       <span 
-        className={cn(className, displayNameClass)}
+        className={cn("font-bold mr-1", displayNameClass)}
         style={getDisplayNameStyle()}
       >
         {children}
@@ -206,33 +222,25 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   return (
     <>
-      {/* FIXED: Normal divider positioning for chronological order */}
       {showDivider && (
         <div
           className="h-[2px] border border-[#CEDCE5] bg-[#64B2CF] mb-1"
           aria-hidden="true"
-        ></div>
+        />
       )}
       <div className={cn(
         "break-words message-row", 
-        // MOBILE: Optimized spacing and text size for normal chronological order
         isMobile ? "mb-1 text-sm leading-relaxed py-0.5" : "mb-1",
-        // Add sender-specific styling for better visual separation on mobile
         isMobile && message.sender === 'self' && "ml-2",
         isMobile && message.sender === 'partner' && "mr-2"
       )}>
         <div className="flex items-start gap-2">
           <div className="flex-1">
-            <UsernameComponent className={cn(
-              "font-bold mr-1",
-              // MOBILE: Slightly smaller username for space efficiency
-              isMobile && "text-sm"
-            )}>
+            <UsernameComponent>
               {displayName}:
             </UsernameComponent>
             <span className={cn(
               theme === 'theme-7' && 'theme-7-text-shadow',
-              // MOBILE: Ensure good readability
               isMobile && "break-words hyphens-auto"
             )}>
               {messageContent}
