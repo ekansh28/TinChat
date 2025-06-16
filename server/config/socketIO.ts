@@ -1,24 +1,36 @@
-// server/config/socketIO.ts - Socket.IO Configuration
+// ===== server/config/socketIO.ts - Enhanced Configuration =====
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
 
 export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]): SocketIOServer {
   const io = new SocketIOServer(server, {
-    // Connection state recovery for better reliability
+    // ✅ FIXED: Enhanced connection state recovery
     connectionStateRecovery: {
-      maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+      maxDisconnectionDuration: 5 * 60 * 1000, // 5 minutes (increased from 2)
       skipMiddlewares: true,
     },
     
-    // Performance optimizations
+    // ✅ FIXED: Improved ping settings to prevent timeout disconnections
     transports: ['websocket', 'polling'],
-    pingTimeout: 60000,      // 60 seconds
-    pingInterval: 25000,     // 25 seconds
-    upgradeTimeout: 10000,   // 10 seconds
-    maxHttpBufferSize: 1e6,  // 1MB
+    pingTimeout: 120000,     // 2 minutes (increased from 60s)
+    pingInterval: 30000,     // 30 seconds (increased from 25s)
+    upgradeTimeout: 30000,   // 30 seconds (increased from 10s)
+    maxHttpBufferSize: 5e6,  // 5MB (increased from 1MB) to prevent large payload disconnections
     
-    // CORS configuration for ProfileCustomizer integration
+    // ✅ FIXED: Enhanced WebSocket configuration
+    allowUpgrades: true,
+    perMessageDeflate: {
+      threshold: 1024,
+      concurrencyLimit: 10,
+      memLevel: 7,
+    },
+    
+    // ✅ FIXED: Better HTTP long-polling configuration
+    httpCompression: true,
+    compression: true,
+    
+    // CORS configuration remains the same
     cors: {
       origin: (origin, callback) => {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -33,39 +45,155 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     },
     
     // Security and performance settings
-    allowEIO3: false,        // Disable Engine.IO v3 for security
-    serveClient: false,      // Don't serve client files
+    allowEIO3: false,
+    serveClient: false,
+    
+    // ✅ FIXED: Better connection timeout handling
+    connectTimeout: 60000, // 1 minute for initial connection
+    
+    // ✅ FIXED: Enhanced engine.io settings
+    destroyUpgrade: false,
+    destroyUpgradeTimeout: 1000,
   });
 
-  // Enhanced error handling for better debugging
+  // ✅ FIXED: Enhanced error handling for better debugging
   io.engine.on('connection_error', (err) => {
     logger.error('🔌 Engine.IO connection error:', {
       req: err.req?.url,
       code: err.code,
       message: err.message,
       context: err.context,
+      headers: err.req?.headers,
+      userAgent: err.req?.headers?.['user-agent'],
     });
   });
 
-  // Memory optimization - discard HTTP request after connection
+  // ✅ FIXED: Better connection monitoring
   io.engine.on('connection', (rawSocket) => {
-    rawSocket.request = null; // Free memory
+    logger.debug(`🔗 New engine connection: ${rawSocket.id}`, {
+      transport: rawSocket.transport.name,
+      userAgent: rawSocket.request.headers['user-agent'],
+      remoteAddress: rawSocket.request.connection?.remoteAddress,
+    });
+    
+    // Memory optimization
+    rawSocket.request = null;
   });
 
-  // Connection statistics logging
+  // ✅ FIXED: Enhanced disconnection monitoring
+  io.engine.on('disconnect', (reason) => {
+    logger.debug(`⚠️ Engine disconnection: ${reason}`);
+  });
+
+  // ✅ FIXED: Monitor transport upgrades
+  io.engine.on('upgrade', (socket) => {
+    logger.debug(`⬆️ Transport upgraded to: ${socket.transport.name}`);
+  });
+
+  // ✅ FIXED: Monitor transport downgrades
+  io.engine.on('upgradeError', (error) => {
+    logger.warn(`⬇️ Transport upgrade failed:`, error.message);
+  });
+
+  // ✅ FIXED: Enhanced connection statistics with disconnect reasons
+  const connectionStats = {
+    totalConnections: 0,
+    activeConnections: 0,
+    disconnectReasons: new Map<string, number>(),
+    transportTypes: new Map<string, number>(),
+  };
+
+  io.on('connection', (socket) => {
+    connectionStats.totalConnections++;
+    connectionStats.activeConnections++;
+    
+    const transport = socket.conn.transport.name;
+    connectionStats.transportTypes.set(transport, (connectionStats.transportTypes.get(transport) || 0) + 1);
+    
+    logger.debug(`👤 Socket connected: ${socket.id}`, {
+      transport,
+      totalConnections: connectionStats.totalConnections,
+      activeConnections: connectionStats.activeConnections,
+    });
+
+    // ✅ FIXED: Enhanced disconnect handling with reason tracking
+    socket.on('disconnect', (reason) => {
+      connectionStats.activeConnections = Math.max(0, connectionStats.activeConnections - 1);
+      connectionStats.disconnectReasons.set(reason, (connectionStats.disconnectReasons.get(reason) || 0) + 1);
+      
+      logger.info(`👋 Socket disconnected: ${socket.id}`, {
+        reason,
+        activeConnections: connectionStats.activeConnections,
+        disconnectCounts: Object.fromEntries(connectionStats.disconnectReasons),
+      });
+    });
+
+    // ✅ FIXED: Monitor transport changes during session
+    socket.conn.on('upgrade', () => {
+      logger.debug(`🔄 Socket ${socket.id} upgraded to: ${socket.conn.transport.name}`);
+    });
+
+    socket.conn.on('upgradeError', (error) => {
+      logger.warn(`❌ Socket ${socket.id} upgrade failed:`, error.message);
+    });
+  });
+
+  // ✅ FIXED: Enhanced periodic statistics with disconnect analysis
   setInterval(() => {
+    const memUsage = process.memoryUsage();
     const stats = {
       connectedSockets: io.engine.clientsCount,
       rooms: io.sockets.adapter.rooms.size,
       memoryUsage: {
-        heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`,
-        heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)}MB`
-      }
+        heapUsed: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)}MB`,
+        heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)}MB`,
+        rss: `${(memUsage.rss / 1024 / 1024).toFixed(2)}MB`,
+      },
+      connectionStats,
+      topDisconnectReasons: Array.from(connectionStats.disconnectReasons.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5),
     };
-    logger.debug('🔌 Socket.IO stats:', stats);
+    
+    logger.debug('🔌 Socket.IO detailed stats:', stats);
+    
+    // ✅ FIXED: Alert on concerning disconnect patterns
+    const pingTimeouts = connectionStats.disconnectReasons.get('ping timeout') || 0;
+    const transportCloses = connectionStats.disconnectReasons.get('transport close') || 0;
+    const totalDisconnects = Array.from(connectionStats.disconnectReasons.values()).reduce((a, b) => a + b, 0);
+    
+    if (totalDisconnects > 0) {
+      const pingTimeoutRate = (pingTimeouts / totalDisconnects) * 100;
+      const transportCloseRate = (transportCloses / totalDisconnects) * 100;
+      
+      if (pingTimeoutRate > 30) {
+        logger.warn(`🚨 High ping timeout rate: ${pingTimeoutRate.toFixed(1)}% - consider adjusting ping settings`);
+      }
+      
+      if (transportCloseRate > 20) {
+        logger.warn(`🚨 High transport close rate: ${transportCloseRate.toFixed(1)}% - possible proxy/network issues`);
+      }
+    }
   }, 30000); // Every 30 seconds
 
-  logger.info('⚡ Socket.IO server configured with ProfileCustomizer optimizations');
+  // ✅ FIXED: Graceful shutdown handling
+  process.on('SIGTERM', () => {
+    logger.info('🛑 SIGTERM received, closing Socket.IO server gracefully...');
+    io.close(() => {
+      logger.info('✅ Socket.IO server closed gracefully');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    logger.info('🛑 SIGINT received, closing Socket.IO server gracefully...');
+    io.close(() => {
+      logger.info('✅ Socket.IO server closed gracefully');
+      process.exit(0);
+    });
+  });
+
+  logger.info('⚡ Socket.IO server configured with enhanced stability settings');
   
   return io;
-}4
+}

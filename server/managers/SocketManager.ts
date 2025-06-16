@@ -98,7 +98,59 @@ export class SocketManager {
       await this.handleFindPartner(socket, payload);
     });
   }
+      // ✅ FIXED: Enhanced connection monitoring
+    private setupConnectionMonitoring(): void {
+      // Monitor all socket connections for health
+      setInterval(() => {
+        const sockets = this.io.sockets.sockets;
+        const now = Date.now();
+        
+        sockets.forEach((socket) => {
+          const lastPong = socket.conn.lastPong || now;
+          const timeSinceLastPong = now - lastPong;
+          
+          // Warn if socket hasn't ponged in a while
+          if (timeSinceLastPong > 90000) { // 90 seconds
+            const authId = this.socketToAuthId[socket.id];
+            logger.warn(`🔍 Socket ${socket.id} (${authId || 'anonymous'}) hasn't ponged in ${Math.round(timeSinceLastPong / 1000)}s`);
+          }
+        });
+      }, 60000); // Check every minute
+    }
 
+      // ✅ FIXED: Add connection recovery helpers
+public handleReconnection(socket: Socket, authId?: string): void {
+  if (authId && this.authIdToSocketId[authId]) {
+    const oldSocketId = this.authIdToSocketId[authId];
+    logger.info(`🔄 User ${authId} reconnecting from ${oldSocketId} to ${socket.id}`);
+    
+    // Clean up old connection
+    this.cleanupUser(oldSocketId, 'reconnection');
+    
+    // Set up new connection
+    this.socketToAuthId[socket.id] = authId;
+    this.authIdToSocketId[authId] = socket.id;
+    
+    // Update status
+    this.profileManager.updateUserStatus(authId, 'online');
+    
+    // Emit reconnection success
+    socket.emit('reconnectionSuccess', {
+      timestamp: new Date().toISOString(),
+      newSocketId: socket.id,
+    });
+  }
+}
+    // ✅ FIXED: Add heartbeat mechanism for critical connections
+private startHeartbeat(): void {
+  setInterval(() => {
+    // Send heartbeat to all connected sockets
+    this.io.emit('heartbeat', {
+      timestamp: Date.now(),
+      serverTime: new Date().toISOString(),
+    });
+  }, 30000); // Every 30 seconds
+}
   private setupChatEventHandlers(socket: Socket): void {
     socket.on('sendMessage', async (payload: unknown) => {
       await this.handleSendMessage(socket, payload);
@@ -138,10 +190,43 @@ export class SocketManager {
   }
 
   private setupCleanupEventHandlers(socket: Socket): void {
-    socket.on('disconnect', async (reason) => {
-      await this.handleDisconnection(socket, reason);
+    // ✅ FIXED: Enhanced disconnect handling with better error catching
+    socket.on('disconnect', async (reason, details) => {
+      await this.handleDisconnection(socket, reason, details);
+    });
+
+    // ✅ FIXED: Add disconnecting event handler for proactive cleanup
+    socket.on('disconnecting', (reason) => {
+      logger.debug(`🔄 Socket ${socket.id} is disconnecting: ${reason}`);
+      // Proactively notify partners before full disconnect
+      this.notifyPartnerBeforeDisconnect(socket.id);
+    });
+
+    // ✅ FIXED: Add error event handler to prevent crashes
+    socket.on('error', (error) => {
+      logger.error(`❌ Socket ${socket.id} error:`, error);
+      this.recordSocketError(socket.id, error);
+    });
+
+    // ✅ FIXED: Add connect_error handler for better debugging
+    socket.on('connect_error', (error) => {
+      logger.error(`🔌 Socket ${socket.id} connection error:`, error);
     });
   }
+
+  private recordSocketError(socketId: string, error: any): void {
+  const authId = this.socketToAuthId[socketId];
+  logger.error(`Socket error details:`, {
+    socketId,
+    authId: authId || 'anonymous',
+    error: error.message || error,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+  
+  // Track error patterns for debugging
+  this.performanceMonitor.recordError();
+}
 
   private async handleFindPartner(socket: Socket, payload: unknown): Promise<void> {
     try {
@@ -222,6 +307,20 @@ export class SocketManager {
       socket.emit('error', { message: 'Invalid payload for findPartner.' });
     }
   }
+
+  private notifyPartnerBeforeDisconnect(socketId: string): void {
+  const room = this.roomManager.getRoomByUserId(socketId);
+  if (room) {
+    const partnerId = room.users.find(id => id !== socketId);
+    if (partnerId) {
+      // ✅ FIXED: Give partner advance warning
+      this.io.to(partnerId).emit('partnerDisconnecting', {
+        reason: 'Connection issues detected',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+}
 
   private async handleSendMessage(socket: Socket, payload: unknown): Promise<void> {
     try {
@@ -369,11 +468,23 @@ export class SocketManager {
     }
   }
 
-  private async handleDisconnection(socket: Socket, reason: string): Promise<void> {
-    logger.info(`👋 User disconnected: ${socket.id}, reason: ${reason}`);
+  private async handleDisconnection(socket: Socket, reason: string, details?: any): Promise<void> {
+    const disconnectInfo = {
+      socketId: socket.id,
+      reason,
+      details,
+      timestamp: new Date().toISOString(),
+      userAgent: socket.handshake.headers['user-agent'],
+      remoteAddress: socket.handshake.address,
+    };
+
+    logger.info(`👋 Enhanced disconnect handling:`, disconnectInfo);
     
     this.onlineUserCount = Math.max(0, this.onlineUserCount - 1);
     this.io.emit('onlineUserCountUpdate', this.onlineUserCount);
+    
+    // ✅ FIXED: Categorize disconnect reasons for better handling
+    await this.categorizeAndHandleDisconnect(socket.id, reason, details);
     
     // Clean up user data
     await this.cleanupUser(socket.id, `disconnect: ${reason}`);
@@ -395,6 +506,50 @@ export class SocketManager {
       });
     }
   }
+
+
+  private async categorizeAndHandleDisconnect(socketId: string, reason: string, details?: any): Promise<void> {
+  const authId = this.socketToAuthId[socketId];
+  
+  switch (reason) {
+    case 'ping timeout':
+      logger.warn(`⏰ Ping timeout for ${socketId} (${authId || 'anonymous'})`);
+      // This suggests network issues or client being backgrounded
+      if (authId) {
+        await this.profileManager.updateUserStatus(authId, 'idle');
+      }
+      break;
+      
+    case 'transport close':
+      logger.warn(`🚫 Transport close for ${socketId} (${authId || 'anonymous'})`);
+      // This suggests proxy/network infrastructure issues
+      break;
+      
+    case 'transport error':
+      logger.error(`❌ Transport error for ${socketId} (${authId || 'anonymous'}):`, details);
+      // Connection failed due to transport error
+      break;
+      
+    case 'client namespace disconnect':
+      logger.debug(`👤 Client initiated disconnect for ${socketId}`);
+      // User intentionally disconnected
+      if (authId) {
+        await this.profileManager.updateUserStatus(authId, 'offline');
+      }
+      break;
+      
+    case 'server namespace disconnect':
+      logger.debug(`🖥️ Server initiated disconnect for ${socketId}`);
+      // Server kicked the user
+      break;
+      
+    default:
+      logger.info(`❓ Unknown disconnect reason "${reason}" for ${socketId}:`, details);
+  }
+}
+
+
+
 
   private async handleGetOnlineUsersList(socket: Socket): Promise<void> {
     try {
@@ -498,27 +653,44 @@ export class SocketManager {
     }
   }
 
-  private async cleanupUser(socketId: string, reason: string): Promise<void> {
+
+// ✅ FIXED: Enhanced user cleanup with better error handling
+private async cleanupUser(socketId: string, reason: string): Promise<void> {
+  try {
     // Remove from waiting lists
     this.matchmakingEngine.removeFromWaitingLists(socketId);
     
     // Clear rate limiting
     delete this.lastMatchRequest[socketId];
     
-    // Handle auth mapping cleanup
+    // Handle auth mapping cleanup with better error handling
     const authId = this.socketToAuthId[socketId];
     if (authId) {
-      await this.profileManager.updateUserStatus(authId, 'offline');
-      delete this.socketToAuthId[socketId];
-      delete this.authIdToSocketId[authId];
+      try {
+        await this.profileManager.updateUserStatus(authId, 'offline');
+        delete this.socketToAuthId[socketId];
+        delete this.authIdToSocketId[authId];
+        
+        // Invalidate profile cache
+        this.profileCache.invalidate(authId);
+        
+        logger.debug(`✅ Auth cleanup completed for ${authId}`);
+      } catch (error) {
+        logger.error(`❌ Auth cleanup failed for ${authId}:`, error);
+      }
       
       // Broadcast updated online users list when someone disconnects
       setTimeout(() => this.broadcastOnlineUsersList(), 500);
     }
     
-    // Clean up rooms
+    // Clean up rooms with better partner notification
     this.roomManager.cleanupUserRooms(socketId, (partnerId) => {
-      this.io.to(partnerId).emit('partnerLeft');
+      this.io.to(partnerId).emit('partnerLeft', {
+        reason: 'Partner disconnected',
+        timestamp: new Date().toISOString(),
+        details: reason,
+      });
+      
       const partnerSocket = this.io.sockets.sockets.get(partnerId);
       if (partnerSocket) {
         partnerSocket.leave(socketId);
@@ -528,8 +700,11 @@ export class SocketManager {
     // Clear typing indicators
     this.typingManager.clearUserTyping(socketId);
     
-    logger.debug(`🧹 Cleanup completed for ${socketId}`);
+    logger.debug(`🧹 Enhanced cleanup completed for ${socketId}: ${reason}`);
+  } catch (error) {
+    logger.error(`❌ Cleanup failed for ${socketId}:`, error);
   }
+}
 
   private async getOnlineUsersData(): Promise<{
     connectedUsers: string[];
