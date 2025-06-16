@@ -13,7 +13,7 @@ import ChatWindow from './components/ChatWindow';
 import { useChatSocket, useChatState } from './hooks/useChatSocket';
 import { useAuth } from './hooks/useAuth';
 import { useThemeDetection } from './hooks/useThemeDetection';
-import { useViewport } from './hooks/useViewPort';
+import { useViewport } from './hooks/useViewport';
 import { useFaviconManager } from './hooks/useFaviconManager';
 import { useSystemMessages } from './hooks/useSystemMessages';
 import { useChatActions } from './hooks/useChatActions';
