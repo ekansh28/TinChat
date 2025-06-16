@@ -1,4 +1,4 @@
-// ===== server/config/socketIO.ts - Enhanced Configuration =====
+// ===== server/config/socketIO.ts - Fixed Configuration =====
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
@@ -26,9 +26,9 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
       memLevel: 7,
     },
     
-    // ✅ FIXED: Better HTTP long-polling configuration
-    httpCompression: true,
-    compression: true,
+    // ✅ REMOVED: Invalid compression property
+    httpCompression: true,   // This is valid
+    // compression: true,    // ❌ REMOVED: This doesn't exist in Socket.IO
     
     // CORS configuration remains the same
     cors: {
@@ -51,13 +51,13 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     // ✅ FIXED: Better connection timeout handling
     connectTimeout: 60000, // 1 minute for initial connection
     
-    // ✅ FIXED: Enhanced engine.io settings
+    // ✅ FIXED: Enhanced engine.io settings (these are valid)
     destroyUpgrade: false,
     destroyUpgradeTimeout: 1000,
   });
 
   // ✅ FIXED: Enhanced error handling for better debugging
-  io.engine.on('connection_error', (err) => {
+  io.engine.on('connection_error', (err: any) => {
     logger.error('🔌 Engine.IO connection error:', {
       req: err.req?.url,
       code: err.code,
@@ -69,29 +69,31 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
   });
 
   // ✅ FIXED: Better connection monitoring
-  io.engine.on('connection', (rawSocket) => {
+  io.engine.on('connection', (rawSocket: any) => {
     logger.debug(`🔗 New engine connection: ${rawSocket.id}`, {
       transport: rawSocket.transport.name,
-      userAgent: rawSocket.request.headers['user-agent'],
-      remoteAddress: rawSocket.request.connection?.remoteAddress,
+      userAgent: rawSocket.request?.headers?.['user-agent'],
+      remoteAddress: rawSocket.request?.connection?.remoteAddress,
     });
     
-    // Memory optimization
-    rawSocket.request = null;
+    // Memory optimization - clear the request object
+    if (rawSocket.request) {
+      rawSocket.request = null;
+    }
   });
 
   // ✅ FIXED: Enhanced disconnection monitoring
-  io.engine.on('disconnect', (reason) => {
+  io.engine.on('disconnect', (reason: string) => {
     logger.debug(`⚠️ Engine disconnection: ${reason}`);
   });
 
   // ✅ FIXED: Monitor transport upgrades
-  io.engine.on('upgrade', (socket) => {
+  io.engine.on('upgrade', (socket: any) => {
     logger.debug(`⬆️ Transport upgraded to: ${socket.transport.name}`);
   });
 
   // ✅ FIXED: Monitor transport downgrades
-  io.engine.on('upgradeError', (error) => {
+  io.engine.on('upgradeError', (error: Error) => {
     logger.warn(`⬇️ Transport upgrade failed:`, error.message);
   });
 
@@ -117,7 +119,7 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     });
 
     // ✅ FIXED: Enhanced disconnect handling with reason tracking
-    socket.on('disconnect', (reason) => {
+    socket.on('disconnect', (reason: string) => {
       connectionStats.activeConnections = Math.max(0, connectionStats.activeConnections - 1);
       connectionStats.disconnectReasons.set(reason, (connectionStats.disconnectReasons.get(reason) || 0) + 1);
       
@@ -133,7 +135,7 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
       logger.debug(`🔄 Socket ${socket.id} upgraded to: ${socket.conn.transport.name}`);
     });
 
-    socket.conn.on('upgradeError', (error) => {
+    socket.conn.on('upgradeError', (error: Error) => {
       logger.warn(`❌ Socket ${socket.id} upgrade failed:`, error.message);
     });
   });
@@ -177,21 +179,16 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
   }, 30000); // Every 30 seconds
 
   // ✅ FIXED: Graceful shutdown handling
-  process.on('SIGTERM', () => {
-    logger.info('🛑 SIGTERM received, closing Socket.IO server gracefully...');
+  const gracefulShutdown = (signal: string) => {
+    logger.info(`🛑 ${signal} received, closing Socket.IO server gracefully...`);
     io.close(() => {
       logger.info('✅ Socket.IO server closed gracefully');
       process.exit(0);
     });
-  });
+  };
 
-  process.on('SIGINT', () => {
-    logger.info('🛑 SIGINT received, closing Socket.IO server gracefully...');
-    io.close(() => {
-      logger.info('✅ Socket.IO server closed gracefully');
-      process.exit(0);
-    });
-  });
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   logger.info('⚡ Socket.IO server configured with enhanced stability settings');
   

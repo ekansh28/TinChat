@@ -1,4 +1,4 @@
-// server/managers/SocketManager.ts - Handles ALL socket events
+// ===== Complete SocketManager.ts with All Missing Methods =====
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ProfileManager, UserProfile } from './ProfileManager';
 import { MessageBatcher } from '../utils/MessageBatcher';
@@ -26,6 +26,7 @@ export interface User {
   displayNameAnimation?: string;
   rainbowSpeed?: number;
   badges?: any[];
+  connectionStartTime?: number; // ✅ ADDED: Track connection time
 }
 
 export class SocketManager {
@@ -43,8 +44,19 @@ export class SocketManager {
   private authIdToSocketId: { [authId: string]: string } = {};
   private lastMatchRequest: { [socketId: string]: number } = {};
   
-  private readonly FIND_PARTNER_COOLDOWN_MS = 2000; // 2 seconds
-  private readonly DEFAULT_PROFILE_COLOR = '#667eea'; // Consistent with ProfileCustomizer
+  // ✅ ADDED: Connection tracking for better monitoring
+  private connectionStartTimes: { [socketId: string]: number } = {};
+  private disconnectStats = {
+    reasons: new Map<string, number>(),
+    userAgents: new Map<string, number>(),
+    connectionDurations: [] as number[],
+  };
+  
+  private readonly FIND_PARTNER_COOLDOWN_MS = 2000;
+  private readonly DEFAULT_PROFILE_COLOR = '#667eea';
+  private readonly PING_CHECK_INTERVAL = 60000; // 1 minute
+  private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private readonly STALE_CONNECTION_THRESHOLD = 90000; // 90 seconds
 
   constructor(
     io: SocketIOServer,
@@ -64,8 +76,10 @@ export class SocketManager {
     
     this.setupSocketHandlers();
     this.startPeriodicTasks();
+    this.setupConnectionMonitoring(); // ✅ ADDED
+    this.startHeartbeat(); // ✅ ADDED
     
-    logger.info('🔌 SocketManager initialized successfully');
+    logger.info('🔌 Enhanced SocketManager initialized with disconnect prevention');
   }
 
   private setupSocketHandlers(): void {
@@ -76,7 +90,13 @@ export class SocketManager {
 
   private handleConnection(socket: Socket): void {
     this.onlineUserCount++;
-    logger.info(`👤 User connected: ${socket.id}. Total online: ${this.onlineUserCount}`);
+    this.connectionStartTimes[socket.id] = Date.now(); // ✅ ADDED: Track connection start
+    
+    logger.info(`👤 User connected: ${socket.id}. Total online: ${this.onlineUserCount}`, {
+      userAgent: socket.handshake.headers['user-agent'],
+      remoteAddress: socket.handshake.address,
+      transport: socket.conn.transport.name,
+    });
     
     this.io.emit('onlineUserCountUpdate', this.onlineUserCount);
     this.performanceMonitor.recordConnection();
@@ -87,6 +107,7 @@ export class SocketManager {
     this.setupStatusEventHandlers(socket);
     this.setupOnlineUsersEventHandlers(socket);
     this.setupCleanupEventHandlers(socket);
+    this.setupHeartbeatHandler(socket); // ✅ ADDED
   }
 
   private setupUserEventHandlers(socket: Socket): void {
@@ -98,59 +119,7 @@ export class SocketManager {
       await this.handleFindPartner(socket, payload);
     });
   }
-      // ✅ FIXED: Enhanced connection monitoring
-    private setupConnectionMonitoring(): void {
-      // Monitor all socket connections for health
-      setInterval(() => {
-        const sockets = this.io.sockets.sockets;
-        const now = Date.now();
-        
-        sockets.forEach((socket) => {
-          const lastPong = socket.conn.lastPong || now;
-          const timeSinceLastPong = now - lastPong;
-          
-          // Warn if socket hasn't ponged in a while
-          if (timeSinceLastPong > 90000) { // 90 seconds
-            const authId = this.socketToAuthId[socket.id];
-            logger.warn(`🔍 Socket ${socket.id} (${authId || 'anonymous'}) hasn't ponged in ${Math.round(timeSinceLastPong / 1000)}s`);
-          }
-        });
-      }, 60000); // Check every minute
-    }
 
-      // ✅ FIXED: Add connection recovery helpers
-public handleReconnection(socket: Socket, authId?: string): void {
-  if (authId && this.authIdToSocketId[authId]) {
-    const oldSocketId = this.authIdToSocketId[authId];
-    logger.info(`🔄 User ${authId} reconnecting from ${oldSocketId} to ${socket.id}`);
-    
-    // Clean up old connection
-    this.cleanupUser(oldSocketId, 'reconnection');
-    
-    // Set up new connection
-    this.socketToAuthId[socket.id] = authId;
-    this.authIdToSocketId[authId] = socket.id;
-    
-    // Update status
-    this.profileManager.updateUserStatus(authId, 'online');
-    
-    // Emit reconnection success
-    socket.emit('reconnectionSuccess', {
-      timestamp: new Date().toISOString(),
-      newSocketId: socket.id,
-    });
-  }
-}
-    // ✅ FIXED: Add heartbeat mechanism for critical connections
-private startHeartbeat(): void {
-  setInterval(() => {
-    // Send heartbeat to all connected sockets
-    this.io.emit('heartbeat', {
-      timestamp: Date.now(),
-      serverTime: new Date().toISOString(),
-    });
-  }, 30000); // Every 30 seconds
-}
   private setupChatEventHandlers(socket: Socket): void {
     socket.on('sendMessage', async (payload: unknown) => {
       await this.handleSendMessage(socket, payload);
@@ -189,44 +158,139 @@ private startHeartbeat(): void {
     });
   }
 
+  // ✅ ADDED: Heartbeat handler for client responses
+  private setupHeartbeatHandler(socket: Socket): void {
+    socket.on('heartbeat_response', (data: any) => {
+      const authId = this.socketToAuthId[socket.id];
+      logger.debug(`💓 Heartbeat response from ${socket.id} (${authId || 'anonymous'}):`, data);
+    });
+
+    socket.on('connection_health', (data: any) => {
+      logger.debug(`🏥 Connection health report from ${socket.id}:`, data);
+    });
+  }
+
   private setupCleanupEventHandlers(socket: Socket): void {
-    // ✅ FIXED: Enhanced disconnect handling with better error catching
     socket.on('disconnect', async (reason, details) => {
       await this.handleDisconnection(socket, reason, details);
     });
 
-    // ✅ FIXED: Add disconnecting event handler for proactive cleanup
     socket.on('disconnecting', (reason) => {
       logger.debug(`🔄 Socket ${socket.id} is disconnecting: ${reason}`);
-      // Proactively notify partners before full disconnect
       this.notifyPartnerBeforeDisconnect(socket.id);
     });
 
-    // ✅ FIXED: Add error event handler to prevent crashes
     socket.on('error', (error) => {
       logger.error(`❌ Socket ${socket.id} error:`, error);
       this.recordSocketError(socket.id, error);
     });
 
-    // ✅ FIXED: Add connect_error handler for better debugging
     socket.on('connect_error', (error) => {
       logger.error(`🔌 Socket ${socket.id} connection error:`, error);
     });
   }
 
+  // ✅ FIXED: Enhanced connection monitoring with stale detection
+  private setupConnectionMonitoring(): void {
+    setInterval(() => {
+      const sockets = this.io.sockets.sockets;
+      const now = Date.now();
+      
+      sockets.forEach((socket) => {
+        try {
+          const lastPong = (socket.conn as any).lastPong || now;
+          const timeSinceLastPong = now - lastPong;
+          const authId = this.socketToAuthId[socket.id];
+          
+          // Check for stale connections
+          if (timeSinceLastPong > this.STALE_CONNECTION_THRESHOLD) {
+            logger.warn(`🔍 Stale connection detected: ${socket.id} (${authId || 'anonymous'}) - ${Math.round(timeSinceLastPong / 1000)}s since last pong`);
+            
+            // Emit warning to client
+            socket.emit('connection_warning', {
+              type: 'stale_connection',
+              timeSinceLastPong,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Check for very long connections without activity
+          const connectionDuration = now - (this.connectionStartTimes[socket.id] || now);
+          if (connectionDuration > 3600000) { // 1 hour
+            logger.debug(`⏰ Long-running connection: ${socket.id} - ${Math.round(connectionDuration / 60000)} minutes`);
+          }
+
+        } catch (error) {
+          logger.error(`Error monitoring socket ${socket.id}:`, error);
+        }
+      });
+
+      // ✅ ADDED: Report disconnect statistics
+      if (this.disconnectStats.reasons.size > 0) {
+        const topReasons = Array.from(this.disconnectStats.reasons.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3);
+        
+        logger.debug('📊 Recent disconnect patterns:', {
+          topReasons,
+          avgDuration: this.getAverageConnectionDuration(),
+          totalTracked: this.disconnectStats.connectionDurations.length,
+        });
+      }
+    }, this.PING_CHECK_INTERVAL);
+  }
+
+  // ✅ ADDED: Enhanced heartbeat with health checks
+  private startHeartbeat(): void {
+    setInterval(() => {
+      const heartbeatData = {
+        timestamp: Date.now(),
+        serverTime: new Date().toISOString(),
+        onlineCount: this.onlineUserCount,
+        serverUptime: process.uptime(),
+      };
+
+      // Send heartbeat to all connected sockets
+      this.io.emit('heartbeat', heartbeatData);
+      
+      logger.debug(`💓 Heartbeat sent to ${this.io.sockets.sockets.size} connections`);
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  // ✅ ADDED: Get average connection duration for analysis
+  private getAverageConnectionDuration(): number {
+    if (this.disconnectStats.connectionDurations.length === 0) return 0;
+    const sum = this.disconnectStats.connectionDurations.reduce((a, b) => a + b, 0);
+    return Math.round(sum / this.disconnectStats.connectionDurations.length / 1000); // in seconds
+  }
+
+  // ✅ ADDED: Record socket errors for pattern analysis
   private recordSocketError(socketId: string, error: any): void {
-  const authId = this.socketToAuthId[socketId];
-  logger.error(`Socket error details:`, {
-    socketId,
-    authId: authId || 'anonymous',
-    error: error.message || error,
-    stack: error.stack,
-    timestamp: new Date().toISOString(),
-  });
-  
-  // Track error patterns for debugging
-  this.performanceMonitor.recordError();
-}
+    const authId = this.socketToAuthId[socketId];
+    logger.error(`Socket error details:`, {
+      socketId,
+      authId: authId || 'anonymous',
+      error: error.message || error,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+    });
+    
+    this.performanceMonitor.recordError();
+  }
+
+  // ✅ ADDED: Notify partner before disconnect
+  private notifyPartnerBeforeDisconnect(socketId: string): void {
+    const room = this.roomManager.getRoomByUserId(socketId);
+    if (room) {
+      const partnerId = room.users.find(id => id !== socketId);
+      if (partnerId) {
+        this.io.to(partnerId).emit('partnerDisconnecting', {
+          reason: 'Connection issues detected',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }
 
   private async handleFindPartner(socket: Socket, payload: unknown): Promise<void> {
     try {
@@ -262,7 +326,8 @@ private startHeartbeat(): void {
         id: socket.id, 
         interests: interests || [], 
         chatType, 
-        authId: authId || null 
+        authId: authId || null,
+        connectionStartTime: this.connectionStartTimes[socket.id],
       };
       
       // Fetch enhanced profile if authenticated
@@ -308,20 +373,6 @@ private startHeartbeat(): void {
     }
   }
 
-  private notifyPartnerBeforeDisconnect(socketId: string): void {
-  const room = this.roomManager.getRoomByUserId(socketId);
-  if (room) {
-    const partnerId = room.users.find(id => id !== socketId);
-    if (partnerId) {
-      // ✅ FIXED: Give partner advance warning
-      this.io.to(partnerId).emit('partnerDisconnecting', {
-        reason: 'Connection issues detected',
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-}
-
   private async handleSendMessage(socket: Socket, payload: unknown): Promise<void> {
     try {
       const { roomId, message, username, authId } = ValidationSchemas.SendMessagePayloadSchema.parse(payload);
@@ -332,7 +383,7 @@ private startHeartbeat(): void {
         return;
       }
 
-      // FIXED: Use cached profile data for better performance
+      // Use cached profile data for better performance
       let senderUsername = 'Stranger';
       let senderDisplayNameColor = this.DEFAULT_PROFILE_COLOR;
       let senderDisplayNameAnimation = 'none';
@@ -449,7 +500,10 @@ private startHeartbeat(): void {
         
         socket.leave(roomId);
         if (partnerId) {
-          this.io.to(partnerId).emit('partnerLeft');
+          this.io.to(partnerId).emit('partnerLeft', {
+            reason: 'Partner left chat',
+            timestamp: new Date().toISOString(),
+          });
           const partnerSocket = this.io.sockets.sockets.get(partnerId);
           if (partnerSocket) partnerSocket.leave(roomId);
         }
@@ -468,27 +522,100 @@ private startHeartbeat(): void {
     }
   }
 
+  // ✅ FIXED: Enhanced disconnect handling with comprehensive tracking
   private async handleDisconnection(socket: Socket, reason: string, details?: any): Promise<void> {
+    const connectionDuration = Date.now() - (this.connectionStartTimes[socket.id] || Date.now());
+    const userAgent = socket.handshake.headers['user-agent'] as string;
+    
     const disconnectInfo = {
       socketId: socket.id,
       reason,
       details,
+      connectionDuration: Math.round(connectionDuration / 1000),
       timestamp: new Date().toISOString(),
-      userAgent: socket.handshake.headers['user-agent'],
+      userAgent: userAgent?.substring(0, 100),
       remoteAddress: socket.handshake.address,
     };
 
     logger.info(`👋 Enhanced disconnect handling:`, disconnectInfo);
     
+    // ✅ ADDED: Record disconnect for analysis
+    this.recordDisconnect(socket.id, reason, userAgent, connectionDuration);
+    
     this.onlineUserCount = Math.max(0, this.onlineUserCount - 1);
     this.io.emit('onlineUserCountUpdate', this.onlineUserCount);
     
-    // ✅ FIXED: Categorize disconnect reasons for better handling
+    // Categorize disconnect reasons for better handling
     await this.categorizeAndHandleDisconnect(socket.id, reason, details);
     
     // Clean up user data
     await this.cleanupUser(socket.id, `disconnect: ${reason}`);
     this.performanceMonitor.recordDisconnection();
+    
+    // ✅ ADDED: Clean up connection tracking
+    delete this.connectionStartTimes[socket.id];
+  }
+
+  // ✅ ADDED: Record disconnect for pattern analysis
+  private recordDisconnect(socketId: string, reason: string, userAgent?: string, connectionDuration?: number): void {
+    this.disconnectStats.reasons.set(reason, (this.disconnectStats.reasons.get(reason) || 0) + 1);
+    
+    if (userAgent) {
+      const browser = this.extractBrowser(userAgent);
+      this.disconnectStats.userAgents.set(browser, (this.disconnectStats.userAgents.get(browser) || 0) + 1);
+    }
+    
+    if (connectionDuration) {
+      this.disconnectStats.connectionDurations.push(connectionDuration);
+      // Keep only last 1000 entries
+      if (this.disconnectStats.connectionDurations.length > 1000) {
+        this.disconnectStats.connectionDurations = this.disconnectStats.connectionDurations.slice(-500);
+      }
+    }
+  }
+
+  // ✅ ADDED: Extract browser from user agent
+  private extractBrowser(userAgent: string): string {
+    if (userAgent.includes('Chrome')) return 'Chrome';
+    if (userAgent.includes('Firefox')) return 'Firefox';
+    if (userAgent.includes('Safari')) return 'Safari';
+    if (userAgent.includes('Edge')) return 'Edge';
+    return 'Other';
+  }
+
+  private async categorizeAndHandleDisconnect(socketId: string, reason: string, details?: any): Promise<void> {
+    const authId = this.socketToAuthId[socketId];
+    
+    switch (reason) {
+      case 'ping timeout':
+        logger.warn(`⏰ Ping timeout for ${socketId} (${authId || 'anonymous'})`);
+        if (authId) {
+          await this.profileManager.updateUserStatus(authId, 'idle');
+        }
+        break;
+        
+      case 'transport close':
+        logger.warn(`🚫 Transport close for ${socketId} (${authId || 'anonymous'})`);
+        break;
+        
+      case 'transport error':
+        logger.error(`❌ Transport error for ${socketId} (${authId || 'anonymous'}):`, details);
+        break;
+        
+      case 'client namespace disconnect':
+        logger.debug(`👤 Client initiated disconnect for ${socketId}`);
+        if (authId) {
+          await this.profileManager.updateUserStatus(authId, 'offline');
+        }
+        break;
+        
+      case 'server namespace disconnect':
+        logger.debug(`🖥️ Server initiated disconnect for ${socketId}`);
+        break;
+        
+      default:
+        logger.info(`❓ Unknown disconnect reason "${reason}" for ${socketId}:`, details);
+    }
   }
 
   private async handleGetOnlineUsersData(socket: Socket): Promise<void> {
@@ -506,50 +633,6 @@ private startHeartbeat(): void {
       });
     }
   }
-
-
-  private async categorizeAndHandleDisconnect(socketId: string, reason: string, details?: any): Promise<void> {
-  const authId = this.socketToAuthId[socketId];
-  
-  switch (reason) {
-    case 'ping timeout':
-      logger.warn(`⏰ Ping timeout for ${socketId} (${authId || 'anonymous'})`);
-      // This suggests network issues or client being backgrounded
-      if (authId) {
-        await this.profileManager.updateUserStatus(authId, 'idle');
-      }
-      break;
-      
-    case 'transport close':
-      logger.warn(`🚫 Transport close for ${socketId} (${authId || 'anonymous'})`);
-      // This suggests proxy/network infrastructure issues
-      break;
-      
-    case 'transport error':
-      logger.error(`❌ Transport error for ${socketId} (${authId || 'anonymous'}):`, details);
-      // Connection failed due to transport error
-      break;
-      
-    case 'client namespace disconnect':
-      logger.debug(`👤 Client initiated disconnect for ${socketId}`);
-      // User intentionally disconnected
-      if (authId) {
-        await this.profileManager.updateUserStatus(authId, 'offline');
-      }
-      break;
-      
-    case 'server namespace disconnect':
-      logger.debug(`🖥️ Server initiated disconnect for ${socketId}`);
-      // Server kicked the user
-      break;
-      
-    default:
-      logger.info(`❓ Unknown disconnect reason "${reason}" for ${socketId}:`, details);
-  }
-}
-
-
-
 
   private async handleGetOnlineUsersList(socket: Socket): Promise<void> {
     try {
@@ -653,58 +736,57 @@ private startHeartbeat(): void {
     }
   }
 
-
-// ✅ FIXED: Enhanced user cleanup with better error handling
-private async cleanupUser(socketId: string, reason: string): Promise<void> {
-  try {
-    // Remove from waiting lists
-    this.matchmakingEngine.removeFromWaitingLists(socketId);
-    
-    // Clear rate limiting
-    delete this.lastMatchRequest[socketId];
-    
-    // Handle auth mapping cleanup with better error handling
-    const authId = this.socketToAuthId[socketId];
-    if (authId) {
-      try {
-        await this.profileManager.updateUserStatus(authId, 'offline');
-        delete this.socketToAuthId[socketId];
-        delete this.authIdToSocketId[authId];
+  // ✅ FIXED: Enhanced user cleanup with better error handling
+  private async cleanupUser(socketId: string, reason: string): Promise<void> {
+    try {
+      // Remove from waiting lists
+      this.matchmakingEngine.removeFromWaitingLists(socketId);
+      
+      // Clear rate limiting
+      delete this.lastMatchRequest[socketId];
+      
+      // Handle auth mapping cleanup with better error handling
+      const authId = this.socketToAuthId[socketId];
+      if (authId) {
+        try {
+          await this.profileManager.updateUserStatus(authId, 'offline');
+          delete this.socketToAuthId[socketId];
+          delete this.authIdToSocketId[authId];
+          
+          // Invalidate profile cache
+          this.profileCache.invalidate(authId);
+          
+          logger.debug(`✅ Auth cleanup completed for ${authId}`);
+        } catch (error) {
+          logger.error(`❌ Auth cleanup failed for ${authId}:`, error);
+        }
         
-        // Invalidate profile cache
-        this.profileCache.invalidate(authId);
-        
-        logger.debug(`✅ Auth cleanup completed for ${authId}`);
-      } catch (error) {
-        logger.error(`❌ Auth cleanup failed for ${authId}:`, error);
+        // Broadcast updated online users list when someone disconnects
+        setTimeout(() => this.broadcastOnlineUsersList(), 500);
       }
       
-      // Broadcast updated online users list when someone disconnects
-      setTimeout(() => this.broadcastOnlineUsersList(), 500);
-    }
-    
-    // Clean up rooms with better partner notification
-    this.roomManager.cleanupUserRooms(socketId, (partnerId) => {
-      this.io.to(partnerId).emit('partnerLeft', {
-        reason: 'Partner disconnected',
-        timestamp: new Date().toISOString(),
-        details: reason,
+      // Clean up rooms with better partner notification
+      this.roomManager.cleanupUserRooms(socketId, (partnerId) => {
+        this.io.to(partnerId).emit('partnerLeft', {
+          reason: 'Partner disconnected',
+          timestamp: new Date().toISOString(),
+          details: reason,
+        });
+        
+        const partnerSocket = this.io.sockets.sockets.get(partnerId);
+        if (partnerSocket) {
+          partnerSocket.leave(socketId);
+        }
       });
       
-      const partnerSocket = this.io.sockets.sockets.get(partnerId);
-      if (partnerSocket) {
-        partnerSocket.leave(socketId);
-      }
-    });
-    
-    // Clear typing indicators
-    this.typingManager.clearUserTyping(socketId);
-    
-    logger.debug(`🧹 Enhanced cleanup completed for ${socketId}: ${reason}`);
-  } catch (error) {
-    logger.error(`❌ Cleanup failed for ${socketId}:`, error);
+      // Clear typing indicators
+      this.typingManager.clearUserTyping(socketId);
+      
+      logger.debug(`🧹 Enhanced cleanup completed for ${socketId}: ${reason}`);
+    } catch (error) {
+      logger.error(`❌ Cleanup failed for ${socketId}:`, error);
+    }
   }
-}
 
   private async getOnlineUsersData(): Promise<{
     connectedUsers: string[];
@@ -778,18 +860,24 @@ private async cleanupUser(socketId: string, reason: string): Promise<void> {
   }
 
   private startPeriodicTasks(): void {
-    // Queue state logging
+    // ✅ ENHANCED: More comprehensive periodic reporting
     setInterval(() => {
       const stats = this.matchmakingEngine.getQueueStats();
       const roomStats = this.roomManager.getStats();
       const cacheStats = this.profileCache.getStats();
+      const disconnectSummary = this.getDisconnectSummary();
       
-      logger.debug('📊 SocketManager periodic stats:', {
+      logger.debug('📊 SocketManager comprehensive stats:', {
         online: this.onlineUserCount,
         queues: stats,
         rooms: roomStats,
         cache: cacheStats,
-        performance: this.performanceMonitor.getStats()
+        performance: this.performanceMonitor.getStats(),
+        disconnects: disconnectSummary,
+        memoryUsage: {
+          heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`,
+          heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)}MB`,
+        }
       });
     }, 30000); // Every 30 seconds
 
@@ -800,6 +888,125 @@ private async cleanupUser(socketId: string, reason: string): Promise<void> {
         return socket?.connected || false;
       });
     }, 60000); // Every minute
+
+    // ✅ ADDED: Periodic memory cleanup
+    setInterval(() => {
+      this.performMemoryCleanup();
+    }, 300000); // Every 5 minutes
+  }
+
+  // ✅ ADDED: Get disconnect summary for monitoring
+  private getDisconnectSummary() {
+    const topReasons = Array.from(this.disconnectStats.reasons.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    return {
+      topReasons: Object.fromEntries(topReasons),
+      avgConnectionDuration: this.getAverageConnectionDuration(),
+      totalTracked: this.disconnectStats.connectionDurations.length,
+    };
+  }
+
+  // ✅ ADDED: Memory cleanup to prevent leaks
+  private performMemoryCleanup(): void {
+    try {
+      // Clean up stale connection tracking
+      const activeSocketIds = new Set(this.io.sockets.sockets.keys());
+      
+      Object.keys(this.connectionStartTimes).forEach(socketId => {
+        if (!activeSocketIds.has(socketId)) {
+          delete this.connectionStartTimes[socketId];
+        }
+      });
+
+      Object.keys(this.lastMatchRequest).forEach(socketId => {
+        if (!activeSocketIds.has(socketId)) {
+          delete this.lastMatchRequest[socketId];
+        }
+      });
+
+      // Clean up orphaned auth mappings
+      Object.entries(this.socketToAuthId).forEach(([socketId, authId]) => {
+        if (!activeSocketIds.has(socketId)) {
+          delete this.socketToAuthId[socketId];
+          delete this.authIdToSocketId[authId];
+        }
+      });
+
+      // Trim disconnect stats to prevent unlimited growth
+      if (this.disconnectStats.connectionDurations.length > 1000) {
+        this.disconnectStats.connectionDurations = this.disconnectStats.connectionDurations.slice(-500);
+      }
+
+      logger.debug('🧹 Memory cleanup completed', {
+        activeConnections: activeSocketIds.size,
+        trackedConnections: Object.keys(this.connectionStartTimes).length,
+        authMappings: Object.keys(this.socketToAuthId).length,
+      });
+    } catch (error) {
+      logger.error('❌ Memory cleanup failed:', error);
+    }
+  }
+
+  // ✅ ADDED: Connection recovery helpers
+  public handleReconnection(socket: Socket, authId?: string): void {
+    if (authId && this.authIdToSocketId[authId]) {
+      const oldSocketId = this.authIdToSocketId[authId];
+      logger.info(`🔄 User ${authId} reconnecting from ${oldSocketId} to ${socket.id}`);
+      
+      // Clean up old connection
+      this.cleanupUser(oldSocketId, 'reconnection');
+      
+      // Set up new connection
+      this.socketToAuthId[socket.id] = authId;
+      this.authIdToSocketId[authId] = socket.id;
+      this.connectionStartTimes[socket.id] = Date.now();
+      
+      // Update status
+      this.profileManager.updateUserStatus(authId, 'online');
+      
+      // Emit reconnection success
+      socket.emit('reconnectionSuccess', {
+        timestamp: new Date().toISOString(),
+        newSocketId: socket.id,
+      });
+    }
+  }
+
+  // ✅ ADDED: Force disconnect with reason (for admin use)
+  public forceDisconnect(socketId: string, reason: string = 'Admin action'): boolean {
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (socket) {
+      logger.info(`🔨 Force disconnecting ${socketId}: ${reason}`);
+      socket.emit('forceDisconnect', { reason, timestamp: new Date().toISOString() });
+      socket.disconnect(true);
+      return true;
+    }
+    return false;
+  }
+
+  // ✅ ADDED: Get detailed connection info for debugging
+  public getConnectionInfo(socketId: string) {
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (!socket) return null;
+
+    const authId = this.socketToAuthId[socketId];
+    const connectionDuration = Date.now() - (this.connectionStartTimes[socketId] || Date.now());
+    const lastPong = (socket.conn as any).lastPong || Date.now();
+
+    return {
+      socketId,
+      authId: authId || null,
+      connected: socket.connected,
+      transport: socket.conn.transport.name,
+      connectionDuration: Math.round(connectionDuration / 1000),
+      lastPong: new Date(lastPong).toISOString(),
+      timeSinceLastPong: Math.round((Date.now() - lastPong) / 1000),
+      userAgent: socket.handshake.headers['user-agent'],
+      remoteAddress: socket.handshake.address,
+      rooms: Array.from(socket.rooms),
+    };
   }
 
   // Public API
@@ -809,7 +1016,35 @@ private async cleanupUser(socketId: string, reason: string): Promise<void> {
       queues: this.matchmakingEngine.getQueueStats(),
       rooms: this.roomManager.getStats(),
       cache: this.profileCache.getStats(),
-      performance: this.performanceMonitor.getStats()
+      performance: this.performanceMonitor.getStats(),
+      disconnects: this.getDisconnectSummary(),
+      memory: {
+        trackedConnections: Object.keys(this.connectionStartTimes).length,
+        authMappings: Object.keys(this.socketToAuthId).length,
+        heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`,
+      }
     };
+  }
+
+  // ✅ ADDED: Health check method
+  public healthCheck() {
+    const now = Date.now();
+    const activeConnections = this.io.sockets.sockets.size;
+    const staleConnections = Array.from(this.io.sockets.sockets.values()).filter(socket => {
+      const lastPong = (socket.conn as any).lastPong || now;
+      return (now - lastPong) > this.STALE_CONNECTION_THRESHOLD;
+    }).length;
+
+    const health = {
+      status: staleConnections / activeConnections > 0.1 ? 'degraded' : 'healthy',
+      activeConnections,
+      staleConnections,
+      onlineUsers: this.onlineUserCount,
+      memoryUsage: process.memoryUsage(),
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    };
+
+    return health;
   }
 }
