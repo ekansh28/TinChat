@@ -1,15 +1,6 @@
 /* src/styles/page.module.css - Layout styles for home page only */
 
-/* Base container matching old design - no background (handled by theme classes in globals.css) */
-.homePageContainer {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  position: relative;
-  min-height: 100vh;
-  padding: 1rem;
-  padding-top: 1rem;
-}
+
 
 /* Mobile adjustments for container */
 @media (max-width: 768px) {
@@ -20,16 +11,6 @@
   }
 }
 
-/* Header positioning - top right like old design */
-.homeHeader {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  z-index: 20;
-}
 
 @media (max-width: 768px) {
   .homeHeader {
@@ -250,3 +231,6 @@
     margin-bottom: 20px;
   }
 }
+
+
+

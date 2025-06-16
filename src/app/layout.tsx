@@ -40,7 +40,7 @@ export default function RootLayout({
     
         {/* Load animated cursor script */}
         <Script 
-          src="/animated-cursor.js" 
+          src="/animatedcursor.js" 
           strategy="beforeInteractive"
           id="animated-cursor-script"
         />

@@ -529,12 +529,12 @@ export function TopBar() {
                 aria-label="Minimize" 
                 onClick={handleMinimize}
                 style={getTitleButtonStyle(currentMode)}
-              >←</button>
+              ></button>
               <button 
                 aria-label="Maximize" 
                 onClick={handleMaximize}
                 style={getTitleButtonStyle(currentMode)}
-              >→</button>
+              ></button>
               <button 
                 aria-label="Close" 
                 onClick={handleClose}
@@ -548,7 +548,7 @@ export function TopBar() {
                     ':hover': { backgroundColor: '#ff5252' }
                   } : {})
                 }}
-              >×</button>
+              ></button>
             </div>
           </div>
 

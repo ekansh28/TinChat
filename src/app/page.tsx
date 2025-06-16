@@ -1,4 +1,4 @@
-// src/app/page.tsx - Updated with Fixed OnlineUsersWindow Position
+// src/app/page.tsx - Updated with Webamp Component
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -15,6 +15,7 @@ import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
 import OnlineUsersWindow from '@/components/home/OnlineUsersWindow';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
+import Webamp from '@/components/home/Webamp';
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
 import { useOnlineUsersData } from '@/hooks/useOnlineUsersData';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
@@ -124,8 +125,6 @@ export default function SelectionLobby() {
 
   return (
     <>
-
-
       <div className={styles.homePageContainer}>
         {/* Header with AuthButtons that now handles Profile Customizer button */}
         <div className={styles.homeHeader}>
@@ -135,6 +134,11 @@ export default function SelectionLobby() {
             onOpenProfileCustomizer={handleOpenProfileCustomizer}
           />
         </div>
+        <div className="webamp-container">
+        {/* Webamp Component - Always visible */}
+        {!isMobile && <Webamp />}
+        </div>
+
 
         {/* Main content area - centered like old design */}
         <div className={styles.homeMainContent}>
