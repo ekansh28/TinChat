@@ -46,3 +46,8 @@ export interface ValidationResult {
   isValid: boolean;
   errors: ValidationError[];
 }
+
+export interface ProfileCustomizerProps {
+  isOpen: boolean;
+  onClose: () => void;
+}

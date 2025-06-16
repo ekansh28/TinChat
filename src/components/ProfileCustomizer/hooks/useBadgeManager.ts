@@ -1,8 +1,9 @@
+
 // src/components/ProfileCustomizer/hooks/useBadgeManager.ts
 import { useState, useCallback } from 'react';
 import type { Badge } from '../types';
 
-// Simple UUID generator (replace with uuid package if available)
+// Simple UUID generator
 const generateUUID = (): string => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
