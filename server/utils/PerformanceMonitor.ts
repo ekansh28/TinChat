@@ -1,4 +1,4 @@
-// ===== server/utils/PerformanceMonitor.ts - Monitoring =====
+
 export class PerformanceMonitor {
   private metrics = {
     totalConnections: 0,
@@ -30,7 +30,7 @@ export class PerformanceMonitor {
     
     if (this.isEnabled) {
       this.startPeriodicCollection();
-      logger.info('📊 Performance monitoring enabled');
+      console.log('📊 Performance monitoring enabled');
     }
   }
 
@@ -109,18 +109,6 @@ export class PerformanceMonitor {
       const recentTotal = this.messageHistory.filter(m => m.timestamp > oneMinuteAgo).length;
       this.metrics.errorRate = recentTotal > 0 ? (recentErrors.length / recentTotal) * 100 : 0;
     }, 5000);
-
-    setInterval(() => {
-      const report = {
-        connections: this.metrics.currentConnections,
-        messages: this.metrics.totalMessages,
-        matches: this.metrics.totalMatches,
-        memory: `${(this.metrics.memoryUsage.heapUsed / 1024 / 1024).toFixed(2)}MB`,
-        avgResponseTime: `${this.metrics.averageResponseTime.toFixed(2)}ms`,
-        errorRate: `${this.metrics.errorRate.toFixed(2)}%`
-      };
-      logger.debug('📊 Performance Report:', report);
-    }, 30000);
   }
 
   getStats() {
@@ -140,4 +128,3 @@ export class PerformanceMonitor {
     };
   }
 }
-

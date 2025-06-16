@@ -1,4 +1,4 @@
-// server/index.ts - Enhanced with Online Users Data
+/* server/index.ts - Enhanced with Online Users Data
 import 'dotenv/config';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -765,4 +765,4 @@ if (supabase) {
       console.error('[CLEANUP_EXCEPTION] Exception during cleanup:', err);
     }
   }, 5 * 60 * 1000); // Every 5 minutes
-}
+} */
