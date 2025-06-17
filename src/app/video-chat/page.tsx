@@ -1,15 +1,14 @@
-// src/app/video-chat/page.tsx - FINAL IMPLEMENTATION
+// src/app/video-chat/page.tsx - WITH SSR ENABLED
 import React, { Suspense } from 'react';
 import dynamicImport from 'next/dynamic';
 
-// Force dynamic rendering for this page
-export const dynamic = 'force-dynamic';
+// Remove this line to enable SSR:
+// export const dynamic = 'force-dynamic';
 
 // Dynamically import the client component
 const VideoChatPageClientContent = dynamicImport(
   () => import('./VideoChatPageClientContent'),
-  { 
-    ssr: false,
+  {
     loading: () => (
       <div className="flex flex-1 items-center justify-center p-4">
         <div className="text-center">
