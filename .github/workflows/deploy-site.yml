@@ -7,28 +7,42 @@ on:
 
 jobs:
   deploy:
-    name: 🔁 Build & Deploy on VPS
+    name: 🔁 Build & Deploy on Contabo VPS
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout Repo
+      - name: ⬇️ Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 🔐 Setup SSH Key
+      - name: 🔐 Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
 
-      - name: 🚀 Deploy to VPS
+      - name: 🧠 Add VPS Host to Known Hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy & Restart on VPS
         env:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
         run: |
-          ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST << 'EOF'
+          ssh $VPS_USER@$VPS_HOST << EOF
+            set -e  # Stop if any command fails
+            echo "📂 Changing to project directory: $VPS_PROJECT_PATH"
             cd $VPS_PROJECT_PATH
+
+            echo "🔄 Pulling latest changes from GitHub"
             git pull origin main
+
+            echo "📦 Installing dependencies"
             npm install
+
+            echo "🏗️ Building the project"
             npm run build
-            pm2 restart tinchat
+
+            echo "🔁 Restarting PM2 process"
+            pm2 restart tinchat || pm2 start npm --name "tinchat" -- start
           EOF
