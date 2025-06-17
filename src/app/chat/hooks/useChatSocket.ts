@@ -1,7 +1,7 @@
 // src/app/chat/hooks/useChatSocket.ts - COMPLETELY FIXED VERSION
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { showChatToast, PartnerInfo, Message } from '../utils/ChatHelpers';
+import { showChatToast } from '../utils/ChatHelpers';
 
 interface UseChatSocketParams {
   onMessage: (msg: any) => void;
@@ -34,17 +34,23 @@ export function useChatSocket({
   roomId,
   onWebRTCSignal
 }: UseChatSocketParams) {
+  // ✅ CRITICAL FIX: Single socket reference with proper lifecycle management
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  
+  // ✅ CRITICAL FIX: Stable state tracking
   const roomIdRef = useRef<string | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const connectionAttemptsRef = useRef(0);
-  const isInitializedRef = useRef(false);
-  const cleanupFunctionsRef = useRef<Array<() => void>>([]);
+  const initializationStateRef = useRef({
+    isInitialized: false,
+    isDestroying: false,
+    socketId: null as string | null
+  });
 
-  // ✅ CRITICAL FIX: Store all handlers in a single stable ref
+  // ✅ CRITICAL FIX: Stable handler references
   const handlersRef = useRef({
     onMessage,
     onPartnerFound,
@@ -59,7 +65,7 @@ export function useChatSocket({
     onConnectErrorHandler
   });
 
-  // ✅ Update handlers ref when they change (without triggering socket recreation)
+  // ✅ Update handlers without triggering socket recreation
   useEffect(() => {
     handlersRef.current = {
       onMessage,
@@ -76,16 +82,17 @@ export function useChatSocket({
     };
   });
 
-  // ✅ Update room ID ref
+  // ✅ Update room ID reference
   useEffect(() => {
     roomIdRef.current = roomId || null;
   }, [roomId]);
 
-  // ✅ CRITICAL FIX: Completely rewritten socket initialization
-  useEffect(() => {
+  // ✅ CRITICAL FIX: Complete socket initialization with proper error handling
+  const initializeSocket = useCallback(() => {
     // Prevent multiple initializations
-    if (isInitializedRef.current) {
-      console.log('[ChatSocket] Already initialized, skipping');
+    if (initializationStateRef.current.isInitialized || 
+        initializationStateRef.current.isDestroying) {
+      console.log('[ChatSocket] Initialization blocked - already initialized or destroying');
       return;
     }
 
@@ -100,26 +107,29 @@ export function useChatSocket({
 
     console.log('[ChatSocket] Initializing connection to:', socketServerUrl);
     
-    isInitializedRef.current = true;
+    initializationStateRef.current.isInitialized = true;
     setIsConnecting(true);
     connectionAttemptsRef.current += 1;
 
+    // ✅ Enhanced socket configuration
     const socket = io(socketServerUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
       forceNew: true,
       upgrade: true,
-      rememberUpgrade: false
+      rememberUpgrade: false,
+      autoConnect: true
     });
     
     socketRef.current = socket;
+    initializationStateRef.current.socketId = socket.id;
 
-    // ✅ Set up WebRTC signal emission function
+    // ✅ Set up WebRTC signal emission function for video chat integration
     if (handlersRef.current.onWebRTCSignal) {
       (window as any).videoChatEmitWebRTCSignal = (data: any) => {
         if (socket.connected && roomIdRef.current) {
@@ -129,19 +139,16 @@ export function useChatSocket({
           });
         }
       };
-      
-      cleanupFunctionsRef.current.push(() => {
-        delete (window as any).videoChatEmitWebRTCSignal;
-      });
     }
 
-    // ✅ Connection events with proper error handling
+    // ✅ CONNECTION EVENT HANDLERS
     const handleConnect = () => {
       console.log('[ChatSocket] ✅ Connected:', socket.id);
       setIsConnected(true);
       setIsConnecting(false);
       setConnectionError(null);
       connectionAttemptsRef.current = 0;
+      initializationStateRef.current.socketId = socket.id;
       
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -157,18 +164,25 @@ export function useChatSocket({
       
       handlersRef.current.onDisconnectHandler(reason);
 
+      // ✅ Smart reconnection logic
       if (reason === 'io server disconnect') {
         console.log('[ChatSocket] Server disconnected us, not attempting reconnect');
-      } else if (connectionAttemptsRef.current < 5) {
-        const delay = Math.min(1000 * Math.pow(2, connectionAttemptsRef.current), 30000);
-        console.log(`[ChatSocket] Scheduling reconnect in ${delay}ms...`);
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (!socketRef.current?.connected) {
-            console.log('[ChatSocket] Attempting manual reconnect...');
-            socket.connect();
-          }
-        }, delay);
+        setConnectionError('Disconnected by server');
+      } else if (reason === 'transport close' || reason === 'ping timeout') {
+        if (connectionAttemptsRef.current < 3 && !initializationStateRef.current.isDestroying) {
+          const delay = Math.min(2000 * Math.pow(2, connectionAttemptsRef.current), 10000);
+          console.log(`[ChatSocket] Scheduling reconnect in ${delay}ms...`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (!socketRef.current?.connected && !initializationStateRef.current.isDestroying) {
+              console.log('[ChatSocket] Attempting manual reconnect...');
+              connectionAttemptsRef.current += 1;
+              socket.connect();
+            }
+          }, delay);
+        } else {
+          setConnectionError('Connection lost - please refresh');
+        }
       }
     };
 
@@ -181,7 +195,7 @@ export function useChatSocket({
       handlersRef.current.onConnectErrorHandler(err);
     };
 
-    // ✅ Chat events using handler refs
+    // ✅ CHAT EVENT HANDLERS using stable handler references
     const handlePartnerFound = (data: any) => {
       console.log('[ChatSocket] 🎯 Partner found:', { partnerId: data.partnerId, roomId: data.roomId });
       roomIdRef.current = data.roomId;
@@ -189,7 +203,7 @@ export function useChatSocket({
     };
 
     const handleReceiveMessage = (data: any) => {
-      console.log('[ChatSocket] 💬 Message received:', { senderId: data.senderId, message: data.message });
+      console.log('[ChatSocket] 💬 Message received:', { senderId: data.senderId });
       handlersRef.current.onMessage(data);
     };
 
@@ -223,6 +237,28 @@ export function useChatSocket({
       setConnectionError(error.message || 'Socket error occurred');
     };
 
+    // ✅ BATCH MESSAGE HANDLING for improved performance
+    const handleBatchedMessages = (messages: Array<{ event: string; data: any }>) => {
+      messages.forEach(({ event, data }) => {
+        switch (event) {
+          case 'receiveMessage':
+            handleReceiveMessage(data);
+            break;
+          case 'partnerStatusChanged':
+            handlePartnerStatusChanged(data);
+            break;
+          case 'partner_typing_start':
+            handleTypingStart();
+            break;
+          case 'partner_typing_stop':
+            handleTypingStop();
+            break;
+          default:
+            console.log('[ChatSocket] Unknown batched event:', event);
+        }
+      });
+    };
+
     // ✅ Attach all event listeners
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
@@ -237,54 +273,98 @@ export function useChatSocket({
     socket.on('findPartnerCooldown', handleFindPartnerCooldown);
     socket.on('onlineUserCountUpdate', handleOnlineUserCountUpdate);
     socket.on('error', handleError);
+    socket.on('batchedMessages', handleBatchedMessages);
 
+    // ✅ WebRTC signal handling if available
     if (handlersRef.current.onWebRTCSignal) {
       socket.on('webrtcSignal', handleWebRTCSignal);
     }
 
-    // ✅ Store cleanup function
-    const cleanup = () => {
-      console.log('[ChatSocket] 🧹 Cleaning up socket connection', {
-        socketId: socket.id,
-        wasConnected: socket.connected,
-        timestamp: new Date().toISOString()
+    // ✅ Enhanced heartbeat handling
+    socket.on('heartbeat', (data) => {
+      console.log('[ChatSocket] 💓 Heartbeat received:', data.onlineCount);
+      socket.emit('heartbeat_response', {
+        clientTime: Date.now(),
+        received: data.timestamp
       });
-      
-      isInitializedRef.current = false;
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
+    });
+
+    // ✅ Connection health monitoring
+    socket.on('connection_warning', (data) => {
+      console.warn('[ChatSocket] ⚠️ Connection warning:', data);
+      if (data.type === 'stale_connection') {
+        // Emit health report
+        socket.emit('connection_health', {
+          latency: Date.now() - data.timestamp,
+          clientTime: Date.now()
+        });
+      }
+    });
+
+    return socket;
+  }, []);
+
+  // ✅ CRITICAL FIX: Clean socket destruction
+  const destroySocket = useCallback(() => {
+    if (initializationStateRef.current.isDestroying) {
+      console.log('[ChatSocket] Already destroying, skipping');
+      return;
+    }
+
+    console.log('[ChatSocket] 🧹 Destroying socket connection');
+    initializationStateRef.current.isDestroying = true;
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (socketRef.current) {
+      // Leave current room before disconnecting
+      if (roomIdRef.current) {
+        socketRef.current.emit('leaveChat', { roomId: roomIdRef.current });
+        roomIdRef.current = null;
       }
       
-      if (roomIdRef.current && socket.connected) {
-        socket.emit('leaveChat', { roomId: roomIdRef.current });
-      }
+      // Clean up global functions
+      delete (window as any).videoChatEmitWebRTCSignal;
       
-      // Run all cleanup functions
-      cleanupFunctionsRef.current.forEach(cleanupFn => {
-        try {
-          cleanupFn();
-        } catch (error) {
-          console.error('[ChatSocket] Cleanup function error:', error);
-        }
-      });
-      cleanupFunctionsRef.current = [];
-      
-      socket.removeAllListeners();
-      socket.disconnect();
+      // Remove all listeners and disconnect
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
       socketRef.current = null;
-      setIsConnected(false);
-      setIsConnecting(false);
+    }
+    
+    // Reset state
+    setIsConnected(false);
+    setIsConnecting(false);
+    setConnectionError(null);
+    
+    // Reset refs
+    initializationStateRef.current = {
+      isInitialized: false,
+      isDestroying: false,
+      socketId: null
     };
+    connectionAttemptsRef.current = 0;
+    
+    console.log('[ChatSocket] ✅ Socket destruction complete');
+  }, []);
 
-    cleanupFunctionsRef.current.push(cleanup);
-
+  // ✅ CRITICAL FIX: Single initialization effect
+  useEffect(() => {
+    console.log('[ChatSocket] Initialization effect triggered');
+    
+    // Initialize socket
+    const socket = initializeSocket();
+    
     // Return cleanup function
-    return cleanup;
-  }, []); // ✅ CRITICAL: Empty dependency array - only initialize once
+    return () => {
+      destroySocket();
+    };
+  }, []); // ✅ Empty dependency array - initialize only once
 
-  // ✅ Stable emit functions with better error handling
+  // ✅ STABLE EMIT FUNCTIONS with comprehensive error handling
   const emitFindPartner = useCallback((payload: {
     chatType: 'text' | 'video';
     interests: string[];
@@ -316,7 +396,7 @@ export function useChatSocket({
       return false;
     }
     
-    console.log('[ChatSocket] 📤 Sending message:', payload);
+    console.log('[ChatSocket] 📤 Sending message:', payload.message.substring(0, 50));
     socketRef.current.emit('sendMessage', {
       ...payload,
       roomId: roomIdRef.current
@@ -327,13 +407,17 @@ export function useChatSocket({
   const emitTypingStart = useCallback(() => {
     if (socketRef.current?.connected && roomIdRef.current) {
       socketRef.current.emit('typing_start', { roomId: roomIdRef.current });
+      return true;
     }
+    return false;
   }, []);
 
   const emitTypingStop = useCallback(() => {
     if (socketRef.current?.connected && roomIdRef.current) {
       socketRef.current.emit('typing_stop', { roomId: roomIdRef.current });
+      return true;
     }
+    return false;
   }, []);
 
   const emitLeaveChat = useCallback(() => {
@@ -373,25 +457,74 @@ export function useChatSocket({
   const getOnlineUserCount = useCallback(() => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('getOnlineUserCount');
+      return true;
     }
+    return false;
   }, []);
 
   const forceReconnect = useCallback(() => {
-    if (socketRef.current) {
+    if (socketRef.current && !initializationStateRef.current.isDestroying) {
       console.log('[ChatSocket] 🔄 Force reconnecting...');
       socketRef.current.disconnect();
       setTimeout(() => {
-        socketRef.current?.connect();
+        if (!initializationStateRef.current.isDestroying) {
+          socketRef.current?.connect();
+        }
       }, 1000);
+      return true;
     }
+    return false;
+  }, []);
+
+  // ✅ Debug and monitoring functions
+  const getConnectionInfo = useCallback(() => {
+    return {
+      isConnected,
+      isConnecting,
+      connectionError,
+      socketId: socketRef.current?.id || null,
+      roomId: roomIdRef.current,
+      transport: socketRef.current?.io.engine.transport.name || null,
+      connectionAttempts: connectionAttemptsRef.current,
+      isInitialized: initializationStateRef.current.isInitialized,
+      isDestroying: initializationStateRef.current.isDestroying
+    };
+  }, [isConnected, isConnecting, connectionError]);
+
+  const emitDebugRequest = useCallback(() => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('getDebugInfo');
+      return true;
+    }
+    return false;
+  }, []);
+
+  // ✅ Enhanced connection health check
+  const checkConnectionHealth = useCallback(() => {
+    if (!socketRef.current?.connected) {
+      return { healthy: false, reason: 'not_connected' };
+    }
+
+    const lastPong = (socketRef.current as any).conn?.lastPong;
+    const now = Date.now();
+    const timeSinceLastPong = lastPong ? now - lastPong : 0;
+
+    if (timeSinceLastPong > 90000) { // 90 seconds
+      return { healthy: false, reason: 'stale_connection', timeSinceLastPong };
+    }
+
+    return { healthy: true, timeSinceLastPong };
   }, []);
 
   return {
+    // Connection state
     socket: socketRef.current,
     isConnected,
     connectionError,
     isConnecting,
     roomId: roomIdRef.current,
+    
+    // Emit functions
     emitFindPartner,
     emitMessage,
     emitTypingStart,
@@ -400,6 +533,12 @@ export function useChatSocket({
     emitWebRTCSignal: handlersRef.current.onWebRTCSignal ? emitWebRTCSignal : undefined,
     emitUpdateStatus,
     getOnlineUserCount,
-    forceReconnect
+    
+    // Utility functions
+    forceReconnect,
+    destroySocket,
+    getConnectionInfo,
+    emitDebugRequest,
+    checkConnectionHealth
   };
 }

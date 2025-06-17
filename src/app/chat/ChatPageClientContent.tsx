@@ -1,4 +1,4 @@
-// src/app/chat/ChatPageClientContent.tsx - ULTIMATE FIX VERSION
+// src/app/chat/ChatPageClientContent.tsx - COMPLETELY FIXED VERSION
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
@@ -20,7 +20,7 @@ import { useSystemMessages } from './hooks/useSystemMessages';
 import { useChatActions } from './hooks/useChatActions';
 import { playSound } from '@/lib/utils';
 
-// Styles for display name animations
+// ✅ CRITICAL FIX: Styles for display name animations
 const displayNameAnimationCSS = `
   .display-name-rainbow {
     background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
@@ -69,19 +69,24 @@ const ChatPageClientContent: React.FC = () => {
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   
-  // ✅ ULTIMATE FIX: Use refs to prevent state re-renders
+  // ✅ CRITICAL FIX: Stable state management with refs for non-reactive data
   const [isScrollEnabled] = useState(true);
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   
-  // ✅ ULTIMATE FIX: Prevent socket recreation with refs
+  // ✅ CRITICAL FIX: Prevent multiple socket initializations
   const initializationRef = useRef<{
     isInitialized: boolean;
     autoSearchStarted: boolean;
-  }>({ isInitialized: false, autoSearchStarted: false });
+    socketInitialized: boolean;
+  }>({ 
+    isInitialized: false, 
+    autoSearchStarted: false,
+    socketInitialized: false
+  });
 
-  // ✅ ULTIMATE FIX: Memoize interests to prevent recreation
+  // ✅ CRITICAL FIX: Stable interests memoization
   const interests = useMemo(() => {
     const interestsParam = searchParams.get('interests');
     if (!interestsParam) return [];
@@ -94,150 +99,139 @@ const ChatPageClientContent: React.FC = () => {
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
 
-  // ✅ ULTIMATE FIX: Completely stable event handlers with useCallback and empty deps
-  const handleMessage = useCallback((data: any) => {
-    console.log('[ChatClient] Handling message:', data);
-    
-    chatState.setPartnerInfo(prev => {
-      if (!prev) return prev;
-      
-      const shouldUpdate = data.senderAuthId && 
-        (data.senderDisplayNameColor || data.senderDisplayNameAnimation);
-      
-      if (!shouldUpdate) return prev;
-      
-      return {
-        ...prev,
-        displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
-        displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
-        rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
-      };
-    });
-    
-    chatState.addMessage({
-      text: data.message,
-      sender: 'partner',
-      senderUsername: data.senderUsername,
-      senderAuthId: data.senderAuthId,
-      senderDisplayNameColor: data.senderDisplayNameColor,
-      senderDisplayNameAnimation: data.senderDisplayNameAnimation,
-      senderRainbowSpeed: data.senderRainbowSpeed
-    });
-    
-    chatState.setIsPartnerTyping(false);
-  }, []); // ✅ EMPTY DEPS - handlers access current values via closure
+  // ✅ CRITICAL FIX: Completely stable socket event handlers
+  const socketHandlers = useMemo(() => {
+    return {
+      onMessage: (data: any) => {
+        console.log('[ChatClient] Handling message:', data);
+        
+        // Update partner info if we have display data
+        if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
+          chatState.setPartnerInfo(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
+              displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
+              rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
+            };
+          });
+        }
+        
+        chatState.addMessage({
+          text: data.message,
+          sender: 'partner',
+          senderUsername: data.senderUsername,
+          senderAuthId: data.senderAuthId,
+          senderDisplayNameColor: data.senderDisplayNameColor,
+          senderDisplayNameAnimation: data.senderDisplayNameAnimation,
+          senderRainbowSpeed: data.senderRainbowSpeed
+        });
+        
+        chatState.setIsPartnerTyping(false);
+      },
 
-  const handlePartnerFound = useCallback((data: any) => {
-    console.log('[ChatClient] Partner found:', data);
-    
-    try {
-      playSound('Match.wav');
-    } catch (error) {
-      console.warn('[ChatClient] Failed to play sound:', error);
-    }
-    
-    chatState.setPartnerInfo({
-      id: data.partnerId,
-      username: data.partnerUsername || 'Stranger',
-      displayName: data.partnerDisplayName,
-      avatarUrl: data.partnerAvatarUrl,
-      bannerUrl: data.partnerBannerUrl,
-      pronouns: data.partnerPronouns,
-      status: data.partnerStatus || 'online',
-      displayNameColor: data.partnerDisplayNameColor || '#ff0000',
-      displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
-      rainbowSpeed: data.partnerRainbowSpeed || 3,
-      authId: data.partnerAuthId,
-      badges: data.partnerBadges || []
-    });
-    
-    setPartnerInterests(data.interests || []);
-    chatState.setIsFindingPartner(false);
-    chatState.setIsPartnerConnected(true);
-    setIsSelfDisconnectedRecently(false);
-    setIsPartnerLeftRecently(false);
-    chatState.setMessages([]);
-  }, []); // ✅ EMPTY DEPS
+      onPartnerFound: (data: any) => {
+        console.log('[ChatClient] Partner found:', data);
+        
+        try {
+          playSound('Match.wav');
+        } catch (error) {
+          console.warn('[ChatClient] Failed to play sound:', error);
+        }
+        
+        chatState.setPartnerInfo({
+          id: data.partnerId,
+          username: data.partnerUsername || 'Stranger',
+          displayName: data.partnerDisplayName,
+          avatarUrl: data.partnerAvatarUrl,
+          bannerUrl: data.partnerBannerUrl,
+          pronouns: data.partnerPronouns,
+          status: data.partnerStatus || 'online',
+          displayNameColor: data.partnerDisplayNameColor || '#667eea',
+          displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
+          rainbowSpeed: data.partnerRainbowSpeed || 3,
+          authId: data.partnerAuthId,
+          badges: data.partnerBadges || []
+        });
+        
+        setPartnerInterests(data.interests || []);
+        chatState.setIsFindingPartner(false);
+        chatState.setIsPartnerConnected(true);
+        setIsSelfDisconnectedRecently(false);
+        setIsPartnerLeftRecently(false);
+        chatState.setMessages([]);
+      },
 
-  const handlePartnerLeft = useCallback(() => {
-    console.log('[ChatClient] Partner left');
-    
-    chatState.setIsPartnerConnected(false);
-    chatState.setIsFindingPartner(false);
-    chatState.setPartnerInfo(null);
-    chatState.setIsPartnerTyping(false);
-    setPartnerInterests([]);
-    setIsPartnerLeftRecently(true);
-    setIsSelfDisconnectedRecently(false);
-  }, []); // ✅ EMPTY DEPS
+      onPartnerLeft: () => {
+        console.log('[ChatClient] Partner left');
+        
+        chatState.setIsPartnerConnected(false);
+        chatState.setIsFindingPartner(false);
+        chatState.setPartnerInfo(null);
+        chatState.setIsPartnerTyping(false);
+        setPartnerInterests([]);
+        setIsPartnerLeftRecently(true);
+        setIsSelfDisconnectedRecently(false);
+      },
 
-  const handleStatusChange = useCallback((status: string) => {
-    chatState.setPartnerInfo(prev => prev ? {...prev, status: status as any} : null);
-  }, []);
+      onStatusChange: (status: string) => {
+        chatState.setPartnerInfo(prev => 
+          prev ? {...prev, status: status as any} : null
+        );
+      },
 
-  const handleTypingStart = useCallback(() => {
-    chatState.setIsPartnerTyping(true);
-  }, []);
+      onTypingStart: () => {
+        chatState.setIsPartnerTyping(true);
+      },
 
-  const handleTypingStop = useCallback(() => {
-    chatState.setIsPartnerTyping(false);
-  }, []);
+      onTypingStop: () => {
+        chatState.setIsPartnerTyping(false);
+      },
 
-  const handleDisconnectHandler = useCallback(() => {
-    console.log('[ChatClient] Socket disconnected');
-    chatState.setIsPartnerConnected(false);
-    chatState.setIsFindingPartner(false);
-    chatState.setIsPartnerTyping(false);
-    chatState.setPartnerInfo(null);
-  }, []);
+      onWaiting: () => {
+        console.log('[ChatClient] Waiting for partner');
+      },
 
-  const handleConnectErrorHandler = useCallback(() => {
-    console.log('[ChatClient] Socket connection error');
-    chatState.setIsFindingPartner(false);
-  }, []);
+      onCooldown: () => {
+        console.log('[ChatClient] Find partner cooldown');
+        chatState.setIsFindingPartner(false);
+      },
 
-  // ✅ ULTIMATE FIX: Single stable socket handler object
-  const socketHandlers = useMemo(() => ({
-    onMessage: handleMessage,
-    onPartnerFound: handlePartnerFound,
-    onPartnerLeft: handlePartnerLeft,
-    onStatusChange: handleStatusChange,
-    onTypingStart: handleTypingStart,
-    onTypingStop: handleTypingStop,
-    onWaiting: () => {},
-    onCooldown: () => chatState.setIsFindingPartner(false),
-    onDisconnectHandler: handleDisconnectHandler,
-    onConnectErrorHandler: handleConnectErrorHandler,
-  }), [
-    handleMessage,
-    handlePartnerFound,
-    handlePartnerLeft,
-    handleStatusChange,
-    handleTypingStart,
-    handleTypingStop,
-    handleDisconnectHandler,
-    handleConnectErrorHandler
-  ]);
+      onDisconnectHandler: () => {
+        console.log('[ChatClient] Socket disconnected');
+        chatState.setIsPartnerConnected(false);
+        chatState.setIsFindingPartner(false);
+        chatState.setIsPartnerTyping(false);
+        chatState.setPartnerInfo(null);
+      },
 
-  // ✅ ULTIMATE FIX: Initialize socket with completely stable dependencies
-  const {
-    isConnected,
-    connectionError,
-    emitFindPartner,
-    emitMessage,
-    emitTypingStart,
-    emitTypingStop,
-    emitLeaveChat
-  } = useChatSocket({
+      onConnectErrorHandler: () => {
+        console.log('[ChatClient] Socket connection error');
+        chatState.setIsFindingPartner(false);
+      }
+    };
+  }, []); // ✅ EMPTY DEPS - handlers use current state via closure
+
+  // ✅ CRITICAL FIX: Initialize socket with completely stable dependencies
+  const socket = useChatSocket({
     ...socketHandlers,
     authId: auth.authId
   });
+
+  // ✅ CRITICAL FIX: Prevent socket recreation by tracking initialization
+  useEffect(() => {
+    if (!initializationRef.current.socketInitialized && socket.socket) {
+      initializationRef.current.socketInitialized = true;
+      console.log('[ChatClient] Socket initialized for the first time');
+    }
+  }, [socket.socket]);
 
   // Use modular hooks for side effects
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
-    connectionError,
+    connectionError: socket.connectionError,
     isSelfDisconnectedRecently,
     isPartnerLeftRecently
   });
@@ -245,7 +239,7 @@ const ChatPageClientContent: React.FC = () => {
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
-    connectionError,
+    connectionError: socket.connectionError,
     isSelfDisconnectedRecently,
     isPartnerLeftRecently,
     partnerInterests,
@@ -254,8 +248,9 @@ const ChatPageClientContent: React.FC = () => {
     setMessages: chatState.setMessages
   });
 
-  const { handleFindOrDisconnect, handleSendMessage, handleInputChange } = useChatActions({
-    isConnected,
+  // ✅ CRITICAL FIX: Stable chat actions with proper dependency injection
+  const chatActions = useChatActions({
+    isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
     setIsFindingPartner: chatState.setIsFindingPartner,
@@ -267,18 +262,18 @@ const ChatPageClientContent: React.FC = () => {
     setIsPartnerLeftRecently,
     addMessage: chatState.addMessage,
     addSystemMessage: chatState.addSystemMessage,
-    emitLeaveChat,
-    emitFindPartner,
-    emitMessage,
-    emitTypingStart,
-    emitTypingStop,
+    emitLeaveChat: socket.emitLeaveChat,
+    emitFindPartner: socket.emitFindPartner,
+    emitMessage: socket.emitMessage,
+    emitTypingStart: socket.emitTypingStart,
+    emitTypingStop: socket.emitTypingStop,
     setCurrentMessage: chatState.setCurrentMessage,
     interests,
     authId: auth.authId,
     username: auth.username
   });
 
-  // ✅ ULTIMATE FIX: Auto-search with strict one-time execution
+  // ✅ CRITICAL FIX: Auto-search with strict one-time execution and proper conditions
   useEffect(() => {
     // Prevent multiple executions
     if (initializationRef.current.autoSearchStarted) {
@@ -286,21 +281,25 @@ const ChatPageClientContent: React.FC = () => {
       return;
     }
 
-    // Check if conditions are met for auto-search
+    // More comprehensive conditions check
     const shouldStartSearch = 
-      isConnected && 
+      socket.isConnected && 
       !auth.isLoading && 
       !chatState.isPartnerConnected && 
       !chatState.isFindingPartner &&
-      auth.authId !== undefined; // Wait for auth to be fully loaded
+      auth.authId !== undefined && // Wait for auth to be fully loaded
+      !socket.connectionError &&
+      !socket.isConnecting;
 
     if (!shouldStartSearch) {
       console.log('[ChatClient] Auto-search conditions not met:', {
-        isConnected,
+        isConnected: socket.isConnected,
         authLoading: auth.isLoading,
         isPartnerConnected: chatState.isPartnerConnected,
         isFindingPartner: chatState.isFindingPartner,
-        authId: auth.authId
+        authId: auth.authId,
+        connectionError: socket.connectionError,
+        isConnecting: socket.isConnecting
       });
       return;
     }
@@ -315,78 +314,122 @@ const ChatPageClientContent: React.FC = () => {
     setIsSelfDisconnectedRecently(false);
     setIsPartnerLeftRecently(false);
     
-    // Use setTimeout to ensure this runs after the current render cycle
+    // Small delay to ensure state is updated
     const timeoutId = setTimeout(() => {
-      emitFindPartner({
-        chatType: 'text',
+      const searchPayload = {
+        chatType: 'text' as const,
         interests,
         authId: auth.authId
-      });
+      };
+      
+      console.log('[ChatClient] Emitting findPartner with payload:', searchPayload);
+      const success = socket.emitFindPartner(searchPayload);
+      
+      if (!success) {
+        console.error('[ChatClient] Failed to emit findPartner');
+        chatState.setIsFindingPartner(false);
+        chatState.addSystemMessage('Failed to start partner search. Please try again.');
+        initializationRef.current.autoSearchStarted = false;
+      }
     }, 100);
 
     return () => {
       clearTimeout(timeoutId);
     };
   }, [
-    isConnected, 
-    auth.isLoading, 
+    socket.isConnected,
+    socket.connectionError,
+    socket.isConnecting,
+    auth.isLoading,
     auth.authId,
     chatState.isPartnerConnected,
     chatState.isFindingPartner,
-    interests,
-    emitFindPartner,
-    chatState.setIsFindingPartner,
-    chatState.addSystemMessage
-  ]);
+    interests
+  ]); // ✅ Complete dependencies for proper triggering
 
-  // ✅ ULTIMATE FIX: Reset auto-search flag when partner state changes
+  // ✅ CRITICAL FIX: Reset auto-search flag when relevant state changes
   useEffect(() => {
-    if (chatState.isPartnerConnected || !isConnected) {
-      initializationRef.current.autoSearchStarted = false;
+    if (chatState.isPartnerConnected || !socket.isConnected || socket.connectionError) {
+      if (initializationRef.current.autoSearchStarted) {
+        console.log('[ChatClient] Resetting auto-search flag due to state change');
+        initializationRef.current.autoSearchStarted = false;
+      }
     }
-  }, [chatState.isPartnerConnected, isConnected]);
+  }, [chatState.isPartnerConnected, socket.isConnected, socket.connectionError]);
 
-  // ✅ ULTIMATE FIX: Navigation cleanup - simplified
+  // ✅ CRITICAL FIX: Navigation cleanup - simplified and more reliable
   useEffect(() => {
-    if (pathname === '/chat') {
-      console.log('[ChatClient] Navigation cleanup triggered');
-      
-      // Reset everything
-      chatState.setIsFindingPartner(false);
-      chatState.setIsPartnerConnected(false);
-      chatState.setMessages([]);
-      chatState.setPartnerInfo(null);
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      
-      // Reset initialization flag
-      initializationRef.current.autoSearchStarted = false;
-    }
+    const handleRouteChange = () => {
+      if (pathname === '/chat') {
+        console.log('[ChatClient] Route change cleanup triggered');
+        
+        // Reset chat state
+        chatState.resetChatState();
+        setIsSelfDisconnectedRecently(false);
+        setIsPartnerLeftRecently(false);
+        setPartnerInterests([]);
+        
+        // Reset initialization flags
+        initializationRef.current.autoSearchStarted = false;
+      }
+    };
+
+    handleRouteChange();
   }, [pathname]); // ✅ Only pathname dependency
 
-  // ✅ Mount effect - completely separate
+  // ✅ Mount effect - completely separate from other effects
   useEffect(() => { 
     console.log('[ChatClient] Component mounted');
-    setIsMounted(true); 
+    setIsMounted(true);
+    
+    // Mark component as initialized
+    initializationRef.current.isInitialized = true;
+    
+    return () => {
+      console.log('[ChatClient] Component unmounting');
+      initializationRef.current.isInitialized = false;
+    };
   }, []);
 
-  // ✅ ULTIMATE FIX: Stable username click handler
+  // ✅ CRITICAL FIX: Stable username click handler
   const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
     console.log('[ChatClient] Username clicked:', authId, clickPosition);
   }, []);
 
+  // ✅ Loading state with better UX
   if (!isMounted || auth.isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading chat...</p>
+          <p className="mt-4 text-gray-600">
+            {auth.isLoading ? 'Loading authentication...' : 'Loading chat...'}
+          </p>
         </div>
       </div>
     );
   }
 
-  // ✅ ULTIMATE FIX: Memoize message mapping to prevent recreation
+  // ✅ Connection error state
+  if (socket.connectionError && !socket.isConnected && !socket.isConnecting) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-bold mb-2">Connection Error</h2>
+          <p className="text-gray-600 mb-4">{socket.connectionError}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ CRITICAL FIX: Memoize expensive computations
   const mappedMessages = useMemo(() => {
     return chatState.messages.map(msg => ({
       id: msg.id,
@@ -401,7 +444,6 @@ const ChatPageClientContent: React.FC = () => {
     }));
   }, [chatState.messages]);
 
-  // ✅ ULTIMATE FIX: Memoize partner info to prevent recreation
   const memoizedPartnerInfo = useMemo(() => {
     if (!chatState.partnerInfo) return undefined;
     
@@ -416,13 +458,32 @@ const ChatPageClientContent: React.FC = () => {
     };
   }, [chatState.partnerInfo]);
 
-  // ✅ ULTIMATE FIX: Memoize own info to prevent recreation
   const memoizedOwnInfo = useMemo(() => ({
     username: auth.username || "You",
     authId: auth.authId,
     displayNameColor: auth.displayNameColor,
     displayNameAnimation: auth.displayNameAnimation
   }), [auth.username, auth.authId, auth.displayNameColor, auth.displayNameAnimation]);
+
+  // ✅ Debug info for development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const debugInfo = {
+        isConnected: socket.isConnected,
+        isPartnerConnected: chatState.isPartnerConnected,
+        isFindingPartner: chatState.isFindingPartner,
+        authId: auth.authId,
+        messageCount: chatState.messages.length,
+        autoSearchStarted: initializationRef.current.autoSearchStarted,
+        socketInitialized: initializationRef.current.socketInitialized
+      };
+      
+      console.log('[ChatClient] Debug Info:', debugInfo);
+      
+      // Make debug info available globally for debugging
+      (window as any).chatDebugInfo = debugInfo;
+    }
+  });
 
   return (
     <>
@@ -453,27 +514,42 @@ const ChatPageClientContent: React.FC = () => {
                 <div className="title-bar-text">
                   {isMobile ? 'TinChat' : 'Text Chat'}
                 </div>
+                
+                {/* ✅ Connection status indicator */}
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "w-2 h-2 rounded-full",
+                    socket.isConnected ? "bg-green-500" : 
+                    socket.isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500"
+                  )} />
+                  {process.env.NODE_ENV === 'development' && (
+                    <span className="text-xs">
+                      {socket.isConnected ? 'Connected' : 
+                       socket.isConnecting ? 'Connecting...' : 'Disconnected'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ChatWindow
                 messages={mappedMessages}
-                onSendMessage={handleSendMessage}
+                onSendMessage={chatActions.handleSendMessage}
                 inputValue={chatState.currentMessage}
-                onInputChange={handleInputChange}
+                onInputChange={chatActions.handleInputChange}
                 isPartnerTyping={chatState.isPartnerTyping}
                 partnerStatus={chatState.partnerInfo?.status || 'offline'}
                 partnerInfo={memoizedPartnerInfo}
                 ownInfo={memoizedOwnInfo}
-                isConnected={isConnected}
+                isConnected={socket.isConnected}
                 isPartnerConnected={chatState.isPartnerConnected}
                 theme={effectivePageTheme}
                 onUsernameClick={handleUsernameClick}
                 isMobile={isMobile}
                 isScrollEnabled={isScrollEnabled}
-                onFindOrDisconnect={handleFindOrDisconnect}
-                findOrDisconnectDisabled={!isConnected || !!connectionError}
+                onFindOrDisconnect={chatActions.handleFindOrDisconnect}
+                findOrDisconnectDisabled={!socket.isConnected || !!socket.connectionError}
                 findOrDisconnectText={
                   chatState.isPartnerConnected 
                     ? (isMobile ? 'Skip' : 'Skip') 
@@ -484,9 +560,16 @@ const ChatPageClientContent: React.FC = () => {
               />
             </div>
 
-            {connectionError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm flex-shrink-0">
-                Connection Error: {connectionError}
+            {/* ✅ Enhanced connection error display */}
+            {socket.connectionError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+                <span>Connection Error: {socket.connectionError}</span>
+                <button 
+                  onClick={() => socket.forceReconnect()}
+                  className="ml-2 px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                >
+                  Retry
+                </button>
               </div>
             )}
           </div>
