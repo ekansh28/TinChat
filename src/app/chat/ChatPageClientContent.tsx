@@ -1,7 +1,7 @@
-// src/app/chat/ChatPageClientContent.tsx - Fixed modular version
+// src/app/chat/ChatPageClientContent.tsx - FIXED VERSION
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import HomeButton from '@/components/HomeButton';
@@ -10,8 +10,8 @@ import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 
 // Import modular components and hooks
 import ChatWindow from './components/ChatWindow';
-import { useChatSocket } from './hooks/useChatSocket';  // ✅ Only import useChatSocket
-import { useChatState } from './hooks/useChatState';    // ✅ Import from separate file
+import { useChatSocket } from './hooks/useChatSocket';
+import { useChatState } from './hooks/useChatState';
 import { useAuth } from './hooks/useAuth';
 import { useThemeDetection } from './hooks/useThemeDetection';
 import { useViewport } from './hooks/useViewport';
@@ -75,10 +75,11 @@ const ChatPageClientContent: React.FC = () => {
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
 
-  const interests = useMemo(() => 
-    searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], 
-    [searchParams]
-  );
+  // ✅ CRITICAL FIX: Memoize interests to prevent recreation on every render
+  const interests = useMemo(() => {
+    const interestsParam = searchParams.get('interests');
+    return interestsParam?.split(',').filter(i => i.trim() !== '') || [];
+  }, [searchParams]);
 
   // Use modular hooks
   const auth = useAuth();
@@ -86,8 +87,8 @@ const ChatPageClientContent: React.FC = () => {
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
 
-  // Socket event handlers (simplified)
-  const handleMessage = (data: any) => {
+  // ✅ CRITICAL FIX: Stable event handlers with useCallback
+  const handleMessage = useCallback((data: any) => {
     if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
       chatState.setPartnerInfo(prev => prev ? {
         ...prev,
@@ -107,9 +108,9 @@ const ChatPageClientContent: React.FC = () => {
       senderRainbowSpeed: data.senderRainbowSpeed
     });
     chatState.setIsPartnerTyping(false);
-  };
+  }, [chatState.setPartnerInfo, chatState.addMessage, chatState.setIsPartnerTyping]);
 
-  const handlePartnerFound = (data: any) => {
+  const handlePartnerFound = useCallback((data: any) => {
     playSound('Match.wav');
     chatState.setPartnerInfo({
       id: data.partnerId,
@@ -132,9 +133,9 @@ const ChatPageClientContent: React.FC = () => {
     setIsSelfDisconnectedRecently(false);
     setIsPartnerLeftRecently(false);
     chatState.setMessages([]);
-  };
+  }, [chatState.setPartnerInfo, chatState.setIsFindingPartner, chatState.setIsPartnerConnected, chatState.setMessages]);
 
-  const handlePartnerLeft = () => {
+  const handlePartnerLeft = useCallback(() => {
     chatState.setIsPartnerConnected(false);
     chatState.setIsFindingPartner(false);
     chatState.setPartnerInfo(null);
@@ -142,22 +143,14 @@ const ChatPageClientContent: React.FC = () => {
     setPartnerInterests([]);
     setIsPartnerLeftRecently(true);
     setIsSelfDisconnectedRecently(false);
-  };
+  }, [chatState.setIsPartnerConnected, chatState.setIsFindingPartner, chatState.setPartnerInfo, chatState.setIsPartnerTyping]);
 
-  // Initialize socket
-  const {
-    isConnected,
-    connectionError,
-    emitFindPartner,
-    emitMessage,
-    emitTypingStart,
-    emitTypingStop,
-    emitLeaveChat
-  } = useChatSocket({
+  // ✅ CRITICAL FIX: Stable socket handlers
+  const socketHandlers = useMemo(() => ({
     onMessage: handleMessage,
     onPartnerFound: handlePartnerFound,
     onPartnerLeft: handlePartnerLeft,
-    onStatusChange: (status) => chatState.setPartnerInfo(prev => prev ? {...prev, status: status as any} : null),
+    onStatusChange: (status: string) => chatState.setPartnerInfo(prev => prev ? {...prev, status: status as any} : null),
     onTypingStart: () => chatState.setIsPartnerTyping(true),
     onTypingStop: () => chatState.setIsPartnerTyping(false),
     onWaiting: () => {},
@@ -169,6 +162,27 @@ const ChatPageClientContent: React.FC = () => {
       chatState.setPartnerInfo(null);
     },
     onConnectErrorHandler: () => chatState.setIsFindingPartner(false),
+  }), [
+    handleMessage, 
+    handlePartnerFound, 
+    handlePartnerLeft,
+    chatState.setPartnerInfo,
+    chatState.setIsPartnerTyping,
+    chatState.setIsFindingPartner,
+    chatState.setIsPartnerConnected
+  ]);
+
+  // Initialize socket with stable handlers
+  const {
+    isConnected,
+    connectionError,
+    emitFindPartner,
+    emitMessage,
+    emitTypingStart,
+    emitTypingStop,
+    emitLeaveChat
+  } = useChatSocket({
+    ...socketHandlers,
     authId: auth.authId
   });
 
@@ -217,9 +231,18 @@ const ChatPageClientContent: React.FC = () => {
     username: auth.username
   });
 
-  // Auto-search for partner when connected
+  // ✅ CRITICAL FIX: Stable auto-search effect with proper dependencies
   useEffect(() => {
-    if (isConnected && !auth.isLoading && !chatState.isPartnerConnected && !chatState.isFindingPartner) {
+    // Only run once when all conditions are met
+    const shouldStartSearch = 
+      isConnected && 
+      !auth.isLoading && 
+      !chatState.isPartnerConnected && 
+      !chatState.isFindingPartner;
+
+    if (shouldStartSearch) {
+      console.log('[ChatClient] Starting auto-search for partner');
+      
       chatState.setIsFindingPartner(true);
       chatState.addSystemMessage('Searching for a partner...');
       setIsSelfDisconnectedRecently(false);
@@ -231,11 +254,23 @@ const ChatPageClientContent: React.FC = () => {
         authId: auth.authId
       });
     }
-  }, [isConnected, auth.isLoading, chatState.isPartnerConnected, chatState.isFindingPartner, interests, auth.authId, emitFindPartner, chatState.setIsFindingPartner, chatState.addSystemMessage]);
+  }, [
+    isConnected, 
+    auth.isLoading, 
+    auth.authId,
+    // ✅ CRITICAL: Only depend on the current state, not the setters
+    chatState.isPartnerConnected,
+    chatState.isFindingPartner,
+    interests, // This is now stable due to useMemo
+    emitFindPartner,
+    chatState.setIsFindingPartner,
+    chatState.addSystemMessage
+  ]);
 
-  // Navigation cleanup effect
+  // ✅ CRITICAL FIX: Simplified navigation cleanup
   useEffect(() => {
     if (pathname === '/chat') {
+      console.log('[ChatClient] Navigation cleanup triggered');
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerConnected(false);
       chatState.setMessages([]);
@@ -243,8 +278,9 @@ const ChatPageClientContent: React.FC = () => {
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
     }
-  }, [pathname, chatState]);
+  }, [pathname]); // ✅ Only depend on pathname
 
+  // ✅ Mount effect - separate from other effects
   useEffect(() => { 
     setIsMounted(true); 
   }, []);
@@ -260,9 +296,9 @@ const ChatPageClientContent: React.FC = () => {
     );
   }
 
-  const handleUsernameClick = (authId: string, clickPosition: { x: number; y: number }) => {
+  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
     console.log('Username clicked for authId:', authId, clickPosition);
-  };
+  }, []);
 
   return (
     <>
