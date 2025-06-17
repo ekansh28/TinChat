@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChatSocket.ts - ENHANCED WITH VIDEO SUPPORT
+// src/app/chat/hooks/useChatSocket.ts - FIXED VERSION WITH STABLE DEPENDENCIES
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { showChatToast, PartnerInfo, Message } from '../utils/ChatHelpers';
@@ -37,13 +37,61 @@ export function useChatSocket({
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const roomIdRef = useRef<string | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionAttemptsRef = useRef(0);
+
+  // ✅ CRITICAL FIX: Store callbacks in stable refs
+  const stableCallbacks = useRef({
+    onMessage,
+    onPartnerFound,
+    onPartnerLeft,
+    onStatusChange,
+    onTypingStart,
+    onTypingStop,
+    onWebRTCSignal,
+    onWaiting,
+    onCooldown,
+    onDisconnectHandler,
+    onConnectErrorHandler
+  });
+
+  // ✅ Update refs when callbacks change (but don't recreate socket)
+  useEffect(() => {
+    stableCallbacks.current = {
+      onMessage,
+      onPartnerFound,
+      onPartnerLeft,
+      onStatusChange,
+      onTypingStart,
+      onTypingStop,
+      onWebRTCSignal,
+      onWaiting,
+      onCooldown,
+      onDisconnectHandler,
+      onConnectErrorHandler
+    };
+  }, [
+    onMessage,
+    onPartnerFound,
+    onPartnerLeft,
+    onStatusChange,
+    onTypingStart,
+    onTypingStop,
+    onWebRTCSignal,
+    onWaiting,
+    onCooldown,
+    onDisconnectHandler,
+    onConnectErrorHandler
+  ]);
 
   // Update room ID ref when it changes
   useEffect(() => {
     roomIdRef.current = roomId || null;
   }, [roomId]);
 
+  // ✅ CRITICAL FIX: Socket connection with stable dependencies
   useEffect(() => {
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
     
@@ -54,21 +102,34 @@ export function useChatSocket({
       return;
     }
 
-    console.log('Connecting to socket server:', socketServerUrl);
+    // Prevent multiple simultaneous connections
+    if (isConnecting || socketRef.current?.connected) {
+      console.log('Connection already in progress or established, skipping...');
+      return;
+    }
+
+    setIsConnecting(true);
+    connectionAttemptsRef.current += 1;
+
+    console.log(`🔌 Connecting to socket server (attempt ${connectionAttemptsRef.current}):`, socketServerUrl);
     
     const socket = io(socketServerUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 20000
+      reconnectionAttempts: 3, // ✅ Limit reconnection attempts
+      reconnectionDelay: 2000, // ✅ Wait 2 seconds between attempts
+      reconnectionDelayMax: 10000, // ✅ Max 10 second delay
+      timeout: 20000,
+      forceNew: true, // ✅ Force new connection to prevent reuse issues
+      upgrade: true,
+      rememberUpgrade: false
     });
     
     socketRef.current = socket;
 
     // Set up WebRTC signal emission function for video chat
-    if (onWebRTCSignal) {
+    if (stableCallbacks.current.onWebRTCSignal) {
       window.videoChatEmitWebRTCSignal = (data) => {
         if (socket.connected && roomIdRef.current) {
           socket.emit('webrtcSignal', {
@@ -79,140 +140,158 @@ export function useChatSocket({
       };
     }
 
-    // Connection events
+    // ✅ Connection events with proper error handling
     socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
+      console.log('✅ Socket connected:', socket.id);
       setIsConnected(true);
+      setIsConnecting(false);
       setConnectionError(null);
+      connectionAttemptsRef.current = 0; // Reset attempts on successful connection
+      
+      // Clear any pending reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
+      console.log('❌ Socket disconnected:', reason);
       setIsConnected(false);
+      setIsConnecting(false);
       roomIdRef.current = null;
-      onDisconnectHandler(reason);
+      
+      // Use stable callback reference
+      stableCallbacks.current.onDisconnectHandler(reason);
+
+      // ✅ Implement exponential backoff for reconnections
+      if (reason === 'io server disconnect') {
+        // Server disconnected us, don't auto-reconnect
+        console.log('Server disconnected us, not attempting reconnect');
+      } else if (connectionAttemptsRef.current < 5) {
+        // Client disconnect, try to reconnect with delay
+        const delay = Math.min(1000 * Math.pow(2, connectionAttemptsRef.current), 30000);
+        console.log(`Scheduling reconnect in ${delay}ms...`);
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (!socketRef.current?.connected) {
+            console.log('Attempting manual reconnect...');
+            socket.connect();
+          }
+        }, delay);
+      }
     });
 
     socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
+      console.error('🚫 Socket connection error:', err);
       setIsConnected(false);
+      setIsConnecting(false);
       setConnectionError(err.message);
-      onConnectErrorHandler(err);
+      
+      // Use stable callback reference
+      stableCallbacks.current.onConnectErrorHandler(err);
     });
 
-    // Chat events
-    socket.on('partnerFound', ({ 
-      partnerId, 
-      roomId: newRoomId, 
-      interests, 
-      partnerUsername,
-      partnerDisplayName,
-      partnerAvatarUrl,
-      partnerBannerUrl,
-      partnerPronouns,
-      partnerStatus,
-      partnerDisplayNameColor,
-      partnerDisplayNameAnimation,
-      partnerRainbowSpeed,
-      partnerAuthId,
-      partnerBadges
+    // ✅ Chat events using stable callback references
+    socket.on('partnerFound', (data: {
+      partnerId: string;
+      roomId: string;
+      interests: string[];
+      partnerUsername?: string;
+      partnerDisplayName?: string;
+      partnerAvatarUrl?: string;
+      partnerBannerUrl?: string;
+      partnerPronouns?: string;
+      partnerStatus?: string;
+      partnerDisplayNameColor?: string;
+      partnerDisplayNameAnimation?: string;
+      partnerRainbowSpeed?: number;
+      partnerAuthId?: string;
+      partnerBadges?: any[];
     }) => {
-      console.log('Partner found:', { partnerId, roomId: newRoomId });
-      roomIdRef.current = newRoomId;
-      onPartnerFound({
-        partnerId,
-        roomId: newRoomId,
-        interests,
-        partnerUsername,
-        partnerDisplayName,
-        partnerAvatarUrl,
-        partnerBannerUrl,
-        partnerPronouns,
-        partnerStatus,
-        partnerDisplayNameColor,
-        partnerDisplayNameAnimation,
-        partnerRainbowSpeed,
-        partnerAuthId,
-        partnerBadges
-      });
+      console.log('🎯 Partner found:', { partnerId: data.partnerId, roomId: data.roomId });
+      roomIdRef.current = data.roomId;
+      stableCallbacks.current.onPartnerFound(data);
     });
 
-    socket.on('receiveMessage', ({
-      senderId,
-      message,
-      senderUsername,
-      senderAuthId,
-      senderDisplayNameColor,
-      senderDisplayNameAnimation,
-      senderRainbowSpeed
+    socket.on('receiveMessage', (data: {
+      senderId: string;
+      message: string;
+      senderUsername?: string;
+      senderAuthId?: string;
+      senderDisplayNameColor?: string;
+      senderDisplayNameAnimation?: string;
+      senderRainbowSpeed?: number;
     }) => {
-      console.log('Message received:', { senderId, message });
-      onMessage({
-        senderId,
-        message,
-        senderUsername,
-        senderAuthId,
-        senderDisplayNameColor,
-        senderDisplayNameAnimation,
-        senderRainbowSpeed
-      });
+      console.log('💬 Message received:', { senderId: data.senderId, message: data.message });
+      stableCallbacks.current.onMessage(data);
     });
 
     socket.on('partnerLeft', () => {
-      console.log('Partner left');
+      console.log('👋 Partner left');
       roomIdRef.current = null;
-      onPartnerLeft();
+      stableCallbacks.current.onPartnerLeft();
     });
 
-    socket.on('partnerStatusChanged', ({ status }) => {
-      console.log('Partner status changed:', status);
-      onStatusChange(status);
+    socket.on('partnerStatusChanged', (data: { status: string }) => {
+      console.log('📊 Partner status changed:', data.status);
+      stableCallbacks.current.onStatusChange(data.status);
     });
 
     // WebRTC signaling (only for video chat)
-    if (onWebRTCSignal) {
-      socket.on('webrtcSignal', (data) => {
-        console.log('WebRTC signal received:', data.signalData?.type || 'candidate');
-        onWebRTCSignal(data.signalData);
+    if (stableCallbacks.current.onWebRTCSignal) {
+      socket.on('webrtcSignal', (data: any) => {
+        console.log('📹 WebRTC signal received:', data.signalData?.type || 'candidate');
+        stableCallbacks.current.onWebRTCSignal!(data.signalData);
       });
     }
 
-    socket.on('partner_typing_start', onTypingStart);
-    socket.on('partner_typing_stop', onTypingStop);
-    socket.on('waitingForPartner', onWaiting);
-    socket.on('findPartnerCooldown', onCooldown);
+    socket.on('partner_typing_start', () => stableCallbacks.current.onTypingStart());
+    socket.on('partner_typing_stop', () => stableCallbacks.current.onTypingStop());
+    socket.on('waitingForPartner', () => stableCallbacks.current.onWaiting());
+    socket.on('findPartnerCooldown', () => stableCallbacks.current.onCooldown());
 
     // Online user count updates
-    socket.on('onlineUserCountUpdate', (count) => {
-      console.log('Online users:', count);
+    socket.on('onlineUserCountUpdate', (count: number) => {
+      console.log('👥 Online users:', count);
     });
 
+    // ✅ Enhanced error handling for socket errors
+    socket.on('error', (error: any) => {
+      console.error('🚨 Socket error:', error);
+      setConnectionError(error.message || 'Socket error occurred');
+    });
+
+    // Cleanup function
     return () => {
-      console.log('Cleaning up socket connection');
+      console.log('🧹 Cleaning up socket connection...');
+      
+      // Clear reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
+      // Leave room if connected
       if (roomIdRef.current && socket.connected) {
         socket.emit('leaveChat', { roomId: roomIdRef.current });
       }
-      if (onWebRTCSignal) {
+      
+      // Clean up WebRTC function
+      if (stableCallbacks.current.onWebRTCSignal) {
         delete window.videoChatEmitWebRTCSignal;
       }
+      
+      // Remove all listeners and disconnect
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setIsConnected(false);
+      setIsConnecting(false);
     };
-  }, [
-    onMessage,
-    onPartnerFound,
-    onPartnerLeft,
-    onStatusChange,
-    onTypingStart,
-    onTypingStop,
-    onWaiting,
-    onCooldown,
-    onDisconnectHandler,
-    onConnectErrorHandler,
-    onWebRTCSignal
-  ]);
+  }, []); // ✅ EMPTY DEPENDENCY ARRAY - No changing dependencies!
 
+  // ✅ Stable emit functions with better error handling
   const emitFindPartner = useCallback((payload: {
     chatType: 'text' | 'video';
     interests: string[];
@@ -223,7 +302,7 @@ export function useChatSocket({
       return false;
     }
     
-    console.log('Finding partner with payload:', payload);
+    console.log('🔍 Finding partner with payload:', payload);
     socketRef.current.emit('findPartner', payload);
     return true;
   }, []);
@@ -244,7 +323,7 @@ export function useChatSocket({
       return false;
     }
     
-    console.log('Sending message:', payload);
+    console.log('📤 Sending message:', payload);
     socketRef.current.emit('sendMessage', {
       ...payload,
       roomId: roomIdRef.current
@@ -266,7 +345,7 @@ export function useChatSocket({
 
   const emitLeaveChat = useCallback(() => {
     if (socketRef.current?.connected && roomIdRef.current) {
-      console.log('Leaving chat room:', roomIdRef.current);
+      console.log('🚪 Leaving chat room:', roomIdRef.current);
       socketRef.current.emit('leaveChat', { roomId: roomIdRef.current });
       roomIdRef.current = null;
       return true;
@@ -279,7 +358,7 @@ export function useChatSocket({
     signalData: any;
   }) => {
     if (socketRef.current?.connected && roomIdRef.current) {
-      console.log('Emitting WebRTC signal:', payload.signalData.type || 'candidate');
+      console.log('📹 Emitting WebRTC signal:', payload.signalData.type || 'candidate');
       socketRef.current.emit('webrtcSignal', {
         roomId: roomIdRef.current,
         signalData: payload.signalData
@@ -291,7 +370,7 @@ export function useChatSocket({
 
   const emitUpdateStatus = useCallback((status: 'online' | 'idle' | 'dnd' | 'offline') => {
     if (socketRef.current?.connected && authId) {
-      console.log('Updating status:', status);
+      console.log('📊 Updating status:', status);
       socketRef.current.emit('updateStatus', { status });
       return true;
     }
@@ -304,23 +383,36 @@ export function useChatSocket({
     }
   }, []);
 
+  // ✅ Force reconnect function for manual recovery
+  const forceReconnect = useCallback(() => {
+    if (socketRef.current) {
+      console.log('🔄 Force reconnecting...');
+      socketRef.current.disconnect();
+      setTimeout(() => {
+        socketRef.current?.connect();
+      }, 1000);
+    }
+  }, []);
+
   return {
     socket: socketRef.current,
     isConnected,
     connectionError,
+    isConnecting,
     roomId: roomIdRef.current,
     emitFindPartner,
     emitMessage,
     emitTypingStart,
     emitTypingStop,
     emitLeaveChat,
-    emitWebRTCSignal: onWebRTCSignal ? emitWebRTCSignal : undefined,
+    emitWebRTCSignal: stableCallbacks.current.onWebRTCSignal ? emitWebRTCSignal : undefined,
     emitUpdateStatus,
-    getOnlineUserCount
+    getOnlineUserCount,
+    forceReconnect
   };
 }
 
-// Chat state management (unchanged)
+// Chat state management (unchanged but with better TypeScript)
 export function useChatState() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isPartnerConnected, setIsPartnerConnected] = useState<boolean>(false);

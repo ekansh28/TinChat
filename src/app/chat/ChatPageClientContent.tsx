@@ -10,7 +10,8 @@ import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 
 // Import modular components and hooks
 import ChatWindow from './components/ChatWindow';
-import { useChatSocket, useChatState } from './hooks/useChatSocket';
+import { useChatSocket } from './hooks/useChatSocket';  // ✅ Only import useChatSocket
+import { useChatState } from './hooks/useChatState';    // ✅ Import from separate file
 import { useAuth } from './hooks/useAuth';
 import { useThemeDetection } from './hooks/useThemeDetection';
 import { useViewport } from './hooks/useViewport';
