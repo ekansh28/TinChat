@@ -20,9 +20,13 @@ jobs:
           ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
 
       - name: 🚀 Deploy to VPS
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd ${{ secrets.VPS_PROJECT_PATH }}
+          ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST << EOF
+            cd $VPS_PROJECT_PATH
             git pull origin main
             npm install
             npm run build
