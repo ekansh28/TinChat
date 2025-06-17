@@ -74,7 +74,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   // Update recent partner data when messages change
   useEffect(() => {
-    // Find the most recent partner message to get latest styling data
     const partnerMessages = messages.filter(msg => msg.sender === 'partner');
     if (partnerMessages.length > 0) {
       const latestPartnerMessage = partnerMessages[partnerMessages.length - 1];
@@ -89,46 +88,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [messages]);
 
-  // Check if pink theme is active by looking for the CSS file in the DOM
+  // Check if pink theme is active
   const isPinkThemeActive = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const themeLink = document.getElementById('dynamic-win98-theme-style') as HTMLLinkElement;
     return themeLink && themeLink.href.includes('pink-theme.css');
   }, []);
 
-  // Check if Windows 7 theme is active by looking at the actual DOM state like TopBar does
+  // Check if Windows 7 theme is active
   const [isWindows7Theme, setIsWindows7Theme] = useState(false);
   
-  // Function to check Windows 7 theme state (same logic as TopBar)
   const checkWindows7Theme = useCallback(() => {
     if (typeof window === 'undefined') return false;
     
-    // Check if Windows 7 CSS is loaded (same ID as TopBar uses)
     const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
     const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
     
-    // Check for Windows 7 sub-theme CSS links (from /win7themes/ folder)
     const win7SubThemeLink = document.querySelector('link[href*="/win7themes/"]') as HTMLLinkElement;
     const hasWin7SubTheme = win7SubThemeLink !== null;
     
-    // A window is in Windows 7 mode if it has the Win7 CSS loaded OR Win7 subthemes
     return hasWin7CSS || hasWin7SubTheme;
   }, []);
   
-  // FIXED: Update Windows 7 theme state with observers - corrected syntax
   useEffect(() => {
     const updateThemeState = () => {
       const newWin7State = checkWindows7Theme();
       setIsWindows7Theme(newWin7State);
-      console.log("ChatWindow: Windows 7 theme detected:", newWin7State);
     };
     
-    // Check initially
     updateThemeState();
     
-    // Watch for changes to the head element (when CSS links are added/removed)
     const headObserver = new MutationObserver((mutations) => {
-      // Check if any mutations involve link elements
       const linkMutation = mutations.some(mutation => 
         Array.from(mutation.addedNodes).some(node => 
           node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
@@ -136,7 +126,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         Array.from(mutation.removedNodes).some(node => 
           node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
         )
-      ); // FIXED: Added missing closing parenthesis
+      );
       
       if (linkMutation) {
         updateThemeState();
@@ -153,22 +143,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     };
   }, [checkWindows7Theme]);
 
-  // IMPROVED: Scroll to bottom function with mobile-specific behavior
+  // ✅ MOBILE vs DESKTOP: Different scroll behaviors
   const scrollToBottom = useCallback((force = false) => {
     if (!messagesContainerRef.current) return;
     
     const container = messagesContainerRef.current;
     
     if (isMobile) {
-      // MOBILE: Bottom-to-top messaging - scroll to show newest messages at bottom
-      const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-      if (force || isAtBottom) {
+      // MOBILE: Always scroll to bottom to show newest messages
+      if (force) {
         requestAnimationFrame(() => {
           container.scrollTop = container.scrollHeight;
         });
+      } else {
+        // Auto-scroll on mobile for new messages
+        const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        if (isNearBottom) {
+          requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+          });
+        }
       }
     } else {
-      // DESKTOP: Traditional chat behavior - can be different if needed
+      // DESKTOP: Traditional chat behavior
       const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
       if (force || isAtBottom) {
         requestAnimationFrame(() => {
@@ -188,15 +185,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     [isConnected, isPartnerConnected]
   );
 
-  // Biscuit Frame Component with proper slicing (for Windows 98 pink theme only)
+  // Biscuit Frame Component
   const BiscuitFrame: React.FC = () => (
     <div className="biscuit-frame-overlay">
-      {/* Edges - these will repeat the appropriate slices */}
       <div className="frame-edge frame-top"></div>
       <div className="frame-edge frame-bottom"></div>
       <div className="frame-edge frame-left"></div>
       <div className="frame-edge frame-right"></div>
-      {/* Corners - these show only the corner portions */}
       <div className="frame-edge frame-corner frame-top-left"></div>
       <div className="frame-edge frame-corner frame-top-right"></div>
       <div className="frame-edge frame-corner frame-bottom-left"></div>
@@ -204,10 +199,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     </div>
   );
 
-  // Function to add glass active classes to parent window
+  // Apply glass classes effect
   useEffect(() => {
     if (isWindows7Theme) {
-      // Find ALL window-related elements and add glass active classes
       const windowElements = document.querySelectorAll('.window, .window-body, .title-bar, .input-area, form');
       windowElements.forEach(element => {
         if (!element.classList.contains('glass')) {
@@ -218,26 +212,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         }
       });
       
-      console.log("ChatWindow: Added glass active classes to all window elements");
-      
-      // Also ensure the main chat container gets proper glass styling
       const chatContainer = document.querySelector('.window-body-content');
       if (chatContainer) {
         chatContainer.classList.add('glass-window-body', 'glass', 'active');
-        console.log("ChatWindow: Added glass active classes to chat container");
       }
     } else {
-      // Remove glass classes when not Windows 7 theme
       const glassElements = document.querySelectorAll('.glass');
       glassElements.forEach(element => {
         element.classList.remove('glass');
         element.classList.remove('active');
       });
-      console.log("ChatWindow: Removed glass active classes from all elements");
     }
   }, [isWindows7Theme]);
 
-  // FIXED: Prepare messages and typing indicator with mobile-specific ordering
+  // ✅ MOBILE vs DESKTOP: Different content rendering
   const renderContent = () => {
     const content = [];
     
@@ -266,7 +254,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
     
-    // Messages in chronological order (oldest to newest)
+    // ✅ MESSAGES: Always in chronological order (oldest to newest)
     messages.forEach((msg, index) => {
       content.push(
         <MessageRow 
@@ -291,12 +279,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
           theme={theme}
           partnerInfo={partnerInfo}
-          recentPartnerData={recentPartnerData}
+          recentPartnerData={recentPartnerData || undefined}
+          isMobile={isMobile} // ✅ ADDED: Pass mobile detection
         />
       );
     }
     
-    // Return content in proper order
     return content;
   };
 
@@ -306,21 +294,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         'window-body window-body-content flex flex-col',
         isWindows7Theme ? 'glass-body-padding has-space' : 'p-0.5',
         isMobile && 'p-1',
-        // Add biscuit-frame class when pink theme is active (Windows 98 only)
         isPinkThemeActive && theme === 'theme-98' && 'relative'
       )} 
       style={{ 
         position: 'relative',
         height: '100%',
-        minHeight: 0, // Important for flex children
-        overflow: 'hidden' // Prevent container from growing
+        minHeight: 0,
+        overflow: 'hidden'
       }}
     >
       
       {/* Render biscuit frame if pink theme is active and Windows 98 */}
       {isPinkThemeActive && theme === 'theme-98' && <BiscuitFrame />}
       
-      {/* MOBILE vs DESKTOP: Different message container layouts */}
+      {/* ✅ MOBILE vs DESKTOP: Different layouts */}
       <div 
         ref={messagesContainerRef}
         className={cn(
@@ -331,24 +318,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           isMobile && 'p-2'
         )} 
         style={{ 
-          // Use calc to ensure proper height that accounts for input area
           height: `calc(100% - ${currentInputAreaHeight}px)`,
-          minHeight: 0, // Allow shrinking
-          maxHeight: `calc(100% - ${currentInputAreaHeight}px)`, // Prevent growing beyond container
+          minHeight: 0,
+          maxHeight: `calc(100% - ${currentInputAreaHeight}px)`,
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
-          WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-          // MOBILE: Use normal flex direction for bottom-to-top messaging
-          // DESKTOP: Can use different layout if needed
+          WebkitOverflowScrolling: 'touch',
+          
+          // ✅ KEY DIFFERENCE: Mobile vs Desktop layout
           display: 'flex',
-          flexDirection: 'column', // Normal order for both - messages appear chronologically
-          justifyContent: isMobile ? 'flex-start' : 'flex-start' // Start from top
+          flexDirection: 'column',
+          
+          // ✅ MOBILE: Use flex-end to align content to bottom
+          // ✅ DESKTOP: Use flex-start for traditional top-down
+          justifyContent: isMobile ? 'flex-end' : 'flex-start',
+          
+          // ✅ MOBILE: Minimum height to fill container
+          ...(isMobile && {
+            minHeight: '100%'
+          })
         }}
       >
-        {/* Messages in chronological order - this gives us the correct flow:
-            User: Hi
-            Stranger: Hello 
-            (newest messages at bottom, auto-scroll to show them) */}
-        {renderContent()}
+        {/* ✅ MOBILE: Add spacer to push content to bottom when there are few messages */}
+        {isMobile && messages.length > 0 && (
+          <div className="flex-1 min-h-0" style={{ minHeight: '20px' }} />
+        )}
+        
+        {/* Messages and content */}
+        <div className={cn(
+          // ✅ MOBILE: Keep messages in container at bottom
+          // ✅ DESKTOP: Normal flow
+          isMobile ? 'flex flex-col w-full' : 'w-full'
+        )}>
+          {renderContent()}
+        </div>
         
         {/* Scroll anchor at the bottom */}
         <div 
@@ -360,7 +362,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         />
       </div>
       
-      {/* FIXED: Input area with proper positioning */}
+      {/* Input area - always at bottom */}
       <div 
         className="flex-shrink-0 w-full"
         style={{ 

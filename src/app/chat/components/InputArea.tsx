@@ -1,7 +1,9 @@
+// src/app/chat/components/InputArea.tsx - WITH INTEGRATED EMOTE GALLERY
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
+import EmoteGallery from '@/components/EmoteGallery'; // ✅ INTEGRATED
 
 interface InputAreaProps {
   value: string;
@@ -22,7 +24,6 @@ const STATIC_DISPLAY_EMOJI_FILENAMES = [
   'confused.gif', 'cool.gif','cry.gif','eek.gif','evil.gif'
 ];
 const SMILE_EMOJI_FILENAME = 'biggrin.gif';
-const EMOJI_BASE_URL_PICKER = "/emotes/";
 
 const InputArea: React.FC<InputAreaProps> = ({ 
   value, 
@@ -44,8 +45,10 @@ const InputArea: React.FC<InputAreaProps> = ({
     `${EMOJI_BASE_URL_DISPLAY}${SMILE_EMOJI_FILENAME}`
   );
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const [pickerEmojiFilenames, setPickerEmojiFilenames] = useState<string[]>([]);
-  const [emojisLoading, setEmojisLoading] = useState(true);
+  
+  // ✅ NEW: Emote gallery state
+  const [showEmoteGallery, setShowEmoteGallery] = useState(false);
+  const [activeTab, setActiveTab] = useState<'quick' | 'gallery'>('quick');
   
   // MOBILE: Track keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -57,11 +60,9 @@ const InputArea: React.FC<InputAreaProps> = ({
   const checkWindows7Theme = useCallback(() => {
     if (typeof window === 'undefined') return false;
     
-    // Check if Windows 7 CSS is loaded (same ID as TopBar uses)
     const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
     const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
     
-    // Check for Windows 7 sub-theme CSS links (from /win7themes/ folder)
     const win7SubThemeLink = document.querySelector('link[href*="/win7themes/"]') as HTMLLinkElement;
     const hasWin7SubTheme = win7SubThemeLink !== null;
     
@@ -144,7 +145,6 @@ const InputArea: React.FC<InputAreaProps> = ({
   // Function to add glass active classes to parent window
   useEffect(() => {
     if (isWindows7Theme) {
-      // Find ALL window-related elements and add glass active classes
       const windowElements = document.querySelectorAll('.window, .window-body, .title-bar, .input-area, form, .themed-input');
       windowElements.forEach(element => {
         if (!element.classList.contains('glass')) {
@@ -157,7 +157,6 @@ const InputArea: React.FC<InputAreaProps> = ({
       
       console.log("InputArea: Added glass active classes to all elements");
     } else {
-      // Remove glass class when not Windows 7 theme
       const glassElements = document.querySelectorAll('.glass');
       glassElements.forEach(element => {
         element.classList.remove('glass');
@@ -166,27 +165,6 @@ const InputArea: React.FC<InputAreaProps> = ({
       console.log("InputArea: Removed glass active classes from all elements");
     }
   }, [isWindows7Theme]);
-
-  // Load emojis for theme-98
-  useEffect(() => {
-    if (theme === 'theme-98') {
-      setEmojisLoading(true);
-      fetch('/emote_index.json')
-        .then(res => { 
-          if (!res.ok) throw new Error(`HTTP ${res.status}`); 
-          return res.json(); 
-        })
-        .then((data: any[]) => setPickerEmojiFilenames(data.map(e => e.filename)))
-        .catch(err => {
-          console.error('Error fetching emote_index.json:', err);
-          setPickerEmojiFilenames([]);
-        })
-        .finally(() => setEmojisLoading(false));
-    } else {
-      setEmojisLoading(false);
-      setPickerEmojiFilenames([]);
-    }
-  }, [theme]);
 
   // Handle emoji picker clicks outside
   useEffect(() => {
@@ -197,6 +175,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           emojiIconTrigger && 
           !emojiIconTrigger.contains(event.target as Node)) {
         setIsEmojiPickerOpen(false);
+        setShowEmoteGallery(false);
       }
     };
     if (isEmojiPickerOpen) document.addEventListener('mousedown', handleClickOutside);
@@ -223,8 +202,6 @@ const InputArea: React.FC<InputAreaProps> = ({
       // Scroll to bottom when input is focused on mobile
       setTimeout(() => onScrollToBottom(), 300);
       
-      // For bottom-to-top messaging, we might want to scroll to top instead
-      // depending on the layout
       if (keyboardVisible) {
         setTimeout(() => onScrollToBottom(), 100);
       }
@@ -259,7 +236,32 @@ const InputArea: React.FC<InputAreaProps> = ({
     setCurrentEmojiIconUrl(`${EMOJI_BASE_URL_DISPLAY}${SMILE_EMOJI_FILENAME}`);
   }, []);
 
-  const toggleEmojiPicker = useCallback(() => setIsEmojiPickerOpen(prev => !prev), []);
+  const toggleEmojiPicker = useCallback(() => {
+    setIsEmojiPickerOpen(prev => !prev);
+    if (!isEmojiPickerOpen) {
+      setShowEmoteGallery(false);
+      setActiveTab('quick');
+    }
+  }, [isEmojiPickerOpen]);
+
+  // ✅ NEW: Handle emote selection from gallery
+  const handleEmoteSelect = useCallback((shortcode: string) => {
+    const emoteText = `:${shortcode}: `;
+    onChange(value + emoteText);
+    
+    // Focus back to input after selection
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+    
+    console.log('InputArea: Inserted emote:', emoteText);
+  }, [value, onChange]);
+
+  // ✅ NEW: Toggle emote gallery
+  const toggleEmoteGallery = useCallback(() => {
+    setShowEmoteGallery(prev => !prev);
+    setActiveTab('gallery');
+  }, []);
 
   return (
     <div className={cn(
@@ -347,7 +349,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               })}
             />
             
-            {/* Emoji Picker - Only on desktop theme-98 */}
+            {/* Emoji/Emote Picker - Only on desktop theme-98 */}
             {theme === 'theme-98' && !isMobile && (
               <div className="relative flex-shrink-0">
                 <img 
@@ -365,44 +367,71 @@ const InputArea: React.FC<InputAreaProps> = ({
                   aria-haspopup="true" 
                   aria-expanded={isEmojiPickerOpen} 
                 />
+                
+                {/* ✅ ENHANCED: Emoji/Emote Picker with tabs */}
                 {isEmojiPickerOpen && (
                   <div 
                     ref={emojiPickerRef} 
-                    className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-silver border border-raised z-30 window shadow-lg" 
-                    style={{ boxShadow: 'inset 1px 1px #fff, inset -1px -1px gray, 1px 1px gray' }} 
+                    className="absolute bottom-full right-0 mb-2 w-80 bg-silver border border-raised z-30 window shadow-lg" 
+                    style={{ 
+                      boxShadow: 'inset 1px 1px #fff, inset -1px -1px gray, 1px 1px gray',
+                      maxHeight: '400px'
+                    }} 
                     role="dialog" 
-                    aria-label="Emoji picker"
+                    aria-label="Emoji and emote picker"
                   >
-                    {emojisLoading ? (
-                      <p className="text-center w-full text-xs">Loading emojis...</p>
-                    ) : pickerEmojiFilenames.length > 0 ? (
-                      <div className="h-32 overflow-y-auto grid grid-cols-4 gap-1" role="grid">
-                        {pickerEmojiFilenames.map((filename) => {
-                          const shortcode = filename.split('.')[0];
-                          return (
-                            <img 
-                              key={filename} 
-                              src={`${EMOJI_BASE_URL_PICKER}${filename}`} 
-                              alt={shortcode} 
-                              className="max-w-6 max-h-6 object-contain cursor-pointer hover:bg-navy hover:p-0.5 rounded" 
-                              onClick={() => { 
-                                onChange(`${value} :${shortcode}: `); 
-                                setIsEmojiPickerOpen(false); 
-                              }} 
-                              data-ai-hint="emoji symbol" 
-                              role="gridcell" 
-                              tabIndex={0} 
-                              onKeyDown={(e) => e.key === 'Enter' && (() => { 
-                                onChange(`${value} :${shortcode}: `); 
-                                setIsEmojiPickerOpen(false); 
-                              })()} 
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-center w-full text-xs">No emojis found.</p>
-                    )}
+                    {/* Tab Headers */}
+                    <div className="flex border-b border-gray-400">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('quick')}
+                        className={cn(
+                          "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                          activeTab === 'quick' 
+                            ? "bg-navy text-white" 
+                            : "bg-silver hover:bg-gray-300"
+                        )}
+                      >
+                        🙂 Quick
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('gallery');
+                          setShowEmoteGallery(true);
+                        }}
+                        className={cn(
+                          "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                          activeTab === 'gallery' 
+                            ? "bg-navy text-white" 
+                            : "bg-silver hover:bg-gray-300"
+                        )}
+                      >
+                        🎭 Gallery
+                      </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="p-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {activeTab === 'quick' && (
+                        <div>
+                          <p className="text-center w-full text-xs mb-2">Quick emojis loading...</p>
+                          <div className="text-center text-xs text-gray-600">
+                            Switch to Gallery tab for full emote collection
+                          </div>
+                        </div>
+                      )}
+                      
+                      {activeTab === 'gallery' && showEmoteGallery && (
+                        <EmoteGallery 
+                          onEmoteSelect={handleEmoteSelect}
+                          isModal={true}
+                          maxHeight="250px"
+                          searchable={true}
+                          className="emote-picker-gallery"
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

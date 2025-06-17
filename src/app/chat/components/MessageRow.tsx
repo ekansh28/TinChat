@@ -1,5 +1,5 @@
-// src/app/chat/components/MessageRow.tsx - Fixed version
-import React, { useMemo, useCallback } from 'react';
+// src/app/chat/components/MessageRow.tsx - Enhanced with mobile bubbles
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
 import { getDisplayNameClass, renderMessageWithEmojis } from '../utils/ChatHelpers';
@@ -37,9 +37,8 @@ interface MessageRowProps {
   isMobile: boolean;
 }
 
-// For theme-98 emoji support
+// Emote system constants
 const EMOJI_BASE_URL_PICKER = "/emotes/";
-const pickerEmojiFilenames: string[] = []; // This would be loaded from your emoji system
 
 const MessageRow: React.FC<MessageRowProps> = ({ 
   message, 
@@ -51,25 +50,53 @@ const MessageRow: React.FC<MessageRowProps> = ({
   isMobile
 }) => {
   const { showProfile } = useProfilePopup();
+  
+  // Load emote filenames for proper rendering
+  const [pickerEmojiFilenames, setPickerEmojiFilenames] = useState<string[]>([]);
+  const [emotesLoading, setEmotesLoading] = useState(true);
+
+  // Load emojis for theme-98 (same as InputArea)
+  useEffect(() => {
+    if (theme === 'theme-98') {
+      setEmotesLoading(true);
+      fetch('/emote_index.json')
+        .then(res => { 
+          if (!res.ok) throw new Error(`HTTP ${res.status}`); 
+          return res.json(); 
+        })
+        .then((data: any[]) => {
+          const filenames = data.map(e => e.filename);
+          setPickerEmojiFilenames(filenames);
+        })
+        .catch(err => {
+          console.error('Error fetching emote_index.json in MessageRow:', err);
+          setPickerEmojiFilenames([]);
+        })
+        .finally(() => setEmotesLoading(false));
+    } else {
+      setEmotesLoading(false);
+      setPickerEmojiFilenames([]);
+    }
+  }, [theme]);
 
   // Prefetch profile data on hover
   const handleMouseEnter = useCallback(() => {
     if (message.sender === 'partner' && message.senderAuthId) {
-      // Implement your prefetch logic here
       console.log('Prefetching profile for', message.senderAuthId);
     }
   }, [message.sender, message.senderAuthId]);
 
+  // ✅ SYSTEM MESSAGES: Always centered
   if (message.sender === 'system') {
     return (
       <div className={cn(
-        "mb-2 message-row",
-        isMobile && "mb-1"
+        "message-row system-message",
+        isMobile ? "mobile-message-system mb-2 mx-4" : "mb-2"
       )}>
         <div className={cn(
           "text-center w-full text-xs italic",
           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
-          isMobile && "py-1 px-2 bg-black bg-opacity-10 rounded"
+          isMobile && "py-2 px-3 bg-black bg-opacity-10 rounded-lg"
         )}>
           {message.content}
         </div>
@@ -77,20 +104,23 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  // Divider logic for chronological order
+  // Divider logic for desktop
   const showDivider = useMemo(() => {
-    return theme === 'theme-7' &&
+    return !isMobile && // ✅ Only show dividers on desktop
+      theme === 'theme-7' &&
       previousMessageSender &&
       ['self', 'partner'].includes(previousMessageSender) &&
       ['self', 'partner'].includes(message.sender) &&
       message.sender !== previousMessageSender;
-  }, [theme, previousMessageSender, message.sender]);
+  }, [theme, previousMessageSender, message.sender, isMobile]);
 
-  const messageContent = useMemo(() => (
-    theme === 'theme-98'
-    ? renderMessageWithEmojis(message.content, pickerEmojiFilenames, EMOJI_BASE_URL_PICKER)
-    : [message.content]
-  ), [message.content, theme]);
+  // Enhanced message content with emojis
+  const messageContent = useMemo(() => {
+    if (theme === 'theme-98' && !emotesLoading) {
+      return renderMessageWithEmojis(message.content, pickerEmojiFilenames, EMOJI_BASE_URL_PICKER);
+    }
+    return [message.content];
+  }, [message.content, theme, pickerEmojiFilenames, emotesLoading]);
 
   // Display name and styling logic
   const isSelf = message.sender === 'self';
@@ -107,7 +137,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     : message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none';
   
   const rainbowSpeed = isSelf
-    ? 3 // Default for own messages
+    ? 3
     : message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3;
 
   const authId = isSelf 
@@ -130,10 +160,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
       y: rect.bottom + 5
     };
     
-    // Call the original onUsernameClick handler for backwards compatibility
     onUsernameClick(authId, clickPosition);
-    
-    // Show the profile popup using the new system (only 2 parameters)
     showProfile(authId, e);
   }, [isClickable, authId, showProfile, onUsernameClick]);
 
@@ -153,8 +180,6 @@ const MessageRow: React.FC<MessageRowProps> = ({
       
       onUsernameClick(authId, clickPosition);
       
-      // For keyboard events, we'll simulate a click at the calculated position
-      // Create a more targeted approach - just trigger the popup with position data
       const fakeEvent = {
         target: e.currentTarget,
         currentTarget: e.currentTarget,
@@ -162,21 +187,18 @@ const MessageRow: React.FC<MessageRowProps> = ({
         stopPropagation: () => {}
       };
       
-      // Cast to unknown first, then to the expected type to avoid TypeScript errors
       showProfile(authId, fakeEvent as unknown as React.MouseEvent);
     }
   }, [isClickable, authId, showProfile, onUsernameClick]);
 
-  // Display name style with proper fallbacks
+  // Display name style
   const getDisplayNameStyle = (): React.CSSProperties => {
     const baseStyle: React.CSSProperties = {};
     
     if (displayNameAnimation === 'rainbow') {
       baseStyle.animationDuration = `${rainbowSpeed}s`;
-      // For rainbow, we don't set color as it's handled by CSS animation
     } else if (displayNameAnimation === 'gradient') {
       baseStyle.animationDuration = `4s`;
-      // For gradient, we don't set color as it's handled by CSS animation
     } else {
       baseStyle.color = displayNameColor || (isSelf ? '#0066cc' : '#ff6b6b');
     }
@@ -184,7 +206,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return baseStyle;
   };
 
-  // Username component that handles clickable vs non-clickable states
+  // Username component
   const UsernameComponent = ({ children }: { children: React.ReactNode }) => {
     if (isClickable) {
       return (
@@ -193,11 +215,13 @@ const MessageRow: React.FC<MessageRowProps> = ({
           onKeyDown={handleKeyDown}
           onMouseEnter={handleMouseEnter}
           className={cn(
-            "font-bold mr-1",
+            "font-bold",
             displayNameClass,
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
             "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded",
-            isMobile && "active:underline active:scale-105 touch-manipulation"
+            isMobile && "active:underline active:scale-105 touch-manipulation",
+            // ✅ MOBILE: Remove margin for bubble layout
+            isMobile ? "" : "mr-1"
           )}
           style={getDisplayNameStyle()}
           aria-label={`View ${displayName}'s profile`}
@@ -212,7 +236,12 @@ const MessageRow: React.FC<MessageRowProps> = ({
     
     return (
       <span 
-        className={cn("font-bold mr-1", displayNameClass)}
+        className={cn(
+          "font-bold",
+          displayNameClass,
+          // ✅ MOBILE: Remove margin for bubble layout
+          isMobile ? "" : "mr-1"
+        )}
         style={getDisplayNameStyle()}
       >
         {children}
@@ -220,6 +249,62 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   };
 
+  // ✅ MOBILE vs DESKTOP: Different layouts
+  if (isMobile) {
+    // ✅ MOBILE: Bubble layout (WhatsApp/iMessage style)
+    return (
+      <>
+        {showDivider && (
+          <div
+            className="h-[2px] border border-[#CEDCE5] bg-[#64B2CF] mb-1"
+            aria-hidden="true"
+          />
+        )}
+        <div className={cn(
+          "message-row message-appear w-full flex",
+          isSelf ? "justify-end" : "justify-start",
+          "mb-1"
+        )}>
+          <div className={cn(
+            "message-bubble max-w-[80%] px-3 py-2 rounded-2xl break-words",
+            isSelf 
+              ? "message-bubble-self bg-blue-500 text-white ml-[20%] rounded-br-md" 
+              : "message-bubble-partner bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 mr-[20%] rounded-bl-md",
+            // Theme-specific styles
+            theme === 'theme-98' && isSelf && "bg-navy border border-gray-600",
+            theme === 'theme-98' && !isSelf && "bg-silver border border-gray-600 text-black",
+            theme === 'theme-7' && "backdrop-blur-sm"
+          )}>
+            {/* Username for partner messages or if different from previous */}
+            {(!isSelf || (previousMessageSender !== message.sender)) && (
+              <div className={cn(
+                "text-xs opacity-75 mb-1",
+                isSelf ? "text-blue-100" : "text-gray-600 dark:text-gray-400"
+              )}>
+                <UsernameComponent>
+                  {displayName}
+                </UsernameComponent>
+              </div>
+            )}
+            
+            {/* Message content */}
+            <div className={cn(
+              "text-sm leading-relaxed",
+              emotesLoading && "opacity-75"
+            )}>
+              {emotesLoading ? (
+                <span>Loading emotes...</span>
+              ) : (
+                messageContent
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ✅ DESKTOP: Traditional layout
   return (
     <>
       {showDivider && (
@@ -230,9 +315,9 @@ const MessageRow: React.FC<MessageRowProps> = ({
       )}
       <div className={cn(
         "break-words message-row", 
-        isMobile ? "mb-1 text-sm leading-relaxed py-0.5" : "mb-1",
-        isMobile && message.sender === 'self' && "ml-2",
-        isMobile && message.sender === 'partner' && "mr-2"
+        "mb-1",
+        message.sender === 'self' && "ml-2",
+        message.sender === 'partner' && "mr-2"
       )}>
         <div className="flex items-start gap-2">
           <div className="flex-1">
@@ -241,9 +326,13 @@ const MessageRow: React.FC<MessageRowProps> = ({
             </UsernameComponent>
             <span className={cn(
               theme === 'theme-7' && 'theme-7-text-shadow',
-              isMobile && "break-words hyphens-auto"
+              "break-words hyphens-auto"
             )}>
-              {messageContent}
+              {emotesLoading ? (
+                <span className="opacity-75">Loading emotes...</span>
+              ) : (
+                messageContent
+              )}
             </span>
           </div>
         </div>

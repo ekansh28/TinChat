@@ -2,7 +2,7 @@
 
 /* Main background */
 .theme-98 body {
-  background-image: url('/wallpapers/WaterColor.jpg') !important;
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/WaterColor.jpg') !important;
   background-repeat: repeat !important;
   background-attachment: fixed !important;
   background-size: auto !important;

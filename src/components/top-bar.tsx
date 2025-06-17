@@ -27,14 +27,9 @@ const availableStamps: ThemeStamp[] = [
 const available7Stamps: ThemeStamp[] = [
   { name: 'Frutiger Aero', imageUrl: '/theme_stamps/frutiger.png', cssFile: 'frutiger1-theme.css', dataAiHint: 'frutiger theme stamp' },
   { name: 'Frutiger Aero 2', imageUrl: '/theme_stamps/frutiger2.png', cssFile: 'frutiger2-theme.css', dataAiHint: 'frutiger2 theme stamp' },
-  { name: 'Frutiger Aero 3', imageUrl: '/theme_stamps/frutiger3.png', cssFile: 'frutiger3-theme.css', dataAiHint: 'frutiger3 theme stamp' },
-  { name: 'idk', imageUrl: '/theme_stamps/beautiful.png', cssFile: 'beautiful-theme.css', dataAiHint: 'beautiful theme stamp' },
   { name: 'PS3', imageUrl: '/theme_stamps/ps3.png', cssFile: 'ps3-theme.css', dataAiHint: 'ps3 theme stamp' },
-  { name: 'Vector Bloom', imageUrl: '/theme_stamps/vectorbloom.png', cssFile: 'vectorbloom-theme.css', dataAiHint: 'vectorbloom theme stamp' },
-  { name: 'Vector Bloom 2', imageUrl: '/theme_stamps/vectorbloom2.png', cssFile: 'vectorbloom2-theme.css', dataAiHint: 'vectorbloom2 theme stamp' },
-  { name: 'Vector Bloom 3', imageUrl: '/theme_stamps/vectorbloom3.png', cssFile: 'vectorbloom3-theme.css', dataAiHint: 'vectorbloom3 theme stamp' },
-  { name: 'Vector Bloom 4', imageUrl: '/theme_stamps/modern.png', cssFile: 'modern-theme.css', dataAiHint: 'modern theme stamp' },
-  { name: 'Default 7', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp' },
+  { name: 'Modern', imageUrl: '/theme_stamps/modern.png', cssFile: 'modern-theme.css', dataAiHint: 'modern theme stamp' },
+  { name: 'Default', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp' },
 ];
 
 const availableXPStamps: ThemeStamp[] = [

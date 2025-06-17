@@ -1,11 +1,11 @@
-/* Windows 7 Frutiger Aero Theme - vectorbloom3-theme.css */
-/* Neutral glass theme with vectorbloom3 background */
+/* Windows 7 Frutiger Aero Theme - modern-theme.css */
+/* Neutral glass theme with modern background */
 
 /* Frutiger Aero background with wallpaper - HIGHER SPECIFICITY */
-html.subtheme-vectorbloom3-theme,
-body.subtheme-vectorbloom3-theme,
-.subtheme-vectorbloom3-theme {
-  background-image: url('/win7wallpapers/vectorbloom3.jpg') !important;
+html.subtheme-modern-theme,
+body.subtheme-modern-theme,
+.subtheme-modern-theme {
+  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/power.jpg') !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
@@ -13,18 +13,18 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Override any existing background */
-.subtheme-vectorbloom3-theme * {
+.subtheme-modern-theme * {
   background-image: none;
 }
 
-.subtheme-vectorbloom3-theme {
-  background-image: url('/win7wallpapers/vectorbloom3.jpg') !important;
+.subtheme-modern-theme {
+  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/power.jpg') !important;
 }
 
 
 
 /* Glass window styling with neutral theme */
-.subtheme-vectorbloom3-theme .window.glass.active {
+.subtheme-modern-theme .window.glass.active {
   background: rgba(255, 255, 255, 0.075) !important;
   backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -35,7 +35,7 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Regular windows also get glass effect in this theme */
-.subtheme-vectorbloom3-theme .window.glass {
+.subtheme-modern-theme .window.glass {
   background: rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(15px) !important;
   border: 1px solid rgba(255, 255, 255, 0.125) !important;
@@ -45,7 +45,7 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Neutral title bar styling */
-.subtheme-vectorbloom3-theme .title-bar.glass.active {
+.subtheme-modern-theme .title-bar.glass.active {
   background: linear-gradient(90deg, 
     rgba(255, 255, 255, 0.15) 0%,
     rgba(240, 240, 240, 0.125) 50%,
@@ -58,26 +58,26 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Title bar text enhancement */
-.subtheme-vectorbloom3-theme .title-bar-text {
+.subtheme-modern-theme .title-bar-text {
   color: #333 !important;
   font-weight: 500 !important;
   text-shadow: 0 1px 3px rgba(255, 255, 255, 0.45) !important;
 }
 
 /* Window body glass effect */
-.subtheme-vectorbloom3-theme .window-body.glass.active {
+.subtheme-modern-theme .window-body.glass.active {
   background: rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(8px) !important;
   color: #333 !important;
 }
 
-.subtheme-vectorbloom3-theme .window-body.has-space.glass.active {
+.subtheme-modern-theme .window-body.has-space.glass.active {
   background: rgba(255, 255, 255, 0.075) !important;
   backdrop-filter: blur(10px) !important;
 }
 
 /* Aero button styling for glass theme - neutral colors */
-.subtheme-vectorbloom3-theme button.glass.active {
+.subtheme-modern-theme button.glass.active {
   /* Neutral aero colors */
   --hue: 0;
   --button-background: rgba(255, 255, 255, 0.15) !important;
@@ -106,7 +106,7 @@ body.subtheme-vectorbloom3-theme,
   font-size: 0.9em !important;
 }
 
-.subtheme-vectorbloom3-theme button.glass.active::after {
+.subtheme-modern-theme button.glass.active::after {
   content: "" !important;
   position: absolute !important;
   top: 4% !important;
@@ -119,33 +119,33 @@ body.subtheme-vectorbloom3-theme,
   pointer-events: none !important;
 }
 
-.subtheme-vectorbloom3-theme button.glass.active:hover,
-.subtheme-vectorbloom3-theme button.glass.active:focus {
+.subtheme-modern-theme button.glass.active:hover,
+.subtheme-modern-theme button.glass.active:focus {
   --button-background: rgba(255, 255, 255, 0.2) !important;
   --bg-dark: rgba(240, 240, 240, 0.175) !important;
   box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15) !important;
   transform: translateY(-1px) !important;
 }
 
-.subtheme-vectorbloom3-theme button.glass.active:hover::after,
-.subtheme-vectorbloom3-theme button.glass.active:focus::after {
+.subtheme-modern-theme button.glass.active:hover::after,
+.subtheme-modern-theme button.glass.active:focus::after {
   background: linear-gradient(to bottom, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.05)) !important;
 }
 
-.subtheme-vectorbloom3-theme button.glass.active:active {
+.subtheme-modern-theme button.glass.active:active {
   --button-background: rgba(240, 240, 240, 0.25) !important;
   --bg-dark: rgba(220, 220, 220, 0.2) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
   transform: translateY(0) !important;
 }
 
-.subtheme-vectorbloom3-theme button.glass.active:active::after {
+.subtheme-modern-theme button.glass.active:active::after {
   background: linear-gradient(to bottom, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.025)) !important;
 }
 
 /* Input field glass styling - neutral colors */
-.subtheme-vectorbloom3-theme input[type="text"].glass.active,
-.subtheme-vectorbloom3-theme textarea.glass.active {
+.subtheme-modern-theme input[type="text"].glass.active,
+.subtheme-modern-theme textarea.glass.active {
 
   background: rgba(255, 255, 255, 0.15) !important;
   backdrop-filter: blur(8px) !important;
@@ -154,8 +154,8 @@ body.subtheme-vectorbloom3-theme,
   color: #333 !important;
 }
 
-.subtheme-vectorbloom3-theme input[type="text"].glass.active:focus,
-.subtheme-vectorbloom3-theme textarea.glass.active:focus {
+.subtheme-modern-theme input[type="text"].glass.active:focus,
+.subtheme-modern-theme textarea.glass.active:focus {
     
   background: rgba(255, 255, 255, 0.2) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
@@ -166,7 +166,7 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Chat message styling */
-.subtheme-vectorbloom3-theme .sunken-panel.glass.active {
+.subtheme-modern-theme .sunken-panel.glass.active {
   background: rgba(255, 255, 255, 0.1) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -174,17 +174,17 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Enhanced scrollbar for glass theme - neutral colors */
-.subtheme-vectorbloom3-theme ::-webkit-scrollbar {
+.subtheme-modern-theme ::-webkit-scrollbar {
   width: 12px !important;
 }
 
-.subtheme-vectorbloom3-theme ::-webkit-scrollbar-track {
+.subtheme-modern-theme ::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(5px) !important;
   border-radius: 6px !important;
 }
 
-.subtheme-vectorbloom3-theme ::-webkit-scrollbar-thumb {
+.subtheme-modern-theme ::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, 
     rgba(255, 255, 255, 0.2) 0%,
     rgba(240, 240, 240, 0.15) 100%) !important;
@@ -193,15 +193,15 @@ body.subtheme-vectorbloom3-theme,
   background-clip: content-box !important;
 }
 
-.subtheme-vectorbloom3-theme ::-webkit-scrollbar-thumb:hover {
+.subtheme-modern-theme ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, 
     rgba(255, 255, 255, 0.3) 0%,
     rgba(240, 240, 240, 0.25) 100%) !important;
 }
 
 /* Menu and dropdown styling */
-.subtheme-vectorbloom3-theme .menu.glass.active,
-.subtheme-vectorbloom3-theme .dropdown.glass.active {
+.subtheme-modern-theme .menu.glass.active,
+.subtheme-modern-theme .dropdown.glass.active {
   background: rgba(255, 255, 255, 0.125) !important;
   backdrop-filter: blur(15px) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -209,19 +209,19 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Title bar controls styling */
-.subtheme-vectorbloom3-theme .title-bar-controls button.glass.active {
+.subtheme-modern-theme .title-bar-controls button.glass.active {
   background: rgba(255, 255, 255, 0.1) !important;
   backdrop-filter: blur(5px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.subtheme-vectorbloom3-theme .title-bar-controls button.glass.active:hover {
+.subtheme-modern-theme .title-bar-controls button.glass.active:hover {
   background: rgba(255, 255, 255, 0.15) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Ambient light effect - neutral colors */
-.subtheme-vectorbloom3-theme::after {
+.subtheme-modern-theme::after {
   content: '' !important;
   position: fixed !important;
   top: -50% !important;
@@ -244,22 +244,22 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Ensure text remains readable */
-.subtheme-vectorbloom3-theme * {
+.subtheme-modern-theme * {
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.25) !important;
 }
 
 /* Special handling for dark elements */
-.subtheme-vectorbloom3-theme .window-body p,
-.subtheme-vectorbloom3-theme .window-body div,
-.subtheme-vectorbloom3-theme .window-body span {
+.subtheme-modern-theme .window-body p,
+.subtheme-modern-theme .window-body div,
+.subtheme-modern-theme .window-body span {
   color: #333 !important;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4) !important;
 }
 
 /* Force background override for any conflicting styles */
-.subtheme-vectorbloom3-theme body,
-.subtheme-vectorbloom3-theme html {
-  background: url('/win7wallpapers/vectorbloom3.jpeg') center/cover fixed no-repeat !important;
+.subtheme-modern-theme body,
+.subtheme-modern-theme html {
+  background: url('/win7wallpapers/modern.jpeg') center/cover fixed no-repeat !important;
 }
 
 *,
@@ -406,7 +406,7 @@ body.subtheme-vectorbloom3-theme,
 }
 
 /* Optional: Enhanced styling for Frutiger theme specifically */
-.subtheme-vectorbloom3-theme .input-area.glass.active {
+.subtheme-modern-theme .input-area.glass.active {
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.08) 0%,
     rgba(255, 255, 255, 0.12) 100%) !important;
@@ -416,7 +416,7 @@ body.subtheme-vectorbloom3-theme,
     inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
-.subtheme-vectorbloom3-theme .input-area button.glass.active {
+.subtheme-modern-theme .input-area button.glass.active {
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.15) 0%,
     rgba(255, 255, 255, 0.25) 100%) !important;
@@ -424,7 +424,7 @@ body.subtheme-vectorbloom3-theme,
   color: #333 !important;
 }
 
-.subtheme-vectorbloom3-theme .input-area input.glass.active {
+.subtheme-modern-theme .input-area input.glass.active {
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.1) 0%,
     rgba(255, 255, 255, 0.2) 100%) !important;
