@@ -26,22 +26,9 @@ jobs:
           VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
         run: |
           ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST << 'EOF'
-            set -e
-
-            cd "$VPS_PROJECT_PATH"
-            echo "📥 Pulling latest code..."
+            cd $VPS_PROJECT_PATH
             git pull origin main
-
-            echo "📦 Installing dependencies..."
             npm install
-
-            echo "🛠️ Building project..."
             npm run build
-
-            echo "🚀 Starting/Restarting PM2..."
-            pm2 describe tinchat > /dev/null \
-              && pm2 restart tinchat \
-              || pm2 start npm --name tinchat -- start
-
-            echo "✅ Deployment complete."
+            pm2 restart tinchat
           EOF
