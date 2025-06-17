@@ -23,6 +23,19 @@ jobs:
           submodules: true
           lfs: false
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and export
+        run: |
+          npm run build
+          npm run export
+
       - name: Get OIDC Token
         id: idtoken
         uses: actions/github-script@v7
@@ -40,7 +53,7 @@ jobs:
           action: "upload"
           app_location: "/"
           api_location: ""
-          output_location: ""
+          output_location: "out"
           github_id_token: ${{ steps.idtoken.outputs.result }}
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}

@@ -33,7 +33,8 @@ const cspHeader = `
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: 'export',              // Enable static export (required for Azure Static Web Apps)
+  trailingSlash: true,           // Ensure consistent URL structure
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -41,7 +42,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    optimizePackageImports: ['98.css']
+    optimizePackageImports: ['98.css'],
   },
   images: {
     remotePatterns: [
@@ -51,19 +52,18 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // Add Supabase storage hostname if needed for images
-      // For example, if supabaseHostname is xyz.supabase.co
+      // Uncomment this if Supabase serves images
       // {
       //   protocol: 'https',
-      //   hostname: supabaseHostname, // Dynamically set
+      //   hostname: supabaseHostname,
       //   port: '',
-      //   pathname: '/storage/v1/object/public/**', // Adjust path as needed
+      //   pathname: '/storage/v1/object/public/**',
       // },
     ],
   },
   env: {
     NEXT_PUBLIC_SOCKET_SERVER_URL: NEXT_PUBLIC_SOCKET_SERVER_URL,
-    // NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are read from .env automatically
+    // Other env vars like NEXT_PUBLIC_SUPABASE_URL will be picked up automatically from process.env
   },
   async headers() {
     return [
@@ -80,7 +80,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'DENY', 
+            value: 'DENY',
           },
           {
             key: 'Strict-Transport-Security',
@@ -93,7 +93,7 @@ const nextConfig: NextConfig = {
           {
             key: 'Permissions-Policy',
             value: "camera=(self), microphone=(self), fullscreen=(self), display-capture=(self), autoplay=(self)",
-          }
+          },
         ],
       },
     ];
