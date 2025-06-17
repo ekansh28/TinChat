@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChatActions.ts
+// src/app/chat/hooks/useChatActions.ts - FIXED VERSION
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -29,10 +29,19 @@ interface ChatActionsProps {
 export const useChatActions = (props: ChatActionsProps) => {
   const { toast } = useToast();
   const isProcessingFindOrDisconnect = useRef(false);
+  
+  // ✅ CRITICAL FIX: Store props in ref to prevent callback recreation
+  const propsRef = useRef(props);
+  
+  // Update props ref without causing re-renders
+  propsRef.current = props;
 
+  // ✅ FIXED: Stable callback with ref-based access to current props
   const handleFindOrDisconnect = useCallback(() => {
+    const currentProps = propsRef.current;
+    
     if (isProcessingFindOrDisconnect.current) return;
-    if (!props.isConnected) {
+    if (!currentProps.isConnected) {
       toast({ 
         title: "Not Connected", 
         description: "Chat server connection not yet established.", 
@@ -43,75 +52,81 @@ export const useChatActions = (props: ChatActionsProps) => {
 
     isProcessingFindOrDisconnect.current = true;
 
-    if (props.isPartnerConnected) {
+    if (currentProps.isPartnerConnected) {
       // Disconnect and find new partner
-      props.addSystemMessage('You have disconnected.');
-      props.setIsPartnerConnected(false);
-      props.setPartnerInfo(null);
-      props.setIsPartnerTyping(false);
-      props.setPartnerInterests([]);
-      props.emitLeaveChat();
+      currentProps.addSystemMessage('You have disconnected.');
+      currentProps.setIsPartnerConnected(false);
+      currentProps.setPartnerInfo(null);
+      currentProps.setIsPartnerTyping(false);
+      currentProps.setPartnerInterests([]);
+      currentProps.emitLeaveChat();
       
-      props.setIsFindingPartner(true);
-      props.setIsSelfDisconnectedRecently(true);
-      props.setIsPartnerLeftRecently(false);
+      currentProps.setIsFindingPartner(true);
+      currentProps.setIsSelfDisconnectedRecently(true);
+      currentProps.setIsPartnerLeftRecently(false);
       
-      props.emitFindPartner({
+      currentProps.emitFindPartner({
         chatType: 'text',
-        interests: props.interests,
-        authId: props.authId
+        interests: currentProps.interests,
+        authId: currentProps.authId
       });
-    } else if (props.isFindingPartner) {
+    } else if (currentProps.isFindingPartner) {
       // Stop searching
-      props.setIsFindingPartner(false);
-      props.setIsSelfDisconnectedRecently(false);
-      props.setIsPartnerLeftRecently(false);
+      currentProps.setIsFindingPartner(false);
+      currentProps.setIsSelfDisconnectedRecently(false);
+      currentProps.setIsPartnerLeftRecently(false);
     } else {
       // Start searching
-      props.setIsFindingPartner(true);
-      props.setIsSelfDisconnectedRecently(false);
-      props.setIsPartnerLeftRecently(false);
-      props.addSystemMessage('Searching for a partner...');
+      currentProps.setIsFindingPartner(true);
+      currentProps.setIsSelfDisconnectedRecently(false);
+      currentProps.setIsPartnerLeftRecently(false);
+      currentProps.addSystemMessage('Searching for a partner...');
       
-      props.emitFindPartner({
+      currentProps.emitFindPartner({
         chatType: 'text',
-        interests: props.interests,
-        authId: props.authId
+        interests: currentProps.interests,
+        authId: currentProps.authId
       });
     }
     
     setTimeout(() => {
       isProcessingFindOrDisconnect.current = false;
     }, 200);
-  }, [props, toast]);
+  }, [toast]); // ✅ Only depend on stable toast function
 
+  // ✅ FIXED: Stable message handler
   const handleSendMessage = useCallback((message: string) => {
-    if (!props.isPartnerConnected) return;
+    const currentProps = propsRef.current;
+    
+    if (!currentProps.isPartnerConnected) return;
 
-    props.addMessage({
+    currentProps.addMessage({
       text: message,
       sender: 'me'
     });
 
-    props.emitMessage({
+    currentProps.emitMessage({
       roomId: '',
       message: message,
-      username: props.username,
-      authId: props.authId
+      username: currentProps.username,
+      authId: currentProps.authId
     });
 
-    props.emitTypingStop();
-  }, [props]);
+    currentProps.emitTypingStop();
+  }, []); // ✅ No dependencies - all accessed via ref
 
+  // ✅ FIXED: Stable input change handler with typing management
   const handleInputChange = useCallback((value: string) => {
-    props.setCurrentMessage(value);
+    const currentProps = propsRef.current;
     
-    if (value.trim() && props.isPartnerConnected) {
-      props.emitTypingStart();
+    currentProps.setCurrentMessage(value);
+    
+    if (value.trim() && currentProps.isPartnerConnected) {
+      currentProps.emitTypingStart();
     } else {
-      props.emitTypingStop();
+      currentProps.emitTypingStop();
     }
-  }, [props]);
+  }, []); // ✅ No dependencies - all accessed via ref
 
   return {
     handleFindOrDisconnect,
