@@ -1,5 +1,5 @@
-// src/app/video-chat/hooks/useWebRTC.ts
-import { useRef, useState, useCallback } from 'react';
+// src/app/video-chat/hooks/useWebRTC.ts - ENHANCED VERSION
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export const useWebRTC = () => {
@@ -11,6 +11,14 @@ export const useWebRTC = () => {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | undefined>(undefined);
+  const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
+
+  // ICE servers configuration
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ];
 
   // Initialize camera and microphone
   const initializeCamera = useCallback(async (): Promise<MediaStream | null> => {
@@ -37,8 +45,16 @@ export const useWebRTC = () => {
     try {
       console.log('Requesting camera and microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
+        video: {
+          width: { ideal: 640, min: 320 },
+          height: { ideal: 480, min: 240 },
+          frameRate: { ideal: 30, min: 15 }
+        }, 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
       
       setHasCameraPermission(true);
@@ -47,6 +63,8 @@ export const useWebRTC = () => {
       // Set up local video element
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        // Ensure video starts playing
+        localVideoRef.current.play().catch(console.warn);
       }
       
       console.log('Camera and microphone access granted');
@@ -67,6 +85,12 @@ export const useWebRTC = () => {
             variant: 'destructive', 
             title: 'No Camera Found', 
             description: 'No camera or microphone device found.' 
+          });
+        } else if (error.name === 'NotReadableError') {
+          toast({ 
+            variant: 'destructive', 
+            title: 'Camera In Use', 
+            description: 'Camera is already in use by another application.' 
           });
         } else {
           toast({ 
@@ -90,6 +114,7 @@ export const useWebRTC = () => {
       peerConnectionRef.current.ontrack = null;
       peerConnectionRef.current.onicecandidate = null;
       peerConnectionRef.current.oniceconnectionstatechange = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
       
       // Remove all senders
       peerConnectionRef.current.getSenders().forEach(sender => {
@@ -105,6 +130,7 @@ export const useWebRTC = () => {
       
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
+      setConnectionState('closed');
       console.log('PeerConnection closed');
     }
     
@@ -115,6 +141,7 @@ export const useWebRTC = () => {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = null;
       }
+      setHasCameraPermission(undefined);
       console.log('Local stream stopped');
     } else if (localStreamRef.current && localVideoRef.current && !localVideoRef.current.srcObject && !stopLocalStream) {
       // Re-attach local stream if not stopping it
@@ -149,13 +176,7 @@ export const useWebRTC = () => {
     }
 
     // Create new peer connection
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    });
-    
+    const pc = new RTCPeerConnection({ iceServers });
     peerConnectionRef.current = pc;
 
     // Add local stream tracks to peer connection
@@ -167,10 +188,8 @@ export const useWebRTC = () => {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('Sending ICE candidate');
-        // This should be handled by the parent component that has access to socket
         if (window.videoChatEmitWebRTCSignal) {
           window.videoChatEmitWebRTCSignal({
-            roomId,
             signalData: { candidate: event.candidate }
           });
         }
@@ -182,21 +201,38 @@ export const useWebRTC = () => {
       console.log('Received remote track');
       if (remoteVideoRef.current && event.streams?.[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
+        remoteVideoRef.current.play().catch(console.warn);
       }
     };
 
     // Handle connection state changes
-    pc.oniceconnectionstatechange = () => {
+    pc.onconnectionstatechange = () => {
       if (peerConnectionRef.current) {
-        console.log('ICE connection state:', peerConnectionRef.current.iceConnectionState);
+        const state = peerConnectionRef.current.connectionState;
+        setConnectionState(state);
+        console.log('Connection state:', state);
         
-        if (peerConnectionRef.current.iceConnectionState === 'failed') {
+        if (state === 'connected') {
+          toast({
+            title: "Video Connected",
+            description: "Video call established successfully!",
+          });
+        } else if (state === 'failed') {
           toast({
             title: "Connection Failed",
             description: "Video connection failed. Trying to reconnect...",
             variant: "destructive"
           });
+        } else if (state === 'disconnected') {
+          console.log('Peer connection disconnected');
         }
+      }
+    };
+
+    // Handle ICE connection state changes
+    pc.oniceconnectionstatechange = () => {
+      if (peerConnectionRef.current) {
+        console.log('ICE connection state:', peerConnectionRef.current.iceConnectionState);
       }
     };
 
@@ -204,13 +240,14 @@ export const useWebRTC = () => {
     if (isInitiator) {
       try {
         console.log('Creating offer as initiator');
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
         await pc.setLocalDescription(offer);
         
-        // This should be handled by the parent component
         if (window.videoChatEmitWebRTCSignal) {
           window.videoChatEmitWebRTCSignal({
-            roomId,
             signalData: offer
           });
         }
@@ -227,21 +264,66 @@ export const useWebRTC = () => {
     return pc;
   }, [initializeCamera, cleanupConnections, toast]);
 
+  // Handle incoming WebRTC signals
+  const handleWebRTCSignal = useCallback(async (signalData: any) => {
+    if (!peerConnectionRef.current) {
+      console.warn('Received WebRTC signal but no peer connection exists');
+      return;
+    }
+
+    try {
+      if (signalData.candidate) {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+        console.log('Added ICE candidate');
+      } else if (signalData.type === 'offer') {
+        console.log('Handling offer');
+        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signalData));
+        const answer = await peerConnectionRef.current.createAnswer();
+        await peerConnectionRef.current.setLocalDescription(answer);
+        
+        if (window.videoChatEmitWebRTCSignal) {
+          window.videoChatEmitWebRTCSignal({
+            signalData: answer
+          });
+        }
+      } else if (signalData.type === 'answer') {
+        console.log('Handling answer');
+        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signalData));
+      }
+    } catch (error) {
+      console.error('Error handling WebRTC signal:', error);
+      toast({
+        title: "WebRTC Signal Error",
+        description: "Failed to process video call signal.",
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupConnections(true);
+    };
+  }, [cleanupConnections]);
+
   return {
     localVideoRef,
     remoteVideoRef,
     localStream: localStreamRef.current,
     peerConnection: peerConnectionRef.current,
     hasCameraPermission,
+    connectionState,
     initializeCamera,
     cleanupConnections,
-    setupPeerConnection
+    setupPeerConnection,
+    handleWebRTCSignal
   };
 };
 
 // Extend window interface for WebRTC signal emission
 declare global {
   interface Window {
-    videoChatEmitWebRTCSignal?: (data: { roomId: string; signalData: any }) => void;
+    videoChatEmitWebRTCSignal?: (data: { signalData: any }) => void;
   }
 }

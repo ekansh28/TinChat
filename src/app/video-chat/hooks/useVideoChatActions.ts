@@ -1,8 +1,9 @@
-// src/app/video-chat/hooks/useVideoChatActions.ts
+// src/app/video-chat/hooks/useVideoChatActions.ts - ENHANCED VERSION
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 interface VideoChatActionsProps {
+  // Base chat action props (same as text chat)
   isConnected: boolean;
   isPartnerConnected: boolean;
   isFindingPartner: boolean;
@@ -24,6 +25,8 @@ interface VideoChatActionsProps {
   interests: string[];
   authId: string | null;
   username: string | null;
+  
+  // Video-specific props
   hasCameraPermission: boolean | undefined;
   initializeCamera: () => Promise<MediaStream | null>;
   cleanupConnections: (stopLocalStream: boolean) => void;
@@ -96,6 +99,7 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
         props.setIsFindingPartner(false);
         props.setIsSelfDisconnectedRecently(false);
         props.setIsPartnerLeftRecently(false);
+        props.addSystemMessage('Stopped searching for video chat partner.');
       } else {
         // Start searching - ensure camera access first
         const stream = await props.initializeCamera();
@@ -119,6 +123,13 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
           authId: props.authId
         });
       }
+    } catch (error) {
+      console.error('Video chat action error:', error);
+      toast({
+        title: "Video Chat Error",
+        description: "An error occurred while managing video chat connection.",
+        variant: "destructive"
+      });
     } finally {
       setTimeout(() => {
         isProcessingFindOrDisconnect.current = false;
@@ -127,22 +138,32 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
   }, [props, toast]);
 
   const handleSendMessage = useCallback((message: string) => {
-    if (!props.isPartnerConnected) return;
+    if (!props.isPartnerConnected) {
+      toast({
+        title: "Not Connected",
+        description: "You must be connected to a partner to send messages.",
+        variant: "destructive"
+      });
+      return;
+    }
 
+    // Add message to local state
     props.addMessage({
       text: message,
       sender: 'me'
     });
 
+    // Emit message through socket
     props.emitMessage({
-      roomId: '',
+      roomId: '', // Room ID is handled by the socket hook
       message: message,
       username: props.username,
       authId: props.authId
     });
 
+    // Stop typing indicator
     props.emitTypingStop();
-  }, [props]);
+  }, [props, toast]);
 
   const handleInputChange = useCallback((value: string) => {
     props.setCurrentMessage(value);

@@ -1,4 +1,4 @@
-// src/app/video-chat/VideoChatPageClientContent.tsx - Enhanced modular version
+// src/app/video-chat/VideoChatPageClientContent.tsx - ENHANCED VERSION
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -8,18 +8,23 @@ import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
 import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 
-// Import modular components and hooks
-import VideoChatWindow from './components/VideoChatWindow';
-import VideoControls from './components/VideoControls';
-import { useVideoChatSocket, useVideoChatState } from './hooks/useVideoChatSocket';
+// Import text chat components for reuse
+import ChatWindow from '../chat/components/ChatWindow';
+import { useChatSocket, useChatState } from '../chat/hooks/useChatSocket';
 import { useAuth } from '../chat/hooks/useAuth';
 import { useThemeDetection } from '../chat/hooks/useThemeDetection';
 import { useViewport } from '../chat/hooks/useViewport';
 import { useFaviconManager } from '../chat/hooks/useFaviconManager';
 import { useSystemMessages } from '../chat/hooks/useSystemMessages';
-import { useVideoChatActions } from './hooks/useVideoChatActions';
+import { useChatActions } from '../chat/hooks/useChatActions';
+
+// Video-specific components
+import VideoControls from './components/VideoControls';
 import { useWebRTC } from './hooks/useWebRTC';
 import { playSound } from '@/lib/utils';
+
+// Enhanced video chat actions that extend text chat actions
+import { useVideoChatActions } from './hooks/useVideoChatActions';
 
 // Styles for display name animations (reuse from text chat)
 const displayNameAnimationCSS = `
@@ -74,17 +79,18 @@ const VideoChatPageClientContent: React.FC = () => {
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
+  const [roomId, setRoomId] = useState<string | null>(null);
 
   const interests = useMemo(() => 
     searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], 
     [searchParams]
   );
 
-  // Use modular hooks
+  // Use modular hooks (same as text chat)
   const auth = useAuth();
   const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
   const { isMobile, chatWindowStyle } = useViewport();
-  const chatState = useVideoChatState();
+  const chatState = useChatState();
 
   // WebRTC hook for video functionality
   const {
@@ -98,7 +104,7 @@ const VideoChatPageClientContent: React.FC = () => {
     setupPeerConnection
   } = useWebRTC();
 
-  // Socket event handlers
+  // Enhanced socket event handlers with WebRTC support
   const handleMessage = (data: any) => {
     if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
       chatState.setPartnerInfo(prev => prev ? {
@@ -141,13 +147,14 @@ const VideoChatPageClientContent: React.FC = () => {
     });
     
     setPartnerInterests(data.interests || []);
+    setRoomId(data.roomId);
     chatState.setIsFindingPartner(false);
     chatState.setIsPartnerConnected(true);
     setIsSelfDisconnectedRecently(false);
     setIsPartnerLeftRecently(false);
     chatState.setMessages([]);
 
-    // Setup WebRTC connection as initiator
+    // Setup WebRTC connection
     if (localStream && isMounted) {
       await setupPeerConnection(data.roomId, true);
     }
@@ -161,13 +168,14 @@ const VideoChatPageClientContent: React.FC = () => {
     setPartnerInterests([]);
     setIsPartnerLeftRecently(true);
     setIsSelfDisconnectedRecently(false);
+    setRoomId(null);
     
     // Clean up WebRTC connections but keep local stream
     cleanupConnections(false);
   };
 
   const handleWebRTCSignal = async (signalData: any) => {
-    if (peerConnection && chatState.roomId) {
+    if (peerConnection && roomId) {
       try {
         if (signalData.candidate) {
           await peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
@@ -175,8 +183,11 @@ const VideoChatPageClientContent: React.FC = () => {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(signalData));
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
+          
           // Emit answer back through socket
-          emitWebRTCSignal({ roomId: chatState.roomId, signalData: answer });
+          if (emitWebRTCSignal) {
+            emitWebRTCSignal({ roomId, signalData: answer });
+          }
         } else if (signalData.type === 'answer') {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(signalData));
         }
@@ -186,7 +197,7 @@ const VideoChatPageClientContent: React.FC = () => {
     }
   };
 
-  // Initialize socket
+  // Enhanced socket with WebRTC support
   const {
     isConnected,
     connectionError,
@@ -196,7 +207,7 @@ const VideoChatPageClientContent: React.FC = () => {
     emitTypingStop,
     emitLeaveChat,
     emitWebRTCSignal
-  } = useVideoChatSocket({
+  } = useChatSocket({
     onMessage: handleMessage,
     onPartnerFound: handlePartnerFound,
     onPartnerLeft: handlePartnerLeft,
@@ -211,15 +222,15 @@ const VideoChatPageClientContent: React.FC = () => {
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerTyping(false);
       chatState.setPartnerInfo(null);
+      setRoomId(null);
       cleanupConnections(false);
     },
     onConnectErrorHandler: () => chatState.setIsFindingPartner(false),
     authId: auth.authId,
-    roomId: chatState.roomId,
-    setRoomId: chatState.setRoomId
+    roomId
   });
 
-  // Use modular hooks for side effects
+  // Use modular hooks for side effects (same as text chat)
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -240,7 +251,9 @@ const VideoChatPageClientContent: React.FC = () => {
     setMessages: chatState.setMessages
   });
 
+  // Enhanced video chat actions
   const { handleFindOrDisconnect, handleSendMessage, handleInputChange } = useVideoChatActions({
+    // Base chat action props
     isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -262,6 +275,8 @@ const VideoChatPageClientContent: React.FC = () => {
     interests,
     authId: auth.authId,
     username: auth.username,
+    
+    // Video-specific props
     hasCameraPermission,
     initializeCamera,
     cleanupConnections,
@@ -315,6 +330,7 @@ const VideoChatPageClientContent: React.FC = () => {
       chatState.setPartnerInfo(null);
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
+      setRoomId(null);
     }
   }, [pathname, chatState]);
 
@@ -348,11 +364,35 @@ const VideoChatPageClientContent: React.FC = () => {
     console.log('Username clicked for authId:', authId, clickPosition);
   };
 
+  const videoWindowStyle = isMobile ? {
+    width: '100vw',
+    height: '200px',
+    maxWidth: '100vw',
+    maxHeight: '200px'
+  } : {
+    width: '640px',
+    height: '240px',
+    minHeight: '240px',
+    maxHeight: '240px'
+  };
+
+  const chatWindowStyleAdjusted = isMobile ? {
+    width: '100vw',
+    height: 'calc(100vh - 300px)',
+    maxWidth: '100vw'
+  } : {
+    width: '640px',
+    height: '300px',
+    minHeight: '300px',
+    maxHeight: '300px'
+  };
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
       
       <ProfilePopupProvider>
+        {/* Top Bar - Same as text chat */}
         <div className="fixed top-0 right-0 z-50">
           <TopBar />
         </div>
@@ -360,39 +400,15 @@ const VideoChatPageClientContent: React.FC = () => {
         {!isMobile && <HomeButton />}
         
         <div className={cn(
-          "video-chat-page-container flex flex-col items-center justify-center",
-          isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
+          "video-chat-page-container flex flex-col items-center justify-center gap-4",
+          isMobile ? "h-screen w-screen p-2 overflow-hidden" : "h-full p-4"
         )}>
-          {/* Video Feeds */}
-          <div className="flex justify-center gap-4 mb-4 mx-auto">
-            <VideoControls
-              localVideoRef={localVideoRef}
-              remoteVideoRef={remoteVideoRef}
-              hasCameraPermission={hasCameraPermission}
-              isFindingPartner={chatState.isFindingPartner}
-              isPartnerConnected={chatState.isPartnerConnected}
-              connectionError={connectionError}
-              theme={effectivePageTheme}
-              isMobile={isMobile}
-            />
-          </div>
-
-          {/* Chat Window */}
+          
+          {/* Video Controls Window */}
           <div className={cn(
             'window flex flex-col relative',
-            pinkThemeActive && 'biscuit-frame',
-            isMobile ? 'h-full w-full overflow-hidden' : ''
-          )} style={isMobile ? { 
-            width: '100vw', 
-            height: '300px',
-            maxWidth: '100vw',
-            maxHeight: '300px'
-          } : { 
-            width: '600px', 
-            height: '300px',
-            minHeight: '300px',
-            maxHeight: '300px'
-          }}>
+            pinkThemeActive && 'biscuit-frame'
+          )} style={videoWindowStyle}>
             
             <div className={cn(
               "title-bar flex-shrink-0",
@@ -400,13 +416,44 @@ const VideoChatPageClientContent: React.FC = () => {
             )}>
               <div className="flex items-center justify-between w-full">
                 <div className="title-bar-text">
-                  {isMobile ? 'Video Chat' : 'Video Chat'}
+                  Video Chat
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 flex justify-center items-center min-h-0 overflow-hidden p-2">
+              <VideoControls
+                localVideoRef={localVideoRef}
+                remoteVideoRef={remoteVideoRef}
+                hasCameraPermission={hasCameraPermission}
+                isFindingPartner={chatState.isFindingPartner}
+                isPartnerConnected={chatState.isPartnerConnected}
+                connectionError={connectionError}
+                theme={effectivePageTheme}
+                isMobile={isMobile}
+              />
+            </div>
+          </div>
+
+          {/* Chat Window - Reusing the exact same component as text chat */}
+          <div className={cn(
+            'window flex flex-col relative',
+            pinkThemeActive && 'biscuit-frame'
+          )} style={chatWindowStyleAdjusted}>
+            
+            <div className={cn(
+              "title-bar flex-shrink-0",
+              isMobile && "text-sm h-8 min-h-8"
+            )}>
+              <div className="flex items-center justify-between w-full">
+                <div className="title-bar-text">
+                  Chat
                 </div>
               </div>
             </div>
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <VideoChatWindow
+              <ChatWindow
                 messages={chatState.messages.map(msg => ({
                   id: msg.id,
                   content: msg.text,
@@ -443,6 +490,7 @@ const VideoChatPageClientContent: React.FC = () => {
                 theme={effectivePageTheme}
                 onUsernameClick={handleUsernameClick}
                 isMobile={isMobile}
+                isScrollEnabled={true}
                 onFindOrDisconnect={handleFindOrDisconnect}
                 findOrDisconnectDisabled={!isConnected || !!connectionError || hasCameraPermission === false}
                 findOrDisconnectText={
@@ -454,19 +502,20 @@ const VideoChatPageClientContent: React.FC = () => {
                 }
               />
             </div>
-
-            {connectionError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm flex-shrink-0">
-                Connection Error: {connectionError}
-              </div>
-            )}
-
-            {hasCameraPermission === false && (
-              <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 text-sm flex-shrink-0">
-                Camera access required for video chat. Please enable camera permissions.
-              </div>
-            )}
           </div>
+
+          {/* Error states */}
+          {connectionError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm rounded window">
+              Connection Error: {connectionError}
+            </div>
+          )}
+
+          {hasCameraPermission === false && (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 text-sm rounded window">
+              Camera access required for video chat. Please enable camera permissions.
+            </div>
+          )}
         </div>
 
         <ProfilePopup />

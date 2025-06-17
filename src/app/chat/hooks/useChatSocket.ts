@@ -1,7 +1,7 @@
-// src/app/chat/hooks/useChatSocket.ts
+// src/app/chat/hooks/useChatSocket.ts - ENHANCED WITH VIDEO SUPPORT
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { showChatToast, PartnerInfo, Message } from '../utils/ChatHelpers'; // Import the types
+import { showChatToast, PartnerInfo, Message } from '../utils/ChatHelpers';
 
 interface UseChatSocketParams {
   onMessage: (msg: any) => void;
@@ -15,6 +15,8 @@ interface UseChatSocketParams {
   onDisconnectHandler: (reason: string) => void;
   onConnectErrorHandler: (err: Error) => void;
   authId?: string | null;
+  roomId?: string | null;
+  onWebRTCSignal?: (signalData: any) => void; // Optional for video chat
 }
 
 export function useChatSocket({
@@ -28,12 +30,19 @@ export function useChatSocket({
   onCooldown,
   onDisconnectHandler,
   onConnectErrorHandler,
-  authId
+  authId,
+  roomId,
+  onWebRTCSignal
 }: UseChatSocketParams) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const roomIdRef = useRef<string | null>(null);
+
+  // Update room ID ref when it changes
+  useEffect(() => {
+    roomIdRef.current = roomId || null;
+  }, [roomId]);
 
   useEffect(() => {
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
@@ -57,6 +66,18 @@ export function useChatSocket({
     });
     
     socketRef.current = socket;
+
+    // Set up WebRTC signal emission function for video chat
+    if (onWebRTCSignal) {
+      window.videoChatEmitWebRTCSignal = (data) => {
+        if (socket.connected && roomIdRef.current) {
+          socket.emit('webrtcSignal', {
+            roomId: roomIdRef.current,
+            signalData: data.signalData
+          });
+        }
+      };
+    }
 
     // Connection events
     socket.on('connect', () => {
@@ -82,7 +103,7 @@ export function useChatSocket({
     // Chat events
     socket.on('partnerFound', ({ 
       partnerId, 
-      roomId, 
+      roomId: newRoomId, 
       interests, 
       partnerUsername,
       partnerDisplayName,
@@ -96,11 +117,11 @@ export function useChatSocket({
       partnerAuthId,
       partnerBadges
     }) => {
-      console.log('Partner found:', { partnerId, roomId });
-      roomIdRef.current = roomId;
+      console.log('Partner found:', { partnerId, roomId: newRoomId });
+      roomIdRef.current = newRoomId;
       onPartnerFound({
         partnerId,
-        roomId,
+        roomId: newRoomId,
         interests,
         partnerUsername,
         partnerDisplayName,
@@ -148,6 +169,14 @@ export function useChatSocket({
       onStatusChange(status);
     });
 
+    // WebRTC signaling (only for video chat)
+    if (onWebRTCSignal) {
+      socket.on('webrtcSignal', (data) => {
+        console.log('WebRTC signal received:', data.signalData?.type || 'candidate');
+        onWebRTCSignal(data.signalData);
+      });
+    }
+
     socket.on('partner_typing_start', onTypingStart);
     socket.on('partner_typing_stop', onTypingStop);
     socket.on('waitingForPartner', onWaiting);
@@ -160,6 +189,12 @@ export function useChatSocket({
 
     return () => {
       console.log('Cleaning up socket connection');
+      if (roomIdRef.current && socket.connected) {
+        socket.emit('leaveChat', { roomId: roomIdRef.current });
+      }
+      if (onWebRTCSignal) {
+        delete window.videoChatEmitWebRTCSignal;
+      }
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
@@ -174,7 +209,8 @@ export function useChatSocket({
     onWaiting,
     onCooldown,
     onDisconnectHandler,
-    onConnectErrorHandler
+    onConnectErrorHandler,
+    onWebRTCSignal
   ]);
 
   const emitFindPartner = useCallback((payload: {
@@ -238,6 +274,21 @@ export function useChatSocket({
     return false;
   }, []);
 
+  const emitWebRTCSignal = useCallback((payload: {
+    roomId: string;
+    signalData: any;
+  }) => {
+    if (socketRef.current?.connected && roomIdRef.current) {
+      console.log('Emitting WebRTC signal:', payload.signalData.type || 'candidate');
+      socketRef.current.emit('webrtcSignal', {
+        roomId: roomIdRef.current,
+        signalData: payload.signalData
+      });
+      return true;
+    }
+    return false;
+  }, []);
+
   const emitUpdateStatus = useCallback((status: 'online' | 'idle' | 'dnd' | 'offline') => {
     if (socketRef.current?.connected && authId) {
       console.log('Updating status:', status);
@@ -263,18 +314,18 @@ export function useChatSocket({
     emitTypingStart,
     emitTypingStop,
     emitLeaveChat,
+    emitWebRTCSignal: onWebRTCSignal ? emitWebRTCSignal : undefined,
     emitUpdateStatus,
     getOnlineUserCount
   };
 }
 
-// Additional hook for chat state management
-// Updated useChatState function with proper typing
+// Chat state management (unchanged)
 export function useChatState() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isPartnerConnected, setIsPartnerConnected] = useState<boolean>(false);
   const [isFindingPartner, setIsFindingPartner] = useState<boolean>(false);
-  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null); // ✅ This fixes the typing issue
+  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
   const [currentMessage, setCurrentMessage] = useState<string>('');
 
@@ -315,7 +366,7 @@ export function useChatState() {
     isFindingPartner,
     setIsFindingPartner,
     partnerInfo,
-    setPartnerInfo, // ✅ Now properly typed as React.Dispatch<React.SetStateAction<PartnerInfo | null>>
+    setPartnerInfo,
     isPartnerTyping,
     setIsPartnerTyping,
     currentMessage,

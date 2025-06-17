@@ -1,4 +1,4 @@
-// src/app/video-chat/hooks/useVideoChatSocket.ts
+// src/app/video-chat/hooks/useVideoChatSocket.ts - ENHANCED VERSION
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { showChatToast } from '../../chat/utils/ChatHelpers';
@@ -17,9 +17,9 @@ interface UseVideoChatSocketParams {
   onConnectErrorHandler: (err: Error) => void;
   authId?: string | null;
   roomId?: string | null;
-  setRoomId: (roomId: string | null) => void;
 }
 
+// Enhanced socket hook that extends the base chat socket with WebRTC support
 export function useVideoChatSocket({
   onMessage,
   onPartnerFound,
@@ -33,8 +33,7 @@ export function useVideoChatSocket({
   onDisconnectHandler,
   onConnectErrorHandler,
   authId,
-  roomId,
-  setRoomId
+  roomId
 }: UseVideoChatSocketParams) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -43,7 +42,7 @@ export function useVideoChatSocket({
 
   // Update room ID ref when it changes
   useEffect(() => {
-    roomIdRef.current = roomId;
+    roomIdRef.current = roomId || null;
   }, [roomId]);
 
   useEffect(() => {
@@ -69,10 +68,14 @@ export function useVideoChatSocket({
     
     socketRef.current = socket;
 
-    // Set up WebRTC signal emission function on window
+    // Set up WebRTC signal emission function on window for easy access
     window.videoChatEmitWebRTCSignal = (data) => {
-      if (socket.connected) {
-        socket.emit('webrtcSignal', data);
+      if (socket.connected && roomIdRef.current) {
+        console.log('Emitting WebRTC signal:', data.signalData.type || 'candidate');
+        socket.emit('webrtcSignal', {
+          roomId: roomIdRef.current,
+          signalData: data.signalData
+        });
       }
     };
 
@@ -86,7 +89,7 @@ export function useVideoChatSocket({
     socket.on('disconnect', (reason) => {
       console.log('Video chat socket disconnected:', reason);
       setIsConnected(false);
-      setRoomId(null);
+      roomIdRef.current = null;
       onDisconnectHandler(reason);
     });
 
@@ -115,7 +118,7 @@ export function useVideoChatSocket({
       partnerBadges
     }) => {
       console.log('Video chat partner found:', { partnerId, roomId: newRoomId });
-      setRoomId(newRoomId);
+      roomIdRef.current = newRoomId;
       onPartnerFound({
         partnerId,
         roomId: newRoomId,
@@ -157,7 +160,7 @@ export function useVideoChatSocket({
 
     socket.on('partnerLeft', () => {
       console.log('Video chat partner left');
-      setRoomId(null);
+      roomIdRef.current = null;
       onPartnerLeft();
     });
 
@@ -166,10 +169,10 @@ export function useVideoChatSocket({
       onStatusChange(status);
     });
 
-    // WebRTC signaling
-    socket.on('webrtcSignal', (signalData) => {
-      console.log('Video chat WebRTC signal received:', signalData.type || 'candidate');
-      onWebRTCSignal(signalData);
+    // WebRTC signaling - this is the key difference from text chat
+    socket.on('webrtcSignal', (data) => {
+      console.log('Video chat WebRTC signal received:', data.signalData?.type || 'candidate');
+      onWebRTCSignal(data.signalData);
     });
 
     socket.on('partner_typing_start', onTypingStart);
@@ -179,7 +182,7 @@ export function useVideoChatSocket({
 
     // Online user count updates
     socket.on('onlineUserCountUpdate', (count) => {
-      console.log('Online users:', count);
+      console.log('Online video chat users:', count);
     });
 
     return () => {
@@ -203,8 +206,7 @@ export function useVideoChatSocket({
     onWaiting,
     onCooldown,
     onDisconnectHandler,
-    onConnectErrorHandler,
-    setRoomId
+    onConnectErrorHandler
   ]);
 
   const emitFindPartner = useCallback((payload: {
@@ -262,19 +264,22 @@ export function useVideoChatSocket({
     if (socketRef.current?.connected && roomIdRef.current) {
       console.log('Leaving video chat room:', roomIdRef.current);
       socketRef.current.emit('leaveChat', { roomId: roomIdRef.current });
-      setRoomId(null);
+      roomIdRef.current = null;
       return true;
     }
     return false;
-  }, [setRoomId]);
+  }, []);
 
   const emitWebRTCSignal = useCallback((payload: {
     roomId: string;
     signalData: any;
   }) => {
-    if (socketRef.current?.connected) {
+    if (socketRef.current?.connected && roomIdRef.current) {
       console.log('Emitting WebRTC signal:', payload.signalData.type || 'candidate');
-      socketRef.current.emit('webrtcSignal', payload);
+      socketRef.current.emit('webrtcSignal', {
+        roomId: roomIdRef.current,
+        signalData: payload.signalData
+      });
       return true;
     }
     return false;
@@ -302,4 +307,11 @@ export function useVideoChatSocket({
     emitWebRTCSignal,
     emitUpdateStatus
   };
+}
+
+// Extend window interface for WebRTC signal emission
+declare global {
+  interface Window {
+    videoChatEmitWebRTCSignal?: (data: { signalData: any }) => void;
+  }
 }

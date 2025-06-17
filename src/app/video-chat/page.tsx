@@ -1,9 +1,12 @@
-// src/app/video-chat/page.tsx
+// src/app/video-chat/page.tsx - FINAL IMPLEMENTATION
 import React, { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
+
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
 
 // Dynamically import the client component
-const VideoChatPageClientContent = dynamic(
+const VideoChatPageClientContent = dynamicImport(
   () => import('./VideoChatPageClientContent'),
   { 
     ssr: false,
@@ -17,8 +20,6 @@ const VideoChatPageClientContent = dynamic(
     )
   }
 );
-
-export const dynamic = 'force-dynamic';
 
 export default function VideoChatPage() {
   return (
