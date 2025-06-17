@@ -33,7 +33,6 @@ const cspHeader = `
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
-  output: 'export',              // Enable static export (required for Azure Static Web Apps)
   trailingSlash: true,           // Ensure consistent URL structure
   typescript: {
     ignoreBuildErrors: true,
