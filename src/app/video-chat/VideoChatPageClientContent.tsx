@@ -10,14 +10,14 @@ import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 
 // Import text chat components for reuse
 import ChatWindow from '../chat/components/ChatWindow';
-import { useChatSocket, useChatState } from '../chat/hooks/useChatSocket';
+import { useChatSocket } from '../chat/hooks/useChatSocket';
 import { useAuth } from '../chat/hooks/useAuth';
 import { useThemeDetection } from '../chat/hooks/useThemeDetection';
 import { useViewport } from '../chat/hooks/useViewport';
 import { useFaviconManager } from '../chat/hooks/useFaviconManager';
 import { useSystemMessages } from '../chat/hooks/useSystemMessages';
 import { useChatActions } from '../chat/hooks/useChatActions';
-
+import { useChatState } from '../chat/hooks/useChatState';
 // Video-specific components
 import VideoControls from './components/VideoControls';
 import { useWebRTC } from './hooks/useWebRTC';
