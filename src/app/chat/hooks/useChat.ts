@@ -228,73 +228,118 @@ export const useChat = (): UseChatReturn => {
     username: auth.username
   });
 
-  // ✅ FIXED: Auto-search effect with stable dependencies
-  useEffect(() => {
-    if (initRef.current.autoSearchStarted) {
-      console.log('[Chat] Auto-search already started, skipping');
+// ✅ FIXED: Auto-search effect with better conditions and debugging
+useEffect(() => {
+  console.log('[Chat] Auto-search effect triggered:', {
+    autoSearchStarted: initRef.current.autoSearchStarted,
+    isConnected: socket.isConnected,
+    authLoading: auth.isLoading,
+    isPartnerConnected: chatState.isPartnerConnected,
+    isFindingPartner: chatState.isFindingPartner,
+    authId: auth.authId,
+    connectionError: socket.connectionError,
+    isConnecting: socket.isConnecting
+  });
+
+  if (initRef.current.autoSearchStarted) {
+    console.log('[Chat] Auto-search already started, skipping');
+    return;
+  }
+
+  // ✅ IMPROVED: More explicit conditions
+  const isSocketReady = socket.isConnected && !socket.connectionError && !socket.isConnecting;
+  const isAuthReady = !auth.isLoading && auth.authId !== undefined;
+  const isChatReady = !chatState.isPartnerConnected && !chatState.isFindingPartner;
+
+  console.log('[Chat] Auto-search readiness check:', {
+    isSocketReady,
+    isAuthReady, 
+    isChatReady,
+    overall: isSocketReady && isAuthReady && isChatReady
+  });
+
+  if (!isSocketReady || !isAuthReady || !isChatReady) {
+    console.log('[Chat] Auto-search conditions not met - waiting...');
+    return;
+  }
+
+  console.log('[Chat] ✅ All conditions met - Starting auto-search for partner');
+  initRef.current.autoSearchStarted = true;
+  
+  // Set state immediately
+  chatState.setIsFindingPartner(true);
+  chatState.addSystemMessage('Searching for a partner...');
+  setIsSelfDisconnectedRecently(false);
+  setIsPartnerLeftRecently(false);
+  
+  // ✅ IMPROVED: More robust partner search with better error handling
+  const attemptSearch = () => {
+    if (!socket.isConnected) {
+      console.error('[Chat] Socket disconnected before search attempt');
+      chatState.setIsFindingPartner(false);
+      chatState.addSystemMessage('Connection lost. Please refresh to try again.');
+      initRef.current.autoSearchStarted = false;
       return;
     }
 
-    const shouldStartSearch = 
-      socket.isConnected && 
-      !auth.isLoading && 
-      !chatState.isPartnerConnected && 
-      !chatState.isFindingPartner &&
-      auth.authId !== undefined &&
-      !socket.connectionError &&
-      !socket.isConnecting;
+    console.log('[Chat] Emitting findPartner with:', {
+      chatType: 'text',
+      interests,
+      authId: auth.authId
+    });
 
-    if (!shouldStartSearch) {
-      console.log('[Chat] Auto-search conditions not met');
-      return;
-    }
-
-    console.log('[Chat] Starting auto-search for partner');
-    initRef.current.autoSearchStarted = true;
+    const success = socket.emitFindPartner({
+      chatType: 'text',
+      interests,
+      authId: auth.authId
+    });
     
-    chatState.setIsFindingPartner(true);
-    chatState.addSystemMessage('Searching for a partner...');
-    setIsSelfDisconnectedRecently(false);
-    setIsPartnerLeftRecently(false);
-    
-    const timeoutId = setTimeout(() => {
-      const success = socket.emitFindPartner({
-        chatType: 'text',
-        interests,
-        authId: auth.authId
-      });
-      
-      if (!success) {
-        console.error('[Chat] Failed to emit findPartner');
-        chatState.setIsFindingPartner(false);
-        chatState.addSystemMessage('Failed to start partner search. Please try again.');
-        initRef.current.autoSearchStarted = false;
-      }
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [
-    socket.isConnected,
-    socket.connectionError,
-    socket.isConnecting,
-    auth.isLoading,
-    auth.authId,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner,
-    interests
-  ]);
-
-  // ✅ FIXED: Reset auto-search flag effect
-  useEffect(() => {
-    if (chatState.isPartnerConnected || !socket.isConnected || socket.connectionError) {
-      if (initRef.current.autoSearchStarted) {
-        console.log('[Chat] Resetting auto-search flag');
-        initRef.current.autoSearchStarted = false;
-      }
+    if (!success) {
+      console.error('[Chat] Failed to emit findPartner - socket not ready');
+      chatState.setIsFindingPartner(false);
+      chatState.addSystemMessage('Failed to start partner search. Please try again.');
+      initRef.current.autoSearchStarted = false;
+    } else {
+      console.log('[Chat] ✅ findPartner emitted successfully');
     }
-  }, [chatState.isPartnerConnected, socket.isConnected, socket.connectionError]);
+  };
 
-  // ✅ FIXED: Navigation cleanup effect
+  // Small delay to ensure socket is fully ready
+  const timeoutId = setTimeout(attemptSearch, 200);
+
+  return () => {
+    clearTimeout(timeoutId);
+  };
+}, [
+  socket.isConnected,
+  socket.connectionError,
+  socket.isConnecting,
+  auth.isLoading,
+  auth.authId,
+  chatState.isPartnerConnected,
+  chatState.isFindingPartner,
+  interests
+]);
+
+// ✅ IMPROVED: Reset auto-search flag when conditions change
+useEffect(() => {
+  const shouldReset = chatState.isPartnerConnected || 
+                     !socket.isConnected || 
+                     socket.connectionError ||
+                     socket.isConnecting;
+
+  if (shouldReset && initRef.current.autoSearchStarted) {
+    console.log('[Chat] Resetting auto-search flag due to state change:', {
+      isPartnerConnected: chatState.isPartnerConnected,
+      isConnected: socket.isConnected,
+      connectionError: socket.connectionError,
+      isConnecting: socket.isConnecting
+    });
+    initRef.current.autoSearchStarted = false;
+  }
+}, [chatState.isPartnerConnected, socket.isConnected, socket.connectionError, socket.isConnecting]);
+  
+// ✅ FIXED: Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/chat') {
       console.log('[Chat] Route change cleanup');
