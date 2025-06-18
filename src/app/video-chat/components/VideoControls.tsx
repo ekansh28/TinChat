@@ -1,7 +1,6 @@
-// src/app/video-chat/components/VideoControls.tsx - ENHANCED VERSION
+// src/app/video-chat/components/VideoControls.tsx - NO TITLE BAR VERSION
 import React, { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface VideoControlsProps {
   localVideoRef: React.RefObject<HTMLVideoElement>;
@@ -62,24 +61,12 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     isMobile && 'flex-row'
   );
 
-  const videoWindowClass = cn(
-    'window flex flex-col',
-    isWindows7Theme ? 'glass active' : '',
-    isWinXPTheme ? 'xp-window' : '',
-    theme === 'theme-98' && !isWindows7Theme && !isWinXPTheme ? '' : ''
-  );
-
-  const titleBarClass = cn(
-    "title-bar text-xs video-feed-title-bar",
-    isWindows7Theme ? 'glass-title-bar' : '',
-    isWinXPTheme ? 'xp-title-bar' : '',
-    isMobile && "min-h-[20px] px-1"
-  );
-
-  const windowBodyClass = cn(
-    'window-body flex-grow overflow-hidden relative p-0',
-    isWindows7Theme && 'glass-window-body glass active',
-    isWinXPTheme && 'xp-window-body'
+  // Simplified video container without window chrome
+  const videoContainerClass = cn(
+    'relative overflow-hidden border-2 bg-black',
+    isWindows7Theme ? 'border-gray-400 rounded-sm shadow-lg' : 'border-gray-600',
+    isWinXPTheme ? 'border-blue-500 rounded-sm' : '',
+    theme === 'theme-98' && !isWindows7Theme && !isWinXPTheme ? 'border-gray-500' : ''
   );
 
   const videoElementClass = cn(
@@ -91,86 +78,86 @@ const VideoControls: React.FC<VideoControlsProps> = ({
 
   return (
     <div className={containerClass}>
-      {/* Local Video (Your Camera) */}
-      <div className={videoWindowClass} style={videoSize}>
-        <div className={titleBarClass}>
-          <div className="title-bar-text">You</div>
+      {/* Local Video (Your Camera) - No title bar */}
+      <div className={videoContainerClass} style={videoSize}>
+        <video 
+          ref={localVideoRef} 
+          autoPlay 
+          muted 
+          className={videoElementClass}
+          data-ai-hint="local camera"
+          playsInline
+          style={{ backgroundColor: '#000' }}
+        />
+        
+        {/* Local video label overlay */}
+        <div className="absolute top-1 left-1 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+          You
         </div>
-        <div className={windowBodyClass}>
-          <video 
-            ref={localVideoRef} 
-            autoPlay 
-            muted 
-            className={videoElementClass}
-            data-ai-hint="local camera"
-            playsInline
-            style={{ backgroundColor: '#000' }}
-          />
-          
-          {/* Camera permission states */}
-          {hasCameraPermission === false && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
-              <div className="text-center p-2">
-                <div className="text-red-400 text-xs mb-1">📷 ❌</div>
-                <p className="text-white text-xs">Camera Denied</p>
-              </div>
+        
+        {/* Camera permission states */}
+        {hasCameraPermission === false && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
+            <div className="text-center p-2">
+              <div className="text-red-400 text-xs mb-1">📷 ❌</div>
+              <p className="text-white text-xs">Camera Denied</p>
             </div>
-          )}
-          
-          {hasCameraPermission === undefined && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
-              <div className="text-center p-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mx-auto mb-1"></div>
-                <p className="text-white text-xs">Requesting camera...</p>
-              </div>
+          </div>
+        )}
+        
+        {hasCameraPermission === undefined && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
+            <div className="text-center p-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mx-auto mb-1"></div>
+              <p className="text-white text-xs">Requesting camera...</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Remote Video (Partner's Camera) */}
-      <div className={videoWindowClass} style={videoSize}>
-        <div className={titleBarClass}>
-          <div className="title-bar-text">Partner</div>
+      {/* Remote Video (Partner's Camera) - No title bar */}
+      <div className={videoContainerClass} style={videoSize}>
+        <video 
+          ref={remoteVideoRef} 
+          autoPlay 
+          className={videoElementClass}
+          data-ai-hint="remote camera"
+          playsInline
+          style={{ backgroundColor: '#000' }}
+        />
+        
+        {/* Remote video label overlay */}
+        <div className="absolute top-1 left-1 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+          Partner
         </div>
-        <div className={windowBodyClass}>
-          <video 
-            ref={remoteVideoRef} 
-            autoPlay 
-            className={videoElementClass}
-            data-ai-hint="remote camera"
-            playsInline
-            style={{ backgroundColor: '#000' }}
-          />
-          
-          {/* Partner connection states */}
-          {isFindingPartner && !isPartnerConnected && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
-              <div className="text-center p-2">
-                <div className="animate-pulse text-xs mb-1">🔍</div>
-                <p className="text-white text-xs">Searching...</p>
-              </div>
+        
+        {/* Partner connection states */}
+        {isFindingPartner && !isPartnerConnected && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
+            <div className="text-center p-2">
+              <div className="animate-pulse text-xs mb-1">🔍</div>
+              <p className="text-white text-xs">Searching...</p>
             </div>
-          )}
-          
-          {!isFindingPartner && !isPartnerConnected && !connectionError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
-              <div className="text-center p-2">
-                <div className="text-gray-400 text-xs mb-1">📺</div>
-                <p className="text-white text-xs">Partner video</p>
-              </div>
+          </div>
+        )}
+        
+        {!isFindingPartner && !isPartnerConnected && !connectionError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
+            <div className="text-center p-2">
+              <div className="text-gray-400 text-xs mb-1">📺</div>
+              <p className="text-white text-xs">Partner video</p>
             </div>
-          )}
-          
-          {connectionError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
-              <div className="text-center p-2">
-                <div className="text-red-400 text-xs mb-1">⚠️</div>
-                <p className="text-white text-xs">Connection error</p>
-              </div>
+          </div>
+        )}
+        
+        {connectionError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90">
+            <div className="text-center p-2">
+              <div className="text-red-400 text-xs mb-1">⚠️</div>
+              <p className="text-white text-xs">Connection error</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

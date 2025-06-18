@@ -1,3 +1,4 @@
+
 /* src/app/video-chat/video-chat.css - ENHANCED VERSION */
 
 /* Video Chat Specific Styles */
@@ -7,27 +8,33 @@
   padding: 1rem;
 }
 
-/* Video Feed Styling */
+/* ✅ ENHANCED: Video Feed Styling with better responsiveness */
 .video-feed-title-bar {
   min-height: 24px;
   display: flex;
   align-items: center;
   padding: 2px 4px;
   font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .video-feed-title-bar .title-bar-text {
   font-size: 12px;
   flex-grow: 1;
   font-weight: normal;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
-/* Video Elements */
+/* ✅ ENHANCED: Video Elements with better error handling */
 video {
   display: block;
   background-color: #000;
   border-radius: 0;
   object-fit: cover;
+  width: 100%;
+  height: 100%;
 }
 
 video::-webkit-media-controls {
@@ -38,10 +45,20 @@ video::-webkit-media-controls-enclosure {
   display: none !important;
 }
 
-/* Video Window Styling */
+video::-webkit-media-controls-panel {
+  display: none !important;
+}
+
+video::cue {
+  display: none;
+}
+
+/* ✅ ENHANCED: Video Window Styling with theme support */
 .video-window {
   border: 2px outset #c0c0c0;
   background: #c0c0c0;
+  position: relative;
+  overflow: hidden;
 }
 
 .theme-7 .video-window {
@@ -57,7 +74,7 @@ video::-webkit-media-controls-enclosure {
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Mobile Video Chat Adjustments */
+/* ✅ ENHANCED: Mobile Video Chat Adjustments */
 @media (max-width: 768px) {
   .video-chat-page-container {
     padding: 0.5rem;
@@ -82,6 +99,20 @@ video::-webkit-media-controls-enclosure {
     align-items: center;
     width: 100%;
   }
+  
+  /* ✅ MOBILE: Input area visibility fixes */
+  .mobile-input-area {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 10 !important;
+    flex-shrink: 0 !important;
+  }
+  
+  .video-input-area {
+    border-top: 1px solid rgba(0,0,0,0.1) !important;
+  }
 }
 
 /* Very small screens - stack videos */
@@ -92,35 +123,44 @@ video::-webkit-media-controls-enclosure {
   }
 }
 
-/* WebRTC Connection Status Indicators */
+/* ✅ ENHANCED: WebRTC Connection Status Indicators */
 .connection-status {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 10px;
   z-index: 10;
   pointer-events: none;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .connection-status.connecting {
-  background: rgba(255, 165, 0, 0.8);
+  background: rgba(255, 165, 0, 0.9);
+  animation: pulse 1.5s infinite;
 }
 
 .connection-status.connected {
-  background: rgba(76, 175, 80, 0.8);
+  background: rgba(76, 175, 80, 0.9);
 }
 
 .connection-status.failed {
-  background: rgba(244, 67, 54, 0.8);
+  background: rgba(244, 67, 54, 0.9);
+  animation: shake 0.5s ease-in-out;
 }
 
-/* Video Loading/Error States */
+.connection-status.disconnected {
+  background: rgba(158, 158, 158, 0.9);
+}
+
+/* ✅ ENHANCED: Video Loading/Error States */
 .video-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: #1a1a1a;
@@ -133,10 +173,12 @@ video::-webkit-media-controls-enclosure {
   position: absolute;
   top: 0;
   left: 0;
+  border-radius: inherit;
 }
 
 .video-placeholder.loading {
-  background: #2a2a2a;
+  background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+  animation: gradientShift 2s ease-in-out infinite;
 }
 
 .video-placeholder.error {
@@ -144,7 +186,17 @@ video::-webkit-media-controls-enclosure {
   color: #ffaaaa;
 }
 
-/* Enhanced Glass Theme Support for Video Chat */
+.video-placeholder.camera-denied {
+  background: #4a1a1a;
+  color: #ffcccc;
+}
+
+.video-placeholder.searching {
+  background: linear-gradient(45deg, #1a2a3a, #2a3a4a);
+  animation: gradientShift 3s ease-in-out infinite;
+}
+
+/* ✅ ENHANCED: Glass Theme Support for Video Chat */
 .theme-7 .video-chat-page-container .window {
   backdrop-filter: blur(10px);
   background: rgba(240, 240, 240, 0.9);
@@ -162,42 +214,47 @@ video::-webkit-media-controls-enclosure {
   backdrop-filter: blur(5px);
 }
 
-/* Video Chat Input Area Enhancements */
+/* ✅ ENHANCED: Video Chat Input Area Enhancements */
 .video-chat-input-area {
   border-top: 1px solid rgba(0, 0, 0, 0.1);
   background: rgba(248, 248, 248, 0.95);
 }
 
-.theme-7 .video-chat-input-area {
+.theme-7 .video-chat-input-area,
+.theme-7 .video-input-area {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(5px);
   border-top: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Responsive Video Layout */
+/* ✅ ENHANCED: Responsive Video Layout */
 .video-controls-container {
   display: flex;
   gap: 16px;
   justify-content: center;
   align-items: flex-start;
   flex-wrap: nowrap;
+  width: 100%;
+  height: 100%;
 }
 
-/* Video Quality Indicators */
+/* ✅ ENHANCED: Video Quality Indicators */
 .video-quality-indicator {
   position: absolute;
   bottom: 4px;
   left: 4px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   padding: 2px 4px;
   border-radius: 2px;
   font-size: 8px;
   font-family: monospace;
   pointer-events: none;
+  backdrop-filter: blur(3px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Camera/Microphone Permission Prompts */
+/* ✅ ENHANCED: Camera/Microphone Permission Prompts */
 .permission-prompt {
   position: absolute;
   inset: 0;
@@ -205,18 +262,20 @@ video::-webkit-media-controls-enclosure {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
   color: white;
   padding: 16px;
   text-align: center;
   z-index: 30;
   font-size: 12px;
+  backdrop-filter: blur(5px);
 }
 
 .permission-prompt .icon {
   font-size: 24px;
   margin-bottom: 8px;
   opacity: 0.8;
+  animation: pulse 2s infinite;
 }
 
 .permission-prompt .title {
@@ -229,9 +288,31 @@ video::-webkit-media-controls-enclosure {
   font-size: 10px;
   opacity: 0.8;
   line-height: 1.4;
+  max-width: 200px;
 }
 
-/* Animations for Video Elements */
+.permission-prompt button {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.permission-prompt button:hover {
+  background: #0056b3;
+}
+
+.permission-prompt button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+/* ✅ ENHANCED: Animations for Video Elements */
 @keyframes videoFadeIn {
   from {
     opacity: 0;
@@ -243,11 +324,37 @@ video::-webkit-media-controls-enclosure {
   }
 }
 
+@keyframes gradientShift {
+  0%, 100% { 
+    background-position: 0% 50%; 
+  }
+  50% { 
+    background-position: 100% 50%; 
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+  50% { 
+    opacity: 0.7; 
+    transform: scale(1.05); 
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
 .video-fade-in {
   animation: videoFadeIn 0.3s ease-out;
 }
 
-/* Video Chat Specific Message Styling */
+/* ✅ ENHANCED: Video Chat Specific Message Styling */
 .video-chat-message {
   font-size: 13px;
   line-height: 1.4;
@@ -264,7 +371,7 @@ video::-webkit-media-controls-enclosure {
   z-index: 1;
 }
 
-/* Windows XP Theme Support */
+/* ✅ ENHANCED: Windows XP Theme Support */
 .xp-window {
   background: #ece9d8;
   border: 1px solid #0054e3;
@@ -283,7 +390,7 @@ video::-webkit-media-controls-enclosure {
   color: #000;
 }
 
-/* Dark Theme Adjustments */
+/* ✅ ENHANCED: Dark Theme Adjustments */
 @media (prefers-color-scheme: dark) {
   .video-placeholder {
     background: #0a0a0a;
@@ -291,42 +398,119 @@ video::-webkit-media-controls-enclosure {
   }
   
   .video-placeholder.loading {
-    background: #1a1a1a;
+    background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
   }
   
   .video-placeholder.error {
     background: #2a0a0a;
     color: #ffcccc;
   }
+  
+  .connection-status {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
 }
 
-/* Ensure video elements are properly sized */
+/* ✅ ENHANCED: Video element sizing and positioning */
 .video-container {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: #000;
+  border-radius: inherit;
 }
 
 .video-container video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background: #000;
 }
 
-/* Fix for potential layout issues */
-.video-chat-layout {
+/* ✅ ENHANCED: Error recovery UI */
+.video-error-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  width: 100%;
-  height: 100%;
-  padding: 1rem;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  text-align: center;
+  padding: 12px;
+  z-index: 20;
 }
 
-/* Responsive adjustments */
-@media (max-width: 640px) {
+.video-error-overlay .error-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+
+.video-error-overlay .error-title {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.video-error-overlay .error-description {
+  font-size: 10px;
+  opacity: 0.7;
+  line-height: 1.3;
+  margin-bottom: 8px;
+  max-width: 150px;
+}
+
+.video-error-overlay button {
+  padding: 4px 8px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.video-error-overlay button:hover {
+  background: #0056b3;
+  transform: scale(1.05);
+}
+
+/* ✅ ENHANCED: Connection quality indicators */
+.connection-quality {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 15;
+}
+
+.connection-quality .bar {
+  width: 3px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 1px;
+}
+
+.connection-quality .bar.active {
+  background: #4CAF50;
+}
+
+.connection-quality .bar.weak {
+  background: #FF9800;
+}
+
+.connection-quality .bar.poor {
+  background: #F44336;
+}
+
+/* ✅ ENHANCED: Layout fixes for different screen sizes */
+@media (max-width: 768px) {
   .video-chat-layout {
     padding: 0.5rem;
     gap: 0.5rem;
@@ -335,4 +519,235 @@ video::-webkit-media-controls-enclosure {
   .video-chat-page-container {
     padding: 0.25rem;
   }
+  
+  /* Force input area visibility on mobile */
+  .mobile-input-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 20 !important;
+    background: inherit !important;
+    border-top: 1px solid rgba(0,0,0,0.1) !important;
+  }
+  
+  /* Mobile video controls adjustments */
+  .video-controls-mobile {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  /* Mobile window adjustments */
+  .mobile-video-window {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 0 !important;
+  }
+  
+  .mobile-chat-window {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: calc(100vh - 300px) !important;
+    min-height: 200px !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* ✅ ENHANCED: Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  .video-fade-in,
+  .connection-status.connecting,
+  .permission-prompt .icon,
+  .video-placeholder.loading {
+    animation: none;
+  }
+}
+
+/* ✅ ENHANCED: High contrast mode support */
+@media (prefers-contrast: high) {
+  .video-placeholder {
+    background: #000;
+    color: #fff;
+    border: 2px solid #fff;
+  }
+  
+  .connection-status {
+    background: #000;
+    color: #fff;
+    border: 2px solid #fff;
+  }
+  
+  .video-error-overlay {
+    background: #000;
+    border: 2px solid #fff;
+  }
+}
+
+/* ✅ ENHANCED: Print styles (hide video elements) */
+@media print {
+  .video-chat-page-container,
+  .video-controls-container,
+  .video-window {
+    display: none !important;
+  }
+}
+
+/* ✅ ENHANCED: Focus management for accessibility */
+video:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+/* ✅ ENHANCED: Loading states */
+.video-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.video-loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+  z-index: 5;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* ✅ ENHANCED: WebRTC statistics overlay (for debugging) */
+.webrtc-stats {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 6px;
+  font-size: 8px;
+  font-family: monospace;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.video-container:hover .webrtc-stats {
+  opacity: 1;
+}
+
+/* ✅ ENHANCED: Video chat specific scrollbar */
+.video-chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.video-chat-messages::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.video-chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.video-chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* ✅ ENHANCED: Theme-specific adjustments for video elements */
+.theme-98 .video-container {
+  border: 1px inset #c0c0c0;
+}
+
+.theme-7.glass .video-container {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  backdrop-filter: blur(1px);
+}
+
+/* ✅ ENHANCED: Status indicators positioning */
+.video-status-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(3px);
+  z-index: 15;
+  transition: opacity 0.3s ease;
+}
+
+.video-status-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video-status-content {
+  text-align: center;
+  color: white;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-width: 200px;
+}
+
+.video-status-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.video-status-text {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.video-status-subtext {
+  font-size: 10px;
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
+/* ✅ ENHANCED: Responsive video window titles */
+.video-title-responsive {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-title-text {
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.video-title-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  opacity: 0.8;
 }

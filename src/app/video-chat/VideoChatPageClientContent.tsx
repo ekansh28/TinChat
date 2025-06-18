@@ -1,8 +1,7 @@
-// src/app/video-chat/VideoChatPageClientContent.tsx - ENHANCED VERSION
+// src/app/video-chat/VideoChatPageClientContent.tsx - MODULAR VERSION
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import React from 'react';
 import { cn } from '@/lib/utils';
 import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
@@ -10,23 +9,12 @@ import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 
 // Import text chat components for reuse
 import ChatWindow from '../chat/components/ChatWindow';
-import { useChatSocket } from '../chat/hooks/useChatSocket';
-import { useAuth } from '../chat/hooks/useAuth';
-import { useThemeDetection } from '../chat/hooks/useThemeDetection';
-import { useViewport } from '../chat/hooks/useViewport';
-import { useFaviconManager } from '../chat/hooks/useFaviconManager';
-import { useSystemMessages } from '../chat/hooks/useSystemMessages';
-import { useChatActions } from '../chat/hooks/useChatActions';
-import { useChatState } from '../chat/hooks/useChatState';
 // Video-specific components
 import VideoControls from './components/VideoControls';
-import { useWebRTC } from './hooks/useWebRTC';
-import { playSound } from '@/lib/utils';
+// Main consolidated hook
+import { useVideoChat } from './hooks/useVideoChat';
 
-// Enhanced video chat actions that extend text chat actions
-import { useVideoChatActions } from './hooks/useVideoChatActions';
-
-// Styles for display name animations (reuse from text chat)
+// Display name animations CSS
 const displayNameAnimationCSS = `
   .display-name-rainbow {
     background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80, #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080);
@@ -71,285 +59,39 @@ const displayNameAnimationCSS = `
 `;
 
 const VideoChatPageClientContent: React.FC = () => {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const [isMounted, setIsMounted] = useState(false);
-  
-  // Additional video chat state
-  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
-  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
-  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
-  const [roomId, setRoomId] = useState<string | null>(null);
-
-  const interests = useMemo(() => 
-    searchParams.get('interests')?.split(',').filter(i => i.trim() !== '') || [], 
-    [searchParams]
-  );
-
-  // Use modular hooks (same as text chat)
-  const auth = useAuth();
-  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
-  const { isMobile, chatWindowStyle } = useViewport();
-  const chatState = useChatState();
-
-  // WebRTC hook for video functionality
+  // ✅ MODULAR: All logic consolidated into one hook
   const {
-    localVideoRef,
-    remoteVideoRef,
-    localStream,
-    peerConnection,
-    hasCameraPermission,
-    initializeCamera,
-    cleanupConnections,
-    setupPeerConnection
-  } = useWebRTC();
-
-  // Enhanced socket event handlers with WebRTC support
-  const handleMessage = (data: any) => {
-    if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
-      chatState.setPartnerInfo(prev => prev ? {
-        ...prev,
-        displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
-        displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
-        rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
-      } : null);
-    }
+    // Loading states
+    isLoading,
+    hasConnectionError,
     
-    chatState.addMessage({
-      text: data.message,
-      sender: 'partner',
-      senderUsername: data.senderUsername,
-      senderAuthId: data.senderAuthId,
-      senderDisplayNameColor: data.senderDisplayNameColor,
-      senderDisplayNameAnimation: data.senderDisplayNameAnimation,
-      senderRainbowSpeed: data.senderRainbowSpeed
-    });
-    chatState.setIsPartnerTyping(false);
-  };
-
-  const handlePartnerFound = async (data: any) => {
-    playSound('Match.wav');
+    // Layout and theme
+    isMobile,
+    pinkThemeActive,
+    effectivePageTheme,
+    videoWindowStyle,
+    chatWindowStyleAdjusted,
     
-    // Set partner info
-    chatState.setPartnerInfo({
-      id: data.partnerId,
-      username: data.partnerUsername || 'Stranger',
-      displayName: data.partnerDisplayName,
-      avatarUrl: data.partnerAvatarUrl,
-      bannerUrl: data.partnerBannerUrl,
-      pronouns: data.partnerPronouns,
-      status: data.partnerStatus || 'online',
-      displayNameColor: data.partnerDisplayNameColor || '#ff0000',
-      displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
-      rainbowSpeed: data.partnerRainbowSpeed || 3,
-      authId: data.partnerAuthId,
-      badges: data.partnerBadges || []
-    });
+    // Chat state and data
+    chatState,
+    auth,
+    mappedMessages,
+    memoizedPartnerInfo,
+    memoizedOwnInfo,
     
-    setPartnerInterests(data.interests || []);
-    setRoomId(data.roomId);
-    chatState.setIsFindingPartner(false);
-    chatState.setIsPartnerConnected(true);
-    setIsSelfDisconnectedRecently(false);
-    setIsPartnerLeftRecently(false);
-    chatState.setMessages([]);
-
-    // Setup WebRTC connection
-    if (localStream && isMounted) {
-      await setupPeerConnection(data.roomId, true);
-    }
-  };
-
-  const handlePartnerLeft = () => {
-    chatState.setIsPartnerConnected(false);
-    chatState.setIsFindingPartner(false);
-    chatState.setPartnerInfo(null);
-    chatState.setIsPartnerTyping(false);
-    setPartnerInterests([]);
-    setIsPartnerLeftRecently(true);
-    setIsSelfDisconnectedRecently(false);
-    setRoomId(null);
+    // WebRTC state
+    webrtc,
     
-    // Clean up WebRTC connections but keep local stream
-    cleanupConnections(false);
-  };
-
-  const handleWebRTCSignal = async (signalData: any) => {
-    if (peerConnection && roomId) {
-      try {
-        if (signalData.candidate) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-        } else if (signalData.type === 'offer') {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(signalData));
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
-          
-          // Emit answer back through socket
-          if (emitWebRTCSignal) {
-            emitWebRTCSignal({ roomId, signalData: answer });
-          }
-        } else if (signalData.type === 'answer') {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(signalData));
-        }
-      } catch (error) {
-        console.error('WebRTC signal handling error:', error);
-      }
-    }
-  };
-
-  // Enhanced socket with WebRTC support
-  const {
-    isConnected,
-    connectionError,
-    emitFindPartner,
-    emitMessage,
-    emitTypingStart,
-    emitTypingStop,
-    emitLeaveChat,
-    emitWebRTCSignal
-  } = useChatSocket({
-    onMessage: handleMessage,
-    onPartnerFound: handlePartnerFound,
-    onPartnerLeft: handlePartnerLeft,
-    onStatusChange: (status) => chatState.setPartnerInfo(prev => prev ? {...prev, status: status as any} : null),
-    onTypingStart: () => chatState.setIsPartnerTyping(true),
-    onTypingStop: () => chatState.setIsPartnerTyping(false),
-    onWebRTCSignal: handleWebRTCSignal,
-    onWaiting: () => {},
-    onCooldown: () => chatState.setIsFindingPartner(false),
-    onDisconnectHandler: () => {
-      chatState.setIsPartnerConnected(false);
-      chatState.setIsFindingPartner(false);
-      chatState.setIsPartnerTyping(false);
-      chatState.setPartnerInfo(null);
-      setRoomId(null);
-      cleanupConnections(false);
-    },
-    onConnectErrorHandler: () => chatState.setIsFindingPartner(false),
-    authId: auth.authId,
-    roomId
-  });
-
-  // Use modular hooks for side effects (same as text chat)
-  useFaviconManager({
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently
-  });
-
-  useSystemMessages({
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently,
-    partnerInterests,
-    interests,
-    messages: chatState.messages,
-    setMessages: chatState.setMessages
-  });
-
-  // Enhanced video chat actions
-  const { handleFindOrDisconnect, handleSendMessage, handleInputChange } = useVideoChatActions({
-    // Base chat action props
-    isConnected,
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    setIsFindingPartner: chatState.setIsFindingPartner,
-    setIsPartnerConnected: chatState.setIsPartnerConnected,
-    setPartnerInfo: chatState.setPartnerInfo,
-    setIsPartnerTyping: chatState.setIsPartnerTyping,
-    setPartnerInterests,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    addMessage: chatState.addMessage,
-    addSystemMessage: chatState.addSystemMessage,
-    emitLeaveChat,
-    emitFindPartner,
-    emitMessage,
-    emitTypingStart,
-    emitTypingStop,
-    setCurrentMessage: chatState.setCurrentMessage,
-    interests,
-    authId: auth.authId,
-    username: auth.username,
+    // Socket state
+    socket,
     
-    // Video-specific props
-    hasCameraPermission,
-    initializeCamera,
-    cleanupConnections,
-    setupPeerConnection: (roomId: string) => setupPeerConnection(roomId, true)
-  });
+    // Actions
+    chatActions,
+    handleUsernameClick
+  } = useVideoChat();
 
-  // Auto-search for partner when connected and camera is ready
-  useEffect(() => {
-    if (isConnected && !auth.isLoading && !chatState.isPartnerConnected && !chatState.isFindingPartner && hasCameraPermission !== undefined) {
-      if (hasCameraPermission === false) {
-        chatState.addSystemMessage('Camera access required for video chat.');
-        return;
-      }
-      
-      if (!localStream) {
-        initializeCamera().then((stream) => {
-          if (stream) {
-            chatState.setIsFindingPartner(true);
-            chatState.addSystemMessage('Searching for a video chat partner...');
-            setIsSelfDisconnectedRecently(false);
-            setIsPartnerLeftRecently(false);
-            
-            emitFindPartner({
-              chatType: 'video',
-              interests,
-              authId: auth.authId
-            });
-          }
-        });
-      } else {
-        chatState.setIsFindingPartner(true);
-        chatState.addSystemMessage('Searching for a video chat partner...');
-        setIsSelfDisconnectedRecently(false);
-        setIsPartnerLeftRecently(false);
-        
-        emitFindPartner({
-          chatType: 'video',
-          interests,
-          authId: auth.authId
-        });
-      }
-    }
-  }, [isConnected, auth.isLoading, chatState.isPartnerConnected, chatState.isFindingPartner, interests, auth.authId, emitFindPartner, hasCameraPermission, localStream, initializeCamera, chatState.setIsFindingPartner, chatState.addSystemMessage]);
-
-  // Navigation cleanup effect
-  useEffect(() => {
-    if (pathname === '/video-chat') {
-      chatState.setIsFindingPartner(false);
-      chatState.setIsPartnerConnected(false);
-      chatState.setMessages([]);
-      chatState.setPartnerInfo(null);
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      setRoomId(null);
-    }
-  }, [pathname, chatState]);
-
-  // Initialize camera on mount
-  useEffect(() => {
-    setIsMounted(true);
-    if (hasCameraPermission === undefined) {
-      initializeCamera();
-    }
-  }, [initializeCamera, hasCameraPermission]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cleanupConnections(true);
-    };
-  }, [cleanupConnections]);
-
-  if (!isMounted || auth.isLoading) {
+  // ✅ LOADING SCREEN: Clean and simple
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -360,39 +102,60 @@ const VideoChatPageClientContent: React.FC = () => {
     );
   }
 
-  const handleUsernameClick = (authId: string, clickPosition: { x: number; y: number }) => {
-    console.log('Username clicked for authId:', authId, clickPosition);
-  };
+  // ✅ CONNECTION ERROR SCREEN: Clean error handling
+  if (hasConnectionError) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-bold mb-2">Connection Error</h2>
+          <p className="text-gray-600 mb-4">{socket.connectionError}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const videoWindowStyle = isMobile ? {
-    width: '100vw',
-    height: '200px',
-    maxWidth: '100vw',
-    maxHeight: '200px'
-  } : {
-    width: '640px',
-    height: '240px',
-    minHeight: '240px',
-    maxHeight: '240px'
-  };
+  // ✅ CAMERA PERMISSION ERROR: Specific error for video chat
+  if (webrtc.hasCameraPermission === false) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-yellow-500 text-6xl mb-4">📷</div>
+          <h2 className="text-xl font-bold mb-2">Camera Access Required</h2>
+          <p className="text-gray-600 mb-4">
+            Video chat requires camera and microphone permissions. 
+            Please enable them and refresh the page.
+          </p>
+          <button 
+            onClick={() => webrtc.initializeCamera()}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 mr-2"
+          >
+            Try Again
+          </button>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const chatWindowStyleAdjusted = isMobile ? {
-    width: '100vw',
-    height: 'calc(100vh - 300px)',
-    maxWidth: '100vw'
-  } : {
-    width: '640px',
-    height: '300px',
-    minHeight: '300px',
-    maxHeight: '300px'
-  };
-
+  // ✅ MAIN VIDEO CHAT INTERFACE: Clean and modular
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
       
       <ProfilePopupProvider>
-        {/* Top Bar - Same as text chat */}
+        {/* Top Bar */}
         <div className="fixed top-0 right-0 z-50">
           <TopBar />
         </div>
@@ -404,7 +167,7 @@ const VideoChatPageClientContent: React.FC = () => {
           isMobile ? "h-screen w-screen p-2 overflow-hidden" : "h-full p-4"
         )}>
           
-          {/* Video Controls Window */}
+          {/* ✅ VIDEO CONTROLS WINDOW: Reusable component */}
           <div className={cn(
             'window flex flex-col relative',
             pinkThemeActive && 'biscuit-frame'
@@ -423,19 +186,19 @@ const VideoChatPageClientContent: React.FC = () => {
 
             <div className="flex-1 flex justify-center items-center min-h-0 overflow-hidden p-2">
               <VideoControls
-                localVideoRef={localVideoRef}
-                remoteVideoRef={remoteVideoRef}
-                hasCameraPermission={hasCameraPermission}
+                localVideoRef={webrtc.localVideoRef}
+                remoteVideoRef={webrtc.remoteVideoRef}
+                hasCameraPermission={webrtc.hasCameraPermission}
                 isFindingPartner={chatState.isFindingPartner}
                 isPartnerConnected={chatState.isPartnerConnected}
-                connectionError={connectionError}
+                connectionError={socket.connectionError}
                 theme={effectivePageTheme}
                 isMobile={isMobile}
               />
             </div>
           </div>
 
-          {/* Chat Window - Reusing the exact same component as text chat */}
+          {/* ✅ CHAT WINDOW: Reusing the exact same component as text chat */}
           <div className={cn(
             'window flex flex-col relative',
             pinkThemeActive && 'biscuit-frame'
@@ -454,45 +217,26 @@ const VideoChatPageClientContent: React.FC = () => {
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ChatWindow
-                messages={chatState.messages.map(msg => ({
-                  id: msg.id,
-                  content: msg.text,
-                  sender: msg.sender === 'me' ? 'self' : msg.sender,
-                  timestamp: msg.timestamp?.getTime(),
-                  senderUsername: msg.senderUsername,
-                  senderAuthId: msg.senderAuthId,
-                  senderDisplayNameColor: msg.senderDisplayNameColor,
-                  senderDisplayNameAnimation: msg.senderDisplayNameAnimation,
-                  senderRainbowSpeed: msg.senderRainbowSpeed
-                }))}
-                onSendMessage={handleSendMessage}
+                messages={mappedMessages}
+                onSendMessage={chatActions.handleSendMessage}
                 inputValue={chatState.currentMessage}
-                onInputChange={handleInputChange}
+                onInputChange={chatActions.handleInputChange}
                 isPartnerTyping={chatState.isPartnerTyping}
                 partnerStatus={chatState.partnerInfo?.status || 'offline'}
-                partnerInfo={chatState.partnerInfo ? {
-                  username: chatState.partnerInfo.username,
-                  displayName: chatState.partnerInfo.displayName,
-                  avatar: chatState.partnerInfo.avatarUrl || '/default-avatar.png',
-                  displayNameColor: chatState.partnerInfo.displayNameColor,
-                  displayNameAnimation: chatState.partnerInfo.displayNameAnimation,
-                  rainbowSpeed: chatState.partnerInfo.rainbowSpeed,
-                  authId: chatState.partnerInfo.authId
-                } : undefined}
-                ownInfo={{
-                  username: auth.username || "You",
-                  authId: auth.authId,
-                  displayNameColor: auth.displayNameColor,
-                  displayNameAnimation: auth.displayNameAnimation
-                }}
-                isConnected={isConnected}
+                partnerInfo={memoizedPartnerInfo}
+                ownInfo={memoizedOwnInfo}
+                isConnected={socket.isConnected}
                 isPartnerConnected={chatState.isPartnerConnected}
                 theme={effectivePageTheme}
                 onUsernameClick={handleUsernameClick}
                 isMobile={isMobile}
                 isScrollEnabled={true}
-                onFindOrDisconnect={handleFindOrDisconnect}
-                findOrDisconnectDisabled={!isConnected || !!connectionError || hasCameraPermission === false}
+                onFindOrDisconnect={chatActions.handleFindOrDisconnect}
+                findOrDisconnectDisabled={
+                  !socket.isConnected || 
+                  !!socket.connectionError || 
+                  webrtc.hasCameraPermission === false
+                }
                 findOrDisconnectText={
                   chatState.isPartnerConnected 
                     ? (isMobile ? 'Skip' : 'Skip') 
@@ -504,16 +248,26 @@ const VideoChatPageClientContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Error states */}
-          {connectionError && (
+          {/* ✅ STATUS INDICATORS: Clean and informative */}
+          {socket.connectionError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm rounded window">
-              Connection Error: {connectionError}
+              Connection Error: {socket.connectionError}
             </div>
           )}
 
-          {hasCameraPermission === false && (
+          {webrtc.hasCameraPermission === false && (
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 text-sm rounded window">
               Camera access required for video chat. Please enable camera permissions.
+            </div>
+          )}
+
+          {/* ✅ WebRTC CONNECTION STATUS: For debugging */}
+          {process.env.NODE_ENV === 'development' && webrtc.peerConnection && (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-3 py-2 text-sm rounded window">
+              WebRTC: {webrtc.connectionState}
+              {webrtc.connectionState === 'connected' && ' 🎥'}
+              {webrtc.connectionState === 'connecting' && ' ⏳'}
+              {webrtc.connectionState === 'failed' && ' ❌'}
             </div>
           )}
         </div>

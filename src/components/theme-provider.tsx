@@ -24,6 +24,7 @@ const ThemeProviderContext = createContext<ThemeProviderContextState | undefined
 
 const DYNAMIC_THEME_STYLE_ID = 'dynamic-win98-theme-style';
 const WIN7_CSS_LINK_ID = 'win7-css-link';
+const WINXP_CSS_LINK_ID = 'winxp-css-link'; // ✅ ADD XP CSS ID
 
 export function ThemeProvider({
   children,
@@ -34,6 +35,26 @@ export function ThemeProvider({
 
   // Start with Windows 98 but allow switching to Windows 7
   const [userSelectedTheme, setUserSelectedTheme] = useState<Theme>('theme-98');
+
+  // ✅ NEW: Helper function to remove Windows 7 CSS
+  const removeWin7CSS = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const win7Link = document.getElementById(WIN7_CSS_LINK_ID);
+    if (win7Link) {
+      win7Link.remove();
+      console.log("ThemeProvider: Removed Windows 7 CSS on home navigation");
+    }
+  }, []);
+
+  // ✅ NEW: Helper function to remove Windows XP CSS
+  const removeWinXPCSS = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const winxpLink = document.getElementById(WINXP_CSS_LINK_ID);
+    if (winxpLink) {
+      winxpLink.remove();
+      console.log("ThemeProvider: Removed Windows XP CSS on home navigation");
+    }
+  }, []);
 
   // Load saved theme from localStorage on mount
   useEffect(() => {
@@ -102,26 +123,35 @@ export function ThemeProvider({
     return () => clearTimeout(timer);
   }, [currentAppliedTheme, storageKey]);
 
-  // Force clear sub-themes when on home page
+  // ✅ ENHANCED: Force clear all external themes when on home page
   useEffect(() => {
     if (pathname === '/' && typeof window !== 'undefined') {
-      console.log("ThemeProvider: On home page, clearing any sub-themes");
+      console.log("ThemeProvider: On home page, clearing ALL external themes and CSS");
       
       const htmlElement = document.documentElement;
       
-      // Remove any existing subtheme classes (both 98 and 7)
+      // Remove any existing subtheme classes (both 98, 7, and XP)
       const available98Stamps = [
         { cssFile: 'pink-theme.css' },
         { cssFile: 'starpattern-theme.css' },
         { cssFile: 'dark-theme.css' },
-        { cssFile: '666-theme.css' }
+        { cssFile: '666-theme.css' },
+        { cssFile: 'watercolor-theme.css' }
       ];
       
       const available7Stamps = [
-        { cssFile: 'frutiger1-theme.css' }
+        { cssFile: 'frutiger1-theme.css' },
+        { cssFile: 'frutiger2-theme.css' },
+        { cssFile: 'ps3-theme.css' },
+        { cssFile: 'leaf-theme.css' }
+      ];
+
+      // ✅ NEW: Add XP stamps
+      const availableXPStamps = [
+        { cssFile: 'bliss-theme.css' }
       ];
       
-      [...available98Stamps, ...available7Stamps].forEach(stamp => {
+      [...available98Stamps, ...available7Stamps, ...availableXPStamps].forEach(stamp => {
         if (stamp.cssFile) {
           const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
           if (htmlElement.classList.contains(existingSubThemeClass)) {
@@ -137,8 +167,19 @@ export function ThemeProvider({
         link.remove();
         console.log("ThemeProvider: Removed sub-theme CSS link");
       }
+
+      // ✅ CRITICAL FIX: Remove Windows 7 and XP CSS when navigating to home
+      removeWin7CSS();
+      removeWinXPCSS();
+
+      // ✅ CRITICAL FIX: Reset to Windows 98 theme on home page
+      htmlElement.classList.remove('theme-7');
+      htmlElement.classList.add('theme-98');
+      setUserSelectedTheme('theme-98');
+      
+      console.log("ThemeProvider: ✅ Forced reset to Windows 98 theme on home page");
     }
-  }, [pathname]);
+  }, [pathname, removeWin7CSS, removeWinXPCSS]); // ✅ ADD DEPENDENCIES
 
   const setThemeCallback = useCallback((newTheme: Theme) => {
     setUserSelectedTheme(newTheme);

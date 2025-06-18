@@ -1,3 +1,4 @@
+// ===== ENHANCED useVideoChatActions.ts =====
 // src/app/video-chat/hooks/useVideoChatActions.ts - ENHANCED VERSION
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -17,8 +18,8 @@ interface VideoChatActionsProps {
   addMessage: (message: any) => void;
   addSystemMessage: (text: string) => void;
   emitLeaveChat: () => void;
-  emitFindPartner: (data: any) => void;
-  emitMessage: (data: any) => void;
+  emitFindPartner: (data: any) => boolean;
+  emitMessage: (data: any) => boolean;
   emitTypingStart: () => void;
   emitTypingStop: () => void;
   setCurrentMessage: (value: string) => void;
@@ -36,11 +37,23 @@ interface VideoChatActionsProps {
 export const useVideoChatActions = (props: VideoChatActionsProps) => {
   const { toast } = useToast();
   const isProcessingFindOrDisconnect = useRef(false);
+  
+  // ✅ CRITICAL FIX: Store props in ref to prevent callback recreation
+  const propsRef = useRef(props);
+  
+  // Update props ref without causing re-renders
+  propsRef.current = props;
 
+  // ✅ ENHANCED: Video chat specific find/disconnect handler
   const handleFindOrDisconnect = useCallback(async () => {
-    if (isProcessingFindOrDisconnect.current) return;
+    const currentProps = propsRef.current;
     
-    if (!props.isConnected) {
+    if (isProcessingFindOrDisconnect.current) {
+      console.log('[VideoChatActions] Find/disconnect already in progress');
+      return;
+    }
+    
+    if (!currentProps.isConnected) {
       toast({ 
         title: "Not Connected", 
         description: "Video chat server connection not yet established.", 
@@ -49,11 +62,11 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
       return;
     }
 
-    // Check camera permission for video chat
-    if (props.hasCameraPermission === false) {
+    // ✅ ENHANCED: Check camera permission for video chat
+    if (currentProps.hasCameraPermission === false) {
       toast({ 
         title: "Camera Required", 
-        description: "Camera access is required for video chat.", 
+        description: "Camera access is required for video chat. Please enable camera permissions.", 
         variant: "destructive" 
       });
       return;
@@ -62,47 +75,75 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
     isProcessingFindOrDisconnect.current = true;
 
     try {
-      if (props.isPartnerConnected) {
-        // Disconnect and find new partner
-        props.addSystemMessage('You have disconnected from video chat.');
-        props.setIsPartnerConnected(false);
-        props.setPartnerInfo(null);
-        props.setIsPartnerTyping(false);
-        props.setPartnerInterests([]);
-        props.emitLeaveChat();
+      if (currentProps.isPartnerConnected) {
+        // ✅ ENHANCED: Disconnect and find new partner with WebRTC cleanup
+        console.log('[VideoChatActions] Disconnecting from current partner');
         
-        // Clean up WebRTC but keep local stream
-        props.cleanupConnections(false);
+        currentProps.addSystemMessage('You have disconnected from video chat.');
+        currentProps.setIsPartnerConnected(false);
+        currentProps.setPartnerInfo(null);
+        currentProps.setIsPartnerTyping(false);
+        currentProps.setPartnerInterests([]);
+        currentProps.emitLeaveChat();
         
-        props.setIsFindingPartner(true);
-        props.setIsSelfDisconnectedRecently(true);
-        props.setIsPartnerLeftRecently(false);
+        // ✅ CRITICAL: Clean up WebRTC but keep local stream for next match
+        currentProps.cleanupConnections(false);
         
-        // Ensure camera is still active
-        const stream = await props.initializeCamera();
+        // Wait a moment for cleanup
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Start finding new partner
+        currentProps.setIsFindingPartner(true);
+        currentProps.setIsSelfDisconnectedRecently(true);
+        currentProps.setIsPartnerLeftRecently(false);
+        
+        // Ensure camera is still active before searching
+        const stream = await currentProps.initializeCamera();
         if (stream) {
-          props.emitFindPartner({
+          console.log('[VideoChatActions] Camera ready, searching for new partner');
+          const success = currentProps.emitFindPartner({
             chatType: 'video',
-            interests: props.interests,
-            authId: props.authId
+            interests: currentProps.interests,
+            authId: currentProps.authId
           });
+          
+          if (!success) {
+            currentProps.setIsFindingPartner(false);
+            currentProps.addSystemMessage('Failed to start partner search. Please try again.');
+          }
         } else {
+          console.error('[VideoChatActions] Camera not available for new search');
           toast({
             title: "Camera Error",
             description: "Cannot find new partner without camera access.",
             variant: "destructive"
           });
-          props.setIsFindingPartner(false);
+          currentProps.setIsFindingPartner(false);
         }
-      } else if (props.isFindingPartner) {
-        // Stop searching
-        props.setIsFindingPartner(false);
-        props.setIsSelfDisconnectedRecently(false);
-        props.setIsPartnerLeftRecently(false);
-        props.addSystemMessage('Stopped searching for video chat partner.');
+        
+      } else if (currentProps.isFindingPartner) {
+        // ✅ ENHANCED: Stop searching
+        console.log('[VideoChatActions] Stopping partner search');
+        
+        currentProps.setIsFindingPartner(false);
+        currentProps.setIsSelfDisconnectedRecently(false);
+        currentProps.setIsPartnerLeftRecently(false);
+        currentProps.addSystemMessage('Stopped searching for video chat partner.');
+        
       } else {
-        // Start searching - ensure camera access first
-        const stream = await props.initializeCamera();
+        // ✅ ENHANCED: Start searching - ensure camera access first
+        console.log('[VideoChatActions] Starting partner search');
+        
+        // Check camera permission first
+        if (currentProps.hasCameraPermission === undefined) {
+          toast({
+            title: "Camera Initializing",
+            description: "Please wait while we set up your camera...",
+          });
+          return;
+        }
+        
+        const stream = await currentProps.initializeCamera();
         if (!stream) {
           toast({
             title: "Camera Required",
@@ -112,19 +153,24 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
           return;
         }
         
-        props.setIsFindingPartner(true);
-        props.setIsSelfDisconnectedRecently(false);
-        props.setIsPartnerLeftRecently(false);
-        props.addSystemMessage('Searching for a video chat partner...');
+        currentProps.setIsFindingPartner(true);
+        currentProps.setIsSelfDisconnectedRecently(false);
+        currentProps.setIsPartnerLeftRecently(false);
+        currentProps.addSystemMessage('Searching for a video chat partner...');
         
-        props.emitFindPartner({
+        const success = currentProps.emitFindPartner({
           chatType: 'video',
-          interests: props.interests,
-          authId: props.authId
+          interests: currentProps.interests,
+          authId: currentProps.authId
         });
+        
+        if (!success) {
+          currentProps.setIsFindingPartner(false);
+          currentProps.addSystemMessage('Failed to start partner search. Please try again.');
+        }
       }
     } catch (error) {
-      console.error('Video chat action error:', error);
+      console.error('[VideoChatActions] Error in find/disconnect:', error);
       toast({
         title: "Video Chat Error",
         description: "An error occurred while managing video chat connection.",
@@ -133,47 +179,90 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
     } finally {
       setTimeout(() => {
         isProcessingFindOrDisconnect.current = false;
-      }, 200);
+      }, 1000); // Longer timeout for video operations
     }
-  }, [props, toast]);
+  }, [toast]);
 
+  // ✅ ENHANCED: Send message handler with video chat context
   const handleSendMessage = useCallback((message: string) => {
-    if (!props.isPartnerConnected) {
+    const currentProps = propsRef.current;
+    
+    if (!currentProps.isPartnerConnected) {
       toast({
         title: "Not Connected",
-        description: "You must be connected to a partner to send messages.",
+        description: "You must be connected to a video chat partner to send messages.",
         variant: "destructive"
       });
       return;
     }
 
-    // Add message to local state
-    props.addMessage({
-      text: message,
-      sender: 'me'
-    });
-
-    // Emit message through socket
-    props.emitMessage({
-      roomId: '', // Room ID is handled by the socket hook
-      message: message,
-      username: props.username,
-      authId: props.authId
-    });
-
-    // Stop typing indicator
-    props.emitTypingStop();
-  }, [props, toast]);
-
-  const handleInputChange = useCallback((value: string) => {
-    props.setCurrentMessage(value);
-    
-    if (value.trim() && props.isPartnerConnected) {
-      props.emitTypingStart();
-    } else {
-      props.emitTypingStop();
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) {
+      return;
     }
-  }, [props]);
+
+    if (trimmedMessage.length > 2000) {
+      toast({
+        title: "Message Too Long",
+        description: "Messages must be 2000 characters or less.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Add message to local state
+      currentProps.addMessage({
+        text: trimmedMessage,
+        sender: 'me'
+      });
+
+      // Emit message through socket
+      const success = currentProps.emitMessage({
+        roomId: '', // Room ID is handled by the socket hook
+        message: trimmedMessage,
+        username: currentProps.username,
+        authId: currentProps.authId
+      });
+
+      if (!success) {
+        toast({
+          title: "Message Failed",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Stop typing indicator
+      currentProps.emitTypingStop();
+      
+      console.log('[VideoChatActions] Message sent successfully');
+    } catch (error) {
+      console.error('[VideoChatActions] Error sending message:', error);
+      toast({
+        title: "Send Error",
+        description: "Failed to send message.",
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
+
+  // ✅ ENHANCED: Input change handler with video chat optimizations
+  const handleInputChange = useCallback((value: string) => {
+    const currentProps = propsRef.current;
+    
+    currentProps.setCurrentMessage(value);
+    
+    // Only send typing indicators if partner is connected
+    if (currentProps.isPartnerConnected) {
+      if (value.trim() && value.length <= 2000) {
+        currentProps.emitTypingStart();
+      } else {
+        currentProps.emitTypingStop();
+      }
+    }
+  }, []);
 
   return {
     handleFindOrDisconnect,
