@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -373,7 +372,6 @@ html.theme-transitioning * {
 }
     
 
-
 .win7-customizer-wrapper {
   all: initial !important;
   position: fixed !important;
@@ -383,8 +381,7 @@ html.theme-transitioning * {
   opacity: 1 !important;
 }
 
-
-/* MOBILE RESPONSIVE CSS - CHAT PAGE ONLY */
+/* ===== MOBILE RESPONSIVE CSS - CHAT PAGE ONLY - FIXED VERSION ===== */
 
 /* Scope all mobile styles to chat page containers */
 .chat-page-container .window-body-content {
@@ -392,88 +389,127 @@ html.theme-transitioning * {
   overflow: hidden;
 }
 
-/* Mobile-specific chat styling - only apply to chat page */
+/* ===== CRITICAL MOBILE INPUT AREA FIX ===== */
 @media (max-width: 768px) {
-  /* Prevent viewport resizing issues - CHAT PAGE ONLY */
-  .chat-page-container {
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
+  /* ✅ CRITICAL FIX: Ensure input area is always visible on mobile */
+  .chat-page-container .input-area,
+  .chat-page-container .mobile-input-container {
+    position: relative !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    z-index: 10 !important;
+    flex-shrink: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: inherit !important;
+    min-height: 70px !important;
+    max-height: 70px !important;
+    border-top: 1px solid rgba(0,0,0,0.1) !important;
   }
   
-  /* Chat window takes full viewport - CHAT PAGE ONLY */
+  /* ✅ FIXED: Remove problematic height calculation that was hiding input */
+  .chat-page-container .window-body-content > div:first-child {
+    /* Don't set fixed height - let flexbox handle it */
+    height: auto !important;
+    max-height: none !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* ✅ Ensure window uses full viewport but allows proper flexbox */
   .chat-page-container .window {
     height: 100vh !important;
-    height: 100dvh !important; /* Use dynamic viewport height if supported */
     max-height: 100vh !important;
-    max-height: 100dvh !important;
-    overflow: hidden;
-  }
-  
-  /* Ensure messages container respects height - CHAT PAGE ONLY */
-  .chat-page-container .window-body-content {
-    height: 100% !important;
-    max-height: 100% !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    display: flex !important;
+    flex-direction: column !important;
     overflow: hidden !important;
   }
   
-  /* Mobile message container styling - CHAT PAGE ONLY */
-  .chat-page-container .mobile-messages-container {
-    /* For bottom-to-top messaging */
+  /* ✅ Ensure window body is flexible and doesn't hide input */
+  .chat-page-container .window-body-content {
     display: flex !important;
-    flex-direction: column-reverse !important;
-    justify-content: flex-start !important;
-    overflow-y: auto !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  
+  /* ✅ Prevent viewport resizing issues */
+  .chat-page-container {
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior: contain !important;
   }
   
-  /* Messages wrapper for proper ordering - CHAT PAGE ONLY */
-  .chat-page-container .mobile-messages-wrapper {
-    display: flex;
-    flex-direction: column;
-    min-height: fit-content;
-    width: 100%;
-  }
-  
-  /* Prevent input zoom on iOS - CHAT PAGE ONLY */
+  /* ✅ Prevent input zoom on iOS */
   .chat-page-container input[type="text"], 
   .chat-page-container input[type="search"], 
   .chat-page-container textarea {
     font-size: 16px !important;
-    -webkit-appearance: none;
-    border-radius: 0;
+    -webkit-appearance: none !important;
+    border-radius: 0 !important;
   }
   
-  /* Prevent keyboard from pushing content - CHAT PAGE ONLY */
-  .chat-page-container .mobile-input-area {
-    position: relative;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 10;
+  /* ✅ Make buttons touch-friendly */
+  .chat-page-container .input-area button {
+    min-height: 44px !important;
+    touch-action: manipulation !important;
   }
   
-  /* Handle virtual keyboard viewport changes - CHAT PAGE ONLY */
-  .chat-page-container .mobile-viewport-adjust {
-    height: 100vh;
-    height: 100dvh; /* Dynamic viewport height */
+  /* ✅ Force input area form to be visible */
+  .chat-page-container .input-area form {
+    display: flex !important;
+    width: 100% !important;
+    height: 100% !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px !important;
   }
   
-  /* Smooth transitions for keyboard opening/closing - CHAT PAGE ONLY */
-  .chat-page-container .mobile-chat-transition {
-    transition: height 0.3s ease-in-out;
+  /* ✅ Ensure input field is properly sized */
+  .chat-page-container .input-area input[type="text"] {
+    flex: 1 !important;
+    min-height: 40px !important;
+    padding: 8px 12px !important;
   }
   
-  /* Ensure proper spacing for safe areas - CHAT PAGE ONLY */
-  .chat-page-container .mobile-safe-area {
-    padding-bottom: env(safe-area-inset-bottom);
+  /* ✅ Mobile message container bottom-anchored */
+  .chat-page-container .window-body-content > div:first-child {
+    justify-content: flex-end !important; /* Anchor messages to bottom */
+    padding-bottom: 5px !important;
+  }
+  
+  /* ✅ Mobile typing indicator positioning */
+  .chat-page-container [key="typing-indicator"],
+  .chat-page-container .typing-indicator-container {
+    order: 999 !important; /* Force typing indicator to bottom */
+    flex-shrink: 0 !important;
+    margin-bottom: 8px !important;
+    margin-top: 4px !important;
+  }
+  
+  /* ✅ Mobile message ordering */
+  .chat-page-container .message-row {
+    order: 1 !important; /* All messages above typing indicator */
+    flex-shrink: 0 !important;
+    margin-bottom: 4px !important;
+  }
+  
+  /* ✅ Empty state messages also anchored to bottom */
+  .chat-page-container .text-center.text-xs.italic {
+    margin-top: auto !important;
+    margin-bottom: 20px !important;
   }
 }
 
-/* Desktop-specific optimizations - CHAT PAGE ONLY */
+/* ===== DESKTOP-SPECIFIC OPTIMIZATIONS ===== */
 @media (min-width: 769px) {
-  /* Standard desktop scrolling behavior - CHAT PAGE ONLY */
+  /* Standard desktop scrolling behavior */
   .chat-page-container .desktop-messages-container {
     display: flex !important;
     flex-direction: column !important;
@@ -481,7 +517,7 @@ html.theme-transitioning * {
     overflow-x: hidden !important;
   }
   
-  /* Fixed chat window dimensions - CHAT PAGE ONLY */
+  /* Fixed chat window dimensions */
   .chat-page-container .window {
     width: 600px !important;
     height: 600px !important;
@@ -490,7 +526,7 @@ html.theme-transitioning * {
   }
 }
 
-/* Common scroll optimizations - CHAT PAGE ONLY */
+/* ===== SCROLL OPTIMIZATIONS ===== */
 .chat-page-container .messages-scroll-container {
   /* Optimize scrolling performance */
   will-change: scroll-position;
@@ -516,7 +552,7 @@ html.theme-transitioning * {
   }
 }
 
-/* Message row optimizations - CHAT PAGE ONLY */
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
 .chat-page-container .message-row {
   /* Prevent layout shift */
   contain: layout style;
@@ -525,7 +561,6 @@ html.theme-transitioning * {
   will-change: transform;
 }
 
-/* Input area optimizations - CHAT PAGE ONLY */
 .chat-page-container .input-area {
   /* Prevent layout shift */
   contain: layout;
@@ -535,7 +570,6 @@ html.theme-transitioning * {
   z-index: 10;
 }
 
-/* Typing indicator optimization - CHAT PAGE ONLY */
 .chat-page-container .typing-indicator {
   /* Smooth animations */
   will-change: opacity, transform;
@@ -544,7 +578,7 @@ html.theme-transitioning * {
   contain: layout style;
 }
 
-/* Windows 7 theme mobile adjustments - CHAT PAGE ONLY */
+/* ===== WINDOWS 7 THEME MOBILE ADJUSTMENTS ===== */
 @media (max-width: 768px) {
   .chat-page-container .glass-window-body {
     /* Reduce glass effects on mobile for performance */
@@ -556,9 +590,45 @@ html.theme-transitioning * {
     backdrop-filter: blur(3px) !important;
     -webkit-backdrop-filter: blur(3px) !important;
   }
+  
+  /* Theme-specific mobile input area styling */
+  .theme-98 .chat-page-container .input-area {
+    background: inherit !important;
+    border-top: inherit !important;
+  }
+  
+  .theme-98 .chat-page-container .input-area input[type="text"] {
+    background: inherit !important;
+    border: inherit !important;
+  }
+  
+  .theme-98 .chat-page-container .input-area button {
+    border: inherit !important;
+    background: inherit !important;
+  }
+  
+  .theme-7 .chat-page-container .input-area {
+    background: inherit !important;
+    backdrop-filter: inherit !important;
+    -webkit-backdrop-filter: inherit !important;
+    border-top: inherit !important;
+  }
+  
+  .theme-7 .chat-page-container .input-area input[type="text"] {
+    background: inherit !important;
+    backdrop-filter: inherit !important;
+    border: inherit !important;
+  }
+  
+  .theme-7 .chat-page-container .input-area button {
+    background: inherit !important;
+    backdrop-filter: inherit !important;
+    border: inherit !important;
+    color: inherit !important;
+  }
 }
 
-/* Ensure proper flexbox behavior - CHAT PAGE ONLY */
+/* ===== FLEXBOX BEHAVIOR FIXES ===== */
 .chat-page-container .flex-container {
   display: flex;
   min-height: 0;
@@ -571,7 +641,7 @@ html.theme-transitioning * {
   min-width: 0;
 }
 
-/* Fix for chat window height issues - CHAT PAGE ONLY */
+/* ===== CHAT WINDOW HEIGHT FIXES ===== */
 .chat-page-container .chat-window-fixed {
   height: 100%;
   display: flex;
@@ -591,123 +661,13 @@ html.theme-transitioning * {
   flex-grow: 0;
 }
 
-/* Ensure customizer appears above everything - CHAT PAGE ONLY */
+/* ===== ENSURE CUSTOMIZER APPEARS ABOVE EVERYTHING ===== */
 .chat-page-container .window.fixed[style*="z-index: 999999"] {
   z-index: 999999 !important;
   transform: translateZ(0); /* Force hardware acceleration */
 }
 
-
-
-
-
-
-
-/* ===== MOBILE BOTTOM-ANCHORED MESSAGES ===== */
-/* Add these styles to your globals.css to make messages appear from bottom on mobile */
-
-@media (max-width: 768px) {
-  /* Mobile-specific: Messages container anchored to bottom */
-  .chat-page-container .window-body-content > div:first-child {
-    /* Change from flex-start to flex-end for bottom anchoring */
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important; /* Anchor messages to bottom */
-    min-height: 100% !important; /* Ensure container fills available space */
-    padding-bottom: 5px !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-  
-  /* Ensure messages container takes full height */
-  .chat-page-container .window-body-content > div:first-child {
-    height: calc(100% - 70px) !important;
-    max-height: calc(100% - 70px) !important;
-  }
-  
-  /* Mobile message ordering: newest at bottom, scroll to show older */
-  .chat-page-container .message-row {
-    order: 1; /* All messages maintain document order */
-    flex-shrink: 0; /* Prevent message compression */
-    margin-bottom: 4px !important;
-  }
-  
-  /* Mobile typing indicator at bottom */
-  .chat-page-container [key="typing-indicator"] {
-    order: 999; /* Keep typing indicator at the very bottom */
-    flex-shrink: 0;
-  }
-  
-  /* Add bottom padding for new messages space */
-  .chat-page-container .message-row:last-child {
-    margin-bottom: 8px !important;
-  }
-  
-  /* Ensure scroll anchor is at bottom */
-  .chat-page-container div[style*="height: 1px"] {
-    order: 1000; /* Scroll anchor at very bottom */
-    margin-top: auto; /* Push to bottom */
-  }
-  
-  /* Mobile: Auto-scroll behavior for new messages */
-  .chat-page-container .sunken-panel,
-  .chat-page-container .tree-view,
-  .chat-page-container [class*="bg-white"] {
-    scroll-behavior: smooth !important;
-    overflow-y: auto !important;
-    overscroll-behavior: contain !important;
-  }
-  
-  /* Empty state messages also anchored to bottom on mobile */
-  .chat-page-container .text-center.text-xs.italic {
-    margin-top: auto !important; /* Push to bottom */
-    margin-bottom: 20px !important;
-  }
-}
-
-
-
-
-/* ===== MOBILE TYPING INDICATOR POSITIONING FIX ===== */
-/* Add these styles to your globals.css to ensure typing indicator appears below messages on mobile */
-
-@media (max-width: 768px) {
-  /* Mobile: Ensure typing indicator appears at the very bottom */
-  .chat-page-container [key="typing-indicator"] {
-    order: 999 !important; /* Force typing indicator to bottom */
-    margin-top: auto !important; /* Push to bottom if needed */
-    flex-shrink: 0 !important;
-    align-self: flex-start !important; /* Left align like other messages */
-  }
-  
-  /* Mobile: Messages container ordering */
-  .chat-page-container .message-row {
-    order: 1 !important; /* All messages above typing indicator */
-    flex-shrink: 0 !important;
-  }
-  
-  /* Mobile: Ensure proper spacing for typing indicator */
-  .chat-page-container .typing-indicator,
-  .chat-page-container [class*="typing"] {
-    margin-bottom: 8px !important; /* Space from input area */
-    margin-top: 4px !important; /* Space from last message */
-  }
-  
-  /* Mobile: Force typing indicator to bottom of messages area */
-  .chat-page-container .window-body-content > div:first-child > div:last-child {
-    margin-bottom: 0 !important; /* Remove extra spacing */
-  }
-  
-  /* Mobile: Ensure typing indicator styling matches messages */
-  .chat-page-container [key="typing-indicator"] {
-    padding-left: 8px !important; /* Match message indentation */
-    padding-right: 8px !important;
-    width: 100% !important;
-    text-align: left !important;
-  }
-}
-
-/* ===== ENSURE TYPING INDICATOR VISIBILITY ===== */
+/* ===== MOBILE TYPING INDICATOR ANIMATIONS ===== */
 @media (max-width: 768px) {
   /* Mobile: Make sure typing indicator is visible and positioned correctly */
   .chat-page-container .text-xs.italic {
@@ -725,7 +685,7 @@ html.theme-transitioning * {
     to { opacity: 0.7; transform: translateY(0); }
   }
   
-  /* Mobile: Typing dots animation for mobile */
+  /* Mobile: Typing dots animation */
   .chat-page-container .typing-indicator .flex {
     gap: 2px !important;
   }
@@ -757,191 +717,5 @@ html.theme-transitioning * {
       transform: scale(1.3);
       opacity: 1;
     }
-  }
-}
-
-/* ===== DESKTOP: Keep existing behavior ===== */
-@media (min-width: 769px) {
-  /* Desktop: Normal typing indicator positioning (no changes) */
-  .chat-page-container [key="typing-indicator"] {
-    order: initial !important;
-    margin-top: initial !important;
-  }
-}
-
-
-
-/* ===== REMOVE MOBILE INPUT AREA SPECIAL POSITIONING ===== */
-/* Add these styles to your globals.css to ensure input area behaves the same on mobile and desktop */
-
-@media (max-width: 768px) {
-  /* Remove any fixed positioning for mobile input area */
-  .chat-page-container .input-area {
-    position: relative !important; /* Same as desktop */
-    bottom: initial !important;
-    left: initial !important;
-    right: initial !important;
-    width: 100% !important; /* Normal width, not viewport width */
-    z-index: initial !important; /* Normal stacking */
-    background: inherit !important;
-    border-top: initial !important;
-    box-shadow: none !important;
-    padding-bottom: initial !important;
-    padding-left: initial !important;
-    padding-right: initial !important;
-  }
-  
-  /* Remove fixed positioning from flex container */
-  .chat-page-container .flex-shrink-0:last-child {
-    position: relative !important; /* Same as desktop */
-    bottom: initial !important;
-    left: initial !important;
-    right: initial !important;
-    width: 100% !important;
-    z-index: initial !important;
-  }
-  
-  /* Reset messages container height to normal calculation */
-  .chat-page-container .window-body-content > div:first-child {
-    height: auto !important; /* Let flexbox handle it */
-    max-height: none !important;
-    padding-bottom: initial !important;
-    margin-bottom: initial !important;
-  }
-  
-  /* Remove special mobile padding */
-  .chat-page-container .overflow-y-auto {
-    padding-bottom: initial !important;
-    margin-bottom: initial !important;
-  }
-  
-  /* Reset window height to normal */
-  .chat-page-container .window {
-    height: 100% !important; /* Same as desktop */
-    position: relative !important;
-  }
-  
-  /* Keep normal input area styling */
-  .chat-page-container .input-area form {
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    padding: 8px !important;
-    gap: 8px !important;
-    background: inherit !important;
-  }
-  
-  /* Keep mobile-friendly input field size but normal positioning */
-  .chat-page-container .input-area input[type="text"] {
-    flex: 1 !important;
-    font-size: 16px !important; /* Prevent iOS zoom */
-    min-height: 40px !important;
-    padding: 8px 12px !important;
-    /* Remove mobile-specific border radius and background */
-    border-radius: initial !important;
-    border: initial !important;
-    background: initial !important;
-  }
-  
-  /* Keep mobile-friendly button size but normal styling */
-  .chat-page-container .input-area button {
-    flex-shrink: 0 !important;
-    min-width: 60px !important;
-    height: 40px !important;
-    /* Remove mobile-specific border radius */
-    border-radius: initial !important;
-    font-size: 14px !important;
-    touch-action: manipulation !important;
-  }
-  
-  /* Remove safe area handling */
-  .chat-page-container .input-area {
-    padding-bottom: initial !important;
-    padding-left: initial !important;
-    padding-right: initial !important;
-  }
-  
-  /* Remove special mobile classes */
-  .mobile-input-area-container,
-  .mobile-input-fixed {
-    position: relative !important;
-    bottom: initial !important;
-    transform: initial !important;
-  }
-}
-
-/* ===== ENSURE UNIFIED STYLING ===== */
-@media (max-width: 768px) {
-  /* Theme-specific styling should work the same as desktop */
-  .theme-98 .chat-page-container .input-area {
-    /* Use same styling as desktop theme-98 */
-    background: inherit !important;
-    border-top: inherit !important;
-  }
-  
-  .theme-98 .chat-page-container .input-area input[type="text"] {
-    /* Use same styling as desktop theme-98 */
-    background: inherit !important;
-    border: inherit !important;
-  }
-  
-  .theme-98 .chat-page-container .input-area button {
-    /* Use same styling as desktop theme-98 */
-    border: inherit !important;
-    background: inherit !important;
-  }
-  
-  .theme-7 .chat-page-container .input-area {
-    /* Use same styling as desktop theme-7 */
-    background: inherit !important;
-    backdrop-filter: inherit !important;
-    -webkit-backdrop-filter: inherit !important;
-    border-top: inherit !important;
-  }
-  
-  .theme-7 .chat-page-container .input-area input[type="text"] {
-    /* Use same styling as desktop theme-7 */
-    background: inherit !important;
-    backdrop-filter: inherit !important;
-    border: inherit !important;
-  }
-  
-  .theme-7 .chat-page-container .input-area button {
-    /* Use same styling as desktop theme-7 */
-    background: inherit !important;
-    backdrop-filter: inherit !important;
-    border: inherit !important;
-    color: inherit !important;
-  }
-}
-
-/* ===== ENSURE MOBILE RESPONSIVENESS WITHOUT SPECIAL POSITIONING ===== */
-@media (max-width: 768px) {
-  /* Keep chat window responsive but with normal layout */
-  .chat-page-container .window {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-  }
-  
-  /* Keep title bar mobile-friendly */
-  .chat-page-container .title-bar {
-    height: 32px !important;
-    min-height: 32px !important;
-    flex-shrink: 0 !important;
-  }
-  
-  /* Keep window body responsive */
-  .chat-page-container .window-body {
-    padding: 4px !important;
-  }
-  
-  /* Mobile input area gets standard mobile height but normal positioning */
-  .chat-page-container .input-area {
-    height: 70px !important;
-    min-height: 70px !important;
-    max-height: 70px !important;
   }
 }

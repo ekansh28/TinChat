@@ -28,7 +28,7 @@ const available7Stamps: ThemeStamp[] = [
   { name: 'Frutiger Aero', imageUrl: '/theme_stamps/frutiger.png', cssFile: 'frutiger1-theme.css', dataAiHint: 'frutiger theme stamp' },
   { name: 'Frutiger Aero 2', imageUrl: '/theme_stamps/frutiger2.png', cssFile: 'frutiger2-theme.css', dataAiHint: 'frutiger2 theme stamp' },
   { name: 'PS3', imageUrl: '/theme_stamps/ps3.png', cssFile: 'ps3-theme.css', dataAiHint: 'ps3 theme stamp' },
-  { name: 'leaf', imageUrl: '/theme_stamps/leaf.png', cssFile: 'leaf-theme.css', dataAiHint: 'leaf theme stamp' },
+  { name: 'leaf', imageUrl: '/theme_stamps/ps3.png', cssFile: 'leaf-theme.css', dataAiHint: 'leaf theme stamp' },
   { name: 'Default', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp' },
 ];
 

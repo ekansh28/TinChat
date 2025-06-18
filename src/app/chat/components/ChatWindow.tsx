@@ -234,6 +234,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [isWindows7Theme]);
 
+  // ✅ MOBILE: Force input area visibility
+  useEffect(() => {
+    if (isMobile) {
+      const inputArea = document.querySelector('.input-area');
+      if (inputArea) {
+        const element = inputArea as HTMLElement;
+        element.style.display = 'block';
+        element.style.visibility = 'visible';
+        element.style.opacity = '1';
+        element.style.position = 'relative';
+        element.style.zIndex = '10';
+        element.style.flexShrink = '0';
+        console.log('[ChatWindow] Mobile: Force input area visibility');
+      }
+    }
+  }, [isMobile]);
+
   // ✅ CONTENT RENDERING: Same for mobile and desktop, with proper ordering for mobile
   const renderContent = () => {
     const content = [];
@@ -344,9 +361,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           isMobile && 'p-2'
         )} 
         style={{ 
-          height: `calc(100% - ${currentInputAreaHeight}px)`,
+          // ✅ FIXED: Let flexbox handle height instead of calc()
+          flex: '1 1 0%',
           minHeight: 0,
-          maxHeight: `calc(100% - ${currentInputAreaHeight}px)`,
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
           WebkitOverflowScrolling: 'touch',
           
@@ -357,11 +374,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           // ✅ MOBILE: Bottom-anchored (messages stick to bottom)
           // ✅ DESKTOP: Top-anchored (traditional)
           justifyContent: isMobile ? 'flex-end' : 'flex-start',
-          
-          // ✅ MOBILE: Ensure container fills available space for bottom anchoring
-          ...(isMobile && {
-            minHeight: '100%'
-          })
         }}
       >
         {/* ✅ MOBILE: Add spacer to push content to bottom when there are few messages */}
@@ -388,14 +400,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         />
       </div>
       
-      {/* ✅ UNIFIED INPUT AREA: Same positioning and styling for mobile and desktop */}
+      {/* ✅ FIXED: Input area with explicit mobile visibility */}
       <div 
-        className="flex-shrink-0 w-full"
+        className={cn(
+          "flex-shrink-0 w-full",
+          // ✅ MOBILE: Force visibility
+          isMobile && "mobile-input-container"
+        )}
         style={{ 
           height: `${currentInputAreaHeight}px`,
           minHeight: `${currentInputAreaHeight}px`,
           maxHeight: `${currentInputAreaHeight}px`,
           position: 'relative',
+          // ✅ MOBILE: Explicit visibility styles
+          ...(isMobile && {
+            zIndex: 10,
+            display: 'block',
+            visibility: 'visible',
+            opacity: 1,
+            backgroundColor: 'inherit',
+            borderTop: '1px solid rgba(0,0,0,0.1)',
+            flexShrink: 0
+          })
         }}
       >
         <InputArea

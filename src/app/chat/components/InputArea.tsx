@@ -1,4 +1,4 @@
-// src/app/chat/components/InputArea.tsx - WITH INTEGRATED EMOTE GALLERY
+// src/app/chat/components/InputArea.tsx - WITH MOBILE VISIBILITY FIXES
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button-themed';
@@ -40,6 +40,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const hoverIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const [currentEmojiIconUrl, setCurrentEmojiIconUrl] = useState(() => 
     `${EMOJI_BASE_URL_DISPLAY}${SMILE_EMOJI_FILENAME}`
@@ -102,6 +103,26 @@ const InputArea: React.FC<InputAreaProps> = ({
       headObserver.disconnect();
     };
   }, [checkWindows7Theme]);
+
+  // ✅ MOBILE: Force visibility on mount and theme changes
+  useEffect(() => {
+    if (isMobile && containerRef.current) {
+      const container = containerRef.current;
+      
+      // Force visibility styles
+      container.style.display = 'block';
+      container.style.visibility = 'visible';
+      container.style.opacity = '1';
+      container.style.position = 'relative';
+      container.style.zIndex = '10';
+      container.style.flexShrink = '0';
+      container.style.width = '100%';
+      container.style.minHeight = '70px';
+      container.style.maxHeight = '70px';
+      
+      console.log('[InputArea] Mobile: Applied visibility styles');
+    }
+  }, [isMobile, isWindows7Theme]);
 
   // MOBILE: Track keyboard visibility
   useEffect(() => {
@@ -264,26 +285,40 @@ const InputArea: React.FC<InputAreaProps> = ({
   }, []);
 
   return (
-    <div className={cn(
-      "flex-shrink-0 w-full",
-      isWindows7Theme ? 'input-area border-t dark:border-gray-600 glass-input-area' : 'input-area status-bar',
-      isMobile ? "p-2 mobile-input-area" : "p-2",
-      // MOBILE: Add extra padding for keyboard visibility
-      isMobile && keyboardVisible && "pb-4"
-    )} 
-    style={{ 
-      height: `${isMobile ? 70 : 60}px`,
-      minHeight: `${isMobile ? 70 : 60}px`,
-      maxHeight: `${isMobile ? 70 : 60}px`,
-      // MOBILE: Handle safe area and keyboard
-      paddingBottom: isMobile ? (keyboardVisible ? '1rem' : 'env(safe-area-inset-bottom)') : undefined,
-      // Force transparency for Windows 7 glass theme
-      ...(isWindows7Theme && {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.2)'
-      })
-    }}>
+    <div 
+      ref={containerRef}
+      className={cn(
+        "flex-shrink-0 w-full input-area",
+        isWindows7Theme ? 'border-t dark:border-gray-600 glass-input-area' : 'status-bar',
+        isMobile ? "p-2 mobile-input-area" : "p-2",
+        // MOBILE: Add extra padding for keyboard visibility
+        isMobile && keyboardVisible && "pb-4"
+      )} 
+      style={{ 
+        height: `${isMobile ? 70 : 60}px`,
+        minHeight: `${isMobile ? 70 : 60}px`,
+        maxHeight: `${isMobile ? 70 : 60}px`,
+        position: 'relative',
+        zIndex: 10,
+        display: 'block',
+        visibility: 'visible',
+        opacity: 1,
+        flexShrink: 0,
+        // MOBILE: Handle safe area and keyboard
+        paddingBottom: isMobile ? (keyboardVisible ? '1rem' : 'env(safe-area-inset-bottom)') : undefined,
+        // Force transparency for Windows 7 glass theme
+        ...(isWindows7Theme && {
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.2)'
+        }),
+        // ✅ MOBILE: Additional visibility enforcement
+        ...(isMobile && {
+          borderTop: '1px solid rgba(0,0,0,0.1)',
+          backgroundColor: 'inherit'
+        })
+      }}
+    >
       <form onSubmit={handleSubmit} className="w-full h-full">
         <div className="flex items-center w-full h-full gap-1">
           {/* Find/Stop/Skip Button - Fixed width */}
