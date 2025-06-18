@@ -112,16 +112,16 @@ const ChatPageClientContent: React.FC = () => {
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ChatWindow
-                messages={chat.mappedMessages}
+                messages={chat.mappedMessages || []} // ✅ SAFETY: Ensure messages is always an array
                 onSendMessage={chat.chatActions.handleSendMessage}
-                inputValue={chat.chatState.currentMessage}
+                inputValue={chat.chatState.currentMessage || ''} // ✅ SAFETY: Ensure string
                 onInputChange={chat.chatActions.handleInputChange}
-                isPartnerTyping={chat.chatState.isPartnerTyping}
+                isPartnerTyping={chat.chatState.isPartnerTyping || false} // ✅ SAFETY: Ensure boolean
                 partnerStatus={chat.chatState.partnerInfo?.status || 'offline'}
                 partnerInfo={chat.memoizedPartnerInfo}
                 ownInfo={chat.memoizedOwnInfo}
-                isConnected={chat.socket.isConnected}
-                isPartnerConnected={chat.chatState.isPartnerConnected}
+                isConnected={chat.socket.isConnected || false} // ✅ SAFETY: Ensure boolean
+                isPartnerConnected={chat.chatState.isPartnerConnected || false} // ✅ SAFETY: Ensure boolean
                 theme={chat.effectivePageTheme}
                 onUsernameClick={chat.handleUsernameClick}
                 isMobile={chat.isMobile}

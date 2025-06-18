@@ -1,4 +1,4 @@
-// src/app/chat/components/MessageRow.tsx - Enhanced with mobile bubbles
+// src/app/chat/components/MessageRow.tsx - UNIFIED LAYOUT (No mobile bubbles)
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
@@ -34,7 +34,7 @@ interface MessageRowProps {
     authId?: string;
   };
   onUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
-  isMobile: boolean;
+  isMobile: boolean; // Keep the prop but don't use it for different layouts
 }
 
 // Emote system constants
@@ -47,7 +47,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
   ownInfo,
   partnerInfo,
   onUsernameClick,
-  isMobile
+  isMobile // Ignored for layout purposes
 }) => {
   const { showProfile } = useProfilePopup();
   
@@ -86,13 +86,10 @@ const MessageRow: React.FC<MessageRowProps> = ({
     }
   }, [message.sender, message.senderAuthId]);
 
-  // ✅ SYSTEM MESSAGES: Always centered
+  // ✅ SYSTEM MESSAGES: Always centered (same for mobile and desktop)
   if (message.sender === 'system') {
     return (
-      <div className={cn(
-        "message-row system-message",
-        isMobile ? "mobile-message-system mb-2 mx-4" : "mb-2"
-      )}>
+      <div className="message-row system-message mb-2">
         <div className={cn(
           "text-center w-full text-xs italic",
           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
@@ -104,15 +101,14 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  // Divider logic for desktop
+  // Divider logic - only for desktop theme-7
   const showDivider = useMemo(() => {
-    return !isMobile && // ✅ Only show dividers on desktop
-      theme === 'theme-7' &&
+    return theme === 'theme-7' &&
       previousMessageSender &&
       ['self', 'partner'].includes(previousMessageSender) &&
       ['self', 'partner'].includes(message.sender) &&
       message.sender !== previousMessageSender;
-  }, [theme, previousMessageSender, message.sender, isMobile]);
+  }, [theme, previousMessageSender, message.sender]);
 
   // Enhanced message content with emojis
   const messageContent = useMemo(() => {
@@ -215,13 +211,11 @@ const MessageRow: React.FC<MessageRowProps> = ({
           onKeyDown={handleKeyDown}
           onMouseEnter={handleMouseEnter}
           className={cn(
-            "font-bold",
+            "font-bold mr-1",
             displayNameClass,
             "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
             "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded",
-            isMobile && "active:underline active:scale-105 touch-manipulation",
-            // ✅ MOBILE: Remove margin for bubble layout
-            isMobile ? "" : "mr-1"
+            isMobile && "active:underline active:scale-105 touch-manipulation"
           )}
           style={getDisplayNameStyle()}
           aria-label={`View ${displayName}'s profile`}
@@ -237,10 +231,8 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return (
       <span 
         className={cn(
-          "font-bold",
-          displayNameClass,
-          // ✅ MOBILE: Remove margin for bubble layout
-          isMobile ? "" : "mr-1"
+          "font-bold mr-1",
+          displayNameClass
         )}
         style={getDisplayNameStyle()}
       >
@@ -249,62 +241,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   };
 
-  // ✅ MOBILE vs DESKTOP: Different layouts
-  if (isMobile) {
-    // ✅ MOBILE: Bubble layout (WhatsApp/iMessage style)
-    return (
-      <>
-        {showDivider && (
-          <div
-            className="h-[2px] border border-[#CEDCE5] bg-[#64B2CF] mb-1"
-            aria-hidden="true"
-          />
-        )}
-        <div className={cn(
-          "message-row message-appear w-full flex",
-          isSelf ? "justify-end" : "justify-start",
-          "mb-1"
-        )}>
-          <div className={cn(
-            "message-bubble max-w-[80%] px-3 py-2 rounded-2xl break-words",
-            isSelf 
-              ? "message-bubble-self bg-blue-500 text-white ml-[20%] rounded-br-md" 
-              : "message-bubble-partner bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 mr-[20%] rounded-bl-md",
-            // Theme-specific styles
-            theme === 'theme-98' && isSelf && "bg-navy border border-gray-600",
-            theme === 'theme-98' && !isSelf && "bg-silver border border-gray-600 text-black",
-            theme === 'theme-7' && "backdrop-blur-sm"
-          )}>
-            {/* Username for partner messages or if different from previous */}
-            {(!isSelf || (previousMessageSender !== message.sender)) && (
-              <div className={cn(
-                "text-xs opacity-75 mb-1",
-                isSelf ? "text-blue-100" : "text-gray-600 dark:text-gray-400"
-              )}>
-                <UsernameComponent>
-                  {displayName}
-                </UsernameComponent>
-              </div>
-            )}
-            
-            {/* Message content */}
-            <div className={cn(
-              "text-sm leading-relaxed",
-              emotesLoading && "opacity-75"
-            )}>
-              {emotesLoading ? (
-                <span>Loading emotes...</span>
-              ) : (
-                messageContent
-              )}
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // ✅ DESKTOP: Traditional layout
+  // ✅ UNIFIED LAYOUT: Always use desktop-style layout (no mobile bubbles)
   return (
     <>
       {showDivider && (

@@ -41,7 +41,7 @@ const INPUT_AREA_HEIGHT = 60; // px
 const INPUT_AREA_HEIGHT_MOBILE = 70; // px
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
-  messages,
+  messages = [], // ✅ DEFAULT VALUE: Prevent undefined
   onSendMessage,
   inputValue,
   onInputChange,
@@ -72,9 +72,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const currentInputAreaHeight = isMobile ? INPUT_AREA_HEIGHT_MOBILE : INPUT_AREA_HEIGHT;
 
+  // ✅ SAFE MESSAGES: Ensure messages is always an array
+  const safeMessages = useMemo(() => {
+    if (!Array.isArray(messages)) {
+      console.warn('ChatWindow: messages prop is not an array, defaulting to empty array');
+      return [];
+    }
+    return messages;
+  }, [messages]);
+
   // Update recent partner data when messages change
   useEffect(() => {
-    const partnerMessages = messages.filter(msg => msg.sender === 'partner');
+    const partnerMessages = safeMessages.filter(msg => msg.sender === 'partner');
     if (partnerMessages.length > 0) {
       const latestPartnerMessage = partnerMessages[partnerMessages.length - 1];
       if (latestPartnerMessage.senderUsername || latestPartnerMessage.senderDisplayNameColor) {
@@ -86,7 +95,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         });
       }
     }
-  }, [messages]);
+  }, [safeMessages]); // ✅ Use safeMessages instead of messages
 
   // Check if pink theme is active
   const isPinkThemeActive = useMemo(() => {
@@ -143,20 +152,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     };
   }, [checkWindows7Theme]);
 
-  // ✅ MOBILE vs DESKTOP: Different scroll behaviors
+  // ✅ MOBILE vs DESKTOP SCROLLING: Different behaviors based on layout
   const scrollToBottom = useCallback((force = false) => {
     if (!messagesContainerRef.current) return;
     
     const container = messagesContainerRef.current;
     
     if (isMobile) {
-      // MOBILE: Always scroll to bottom to show newest messages
+      // MOBILE: Always scroll to bottom to show newest messages (bottom-anchored layout)
       if (force) {
         requestAnimationFrame(() => {
           container.scrollTop = container.scrollHeight;
         });
       } else {
-        // Auto-scroll on mobile for new messages
+        // Auto-scroll on mobile for new messages when near bottom
         const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
         if (isNearBottom) {
           requestAnimationFrame(() => {
@@ -165,7 +174,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         }
       }
     } else {
-      // DESKTOP: Traditional chat behavior
+      // DESKTOP: Traditional chat behavior (top-anchored)
       const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
       if (force || isAtBottom) {
         requestAnimationFrame(() => {
@@ -178,7 +187,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // Auto-scroll effect for new messages
   useEffect(() => { 
     scrollToBottom();
-  }, [messages, isPartnerTyping, scrollToBottom]);
+  }, [safeMessages, isPartnerTyping, scrollToBottom]); // ✅ Use safeMessages instead of messages
 
   const inputAndSendDisabled = useMemo(() => 
     !isConnected || !isPartnerConnected, 
@@ -225,12 +234,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [isWindows7Theme]);
 
-  // ✅ MOBILE vs DESKTOP: Different content rendering
+  // ✅ CONTENT RENDERING: Same for mobile and desktop, with proper ordering for mobile
   const renderContent = () => {
     const content = [];
     
     // Empty state messages
-    if (!isConnected && messages.length === 0) {
+    if (!isConnected && safeMessages.length === 0) {
       content.push(
         <div key="connecting" className={cn(
           "text-center text-xs italic p-4",
@@ -241,7 +250,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           Connecting to chat server...
         </div>
       );
-    } else if (isConnected && messages.length === 0 && !isPartnerConnected) {
+    } else if (isConnected && safeMessages.length === 0 && !isPartnerConnected) {
       content.push(
         <div key="waiting" className={cn(
           "text-center text-xs italic p-4",
@@ -254,34 +263,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
     
-    // ✅ MESSAGES: Always in chronological order (oldest to newest)
-    messages.forEach((msg, index) => {
-      content.push(
-        <MessageRow 
-          key={msg.id || index} 
-          message={msg} 
-          theme={theme} 
-          previousMessageSender={index > 0 ? messages[index-1]?.sender : undefined} 
-          ownInfo={ownInfo}
-          partnerInfo={partnerInfo}
-          onUsernameClick={onUsernameClick}
-          isMobile={isMobile}
-        />
-      );
+    // ✅ MESSAGES: Same layout for mobile and desktop - traditional format
+    // ✅ SAFE: Use safeMessages to prevent undefined access
+    safeMessages.forEach((msg, index) => {
+      // ✅ SAFETY CHECK: Ensure message object exists
+      if (msg && typeof msg === 'object') {
+        content.push(
+          <MessageRow 
+            key={msg.id || `msg-${index}`} 
+            message={msg} 
+            theme={theme} 
+            previousMessageSender={index > 0 ? safeMessages[index-1]?.sender : undefined} 
+            ownInfo={ownInfo}
+            partnerInfo={partnerInfo}
+            onUsernameClick={onUsernameClick}
+            isMobile={false} // ✅ UNIFIED LAYOUT: Always use desktop-style message format
+          />
+        );
+      }
     });
     
-    // Typing indicator at the end (newest position)
+    // ✅ TYPING INDICATOR: Always render at the end (after all messages)
+    // This ensures it appears at the bottom on mobile and after messages on desktop
     if (isPartnerTyping) {
       content.push(
-        <PartnerTypingIndicator 
+        <div 
           key="typing-indicator"
-          isTyping={isPartnerTyping} 
-          partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
-          theme={theme}
-          partnerInfo={partnerInfo}
-          recentPartnerData={recentPartnerData || undefined}
-          isMobile={isMobile} // ✅ ADDED: Pass mobile detection
-        />
+          className={cn(
+            // ✅ MOBILE: Add specific class for CSS targeting
+            "typing-indicator-container",
+            isMobile && "mobile-typing-indicator-container"
+          )}
+        >
+          <PartnerTypingIndicator 
+            isTyping={isPartnerTyping} 
+            partnerName={partnerInfo?.displayName || partnerInfo?.username || 'Stranger'}
+            theme={theme}
+            partnerInfo={partnerInfo}
+            recentPartnerData={recentPartnerData || undefined}
+            isMobile={false} // ✅ UNIFIED LAYOUT: Always use desktop-style indicator
+            className={cn(
+              // ✅ MOBILE: Add mobile-specific styling
+              isMobile && "mobile-typing-indicator"
+            )}
+          />
+        </div>
       );
     }
     
@@ -307,7 +333,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       {/* Render biscuit frame if pink theme is active and Windows 98 */}
       {isPinkThemeActive && theme === 'theme-98' && <BiscuitFrame />}
       
-      {/* ✅ MOBILE vs DESKTOP: Different layouts */}
+      {/* ✅ MOBILE vs DESKTOP: Different flex behaviors for message positioning */}
       <div 
         ref={messagesContainerRef}
         className={cn(
@@ -324,22 +350,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
           WebkitOverflowScrolling: 'touch',
           
-          // ✅ KEY DIFFERENCE: Mobile vs Desktop layout
+          // ✅ KEY DIFFERENCE: Mobile vs Desktop message positioning
           display: 'flex',
           flexDirection: 'column',
           
-          // ✅ MOBILE: Use flex-end to align content to bottom
-          // ✅ DESKTOP: Use flex-start for traditional top-down
+          // ✅ MOBILE: Bottom-anchored (messages stick to bottom)
+          // ✅ DESKTOP: Top-anchored (traditional)
           justifyContent: isMobile ? 'flex-end' : 'flex-start',
           
-          // ✅ MOBILE: Minimum height to fill container
+          // ✅ MOBILE: Ensure container fills available space for bottom anchoring
           ...(isMobile && {
             minHeight: '100%'
           })
         }}
       >
         {/* ✅ MOBILE: Add spacer to push content to bottom when there are few messages */}
-        {isMobile && messages.length > 0 && (
+        {isMobile && safeMessages.length > 0 && (
           <div className="flex-1 min-h-0" style={{ minHeight: '20px' }} />
         )}
         
@@ -362,13 +388,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         />
       </div>
       
-      {/* Input area - always at bottom */}
+      {/* ✅ UNIFIED INPUT AREA: Same positioning and styling for mobile and desktop */}
       <div 
         className="flex-shrink-0 w-full"
         style={{ 
           height: `${currentInputAreaHeight}px`,
           minHeight: `${currentInputAreaHeight}px`,
-          maxHeight: `${currentInputAreaHeight}px`
+          maxHeight: `${currentInputAreaHeight}px`,
+          position: 'relative',
         }}
       >
         <InputArea

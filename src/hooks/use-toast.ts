@@ -1,4 +1,6 @@
 // src/hooks/use-toast.ts
+'use client';
+
 import { useState, useCallback } from 'react';
 
 export interface ToastProps {
