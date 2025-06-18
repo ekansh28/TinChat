@@ -1,4 +1,4 @@
-// src/app/chat/components/InputArea.tsx - WITH CDN EMOJI PICKER
+// src/app/chat/components/InputArea.tsx - WITH SMALL CDN EMOJI PICKER
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button-themed';
@@ -445,25 +445,21 @@ const InputArea: React.FC<InputAreaProps> = ({
                   aria-expanded={isEmojiPickerOpen} 
                 />
                 
-                {/* CDN Emoji Picker */}
+                {/* Small CDN Emoji Picker */}
                 {isEmojiPickerOpen && (
                   <div 
                     ref={emojiPickerRef} 
-                    className="absolute bottom-full right-0 mb-1 w-64 bg-silver border border-raised z-30 window shadow-lg" 
-                    style={{ 
-                      boxShadow: 'inset 1px 1px #fff, inset -1px -1px gray, 1px 1px gray',
-                      maxHeight: '320px'
-                    }} 
+                    className="emoji-picker-window" 
                     role="dialog" 
                     aria-label="Emoji picker"
                   >
                     {/* Compact Header */}
-                    <div className="flex items-center justify-between px-2 py-1 border-b border-gray-400 bg-navy text-white">
-                      <h3 className="text-xs font-medium">Emojis</h3>
+                    <div className="emoji-picker-header">
+                      <h3 className="emoji-picker-title">Emojis</h3>
                       <button
                         type="button"
                         onClick={() => setIsEmojiPickerOpen(false)}
-                        className="text-white hover:text-gray-300 text-sm leading-none w-4 h-4 flex items-center justify-center"
+                        className="emoji-picker-close"
                         aria-label="Close emoji picker"
                       >
                         ×
@@ -471,85 +467,61 @@ const InputArea: React.FC<InputAreaProps> = ({
                     </div>
 
                     {/* Compact Search */}
-                    <div className="p-1">
+                    <div className="emoji-picker-search">
                       <input
                         type="text"
                         placeholder="Search..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full px-2 py-1 text-xs border border-gray-400 rounded"
+                        className="emoji-picker-search-input"
                         autoFocus
                       />
                     </div>
 
                     {/* Emoji Grid - No horizontal scroll, fixed columns */}
-                    <div 
-                      className="p-1 overflow-y-auto overflow-x-hidden" 
-                      style={{ 
-                        maxHeight: '240px',
-                        minHeight: '120px'
-                      }}
-                    >
+                    <div className="emoji-picker-grid-container">
                       {emotesLoading ? (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="text-center">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto mb-1"></div>
-                            <p className="text-xs text-gray-600">Loading...</p>
+                        <div className="emoji-picker-loading">
+                          <div className="emoji-picker-loading-content">
+                            <div className="emoji-picker-spinner"></div>
+                            <p className="emoji-picker-loading-text">Loading...</p>
                           </div>
                         </div>
                       ) : filteredEmotes.length === 0 ? (
-                        <div className="text-center py-4 text-gray-500">
+                        <div className="emoji-picker-empty">
                           {searchTerm ? (
                             <>
-                              <p className="mb-1 text-xs">No results</p>
+                              <p className="emoji-picker-empty-text">No results</p>
                               <button 
                                 onClick={() => setSearchTerm('')}
-                                className="text-blue-600 hover:text-blue-800 underline text-xs"
+                                className="emoji-picker-clear-search"
                                 type="button"
                               >
                                 Clear
                               </button>
                             </>
                           ) : (
-                            <p className="text-xs">No emojis</p>
+                            <p className="emoji-picker-empty-text">No emojis</p>
                           )}
                         </div>
                       ) : (
-                        <div 
-                          className="grid gap-1" 
-                          style={{ 
-                            gridTemplateColumns: 'repeat(8, 1fr)',
-                            width: '100%'
-                          }}
-                        >
+                        <div className="emoji-picker-grid">
                           {filteredEmotes.map((emote, index) => {
                             const shortcode = emote.filename.split('.')[0];
                             
                             return (
                               <div 
                                 key={`${emote.filename}-${index}`}
-                                className="flex items-center justify-center p-1 rounded cursor-pointer transition-all duration-200 hover:bg-gray-200 hover:scale-110 aspect-square"
+                                className="emoji-picker-item"
                                 onClick={() => handleEmoteSelect(emote)}
                                 title={`:${shortcode}:`}
                                 role="button"
                                 aria-label={`Insert ${shortcode} emoji`}
-                                style={{ 
-                                  minWidth: '24px',
-                                  maxWidth: '28px',
-                                  minHeight: '24px',
-                                  maxHeight: '28px'
-                                }}
                               >
                                 <img
                                   src={`${EMOJI_CDN_BASE}${emote.filename}`}
                                   alt={shortcode}
-                                  className="max-w-full max-h-full object-contain"
-                                  style={{
-                                    width: 'auto',
-                                    height: 'auto',
-                                    maxWidth: '20px',
-                                    maxHeight: '20px'
-                                  }}
+                                  className="emoji-picker-image"
                                   loading="lazy"
                                   onError={(e) => {
                                     const img = e.target as HTMLImageElement;
@@ -565,7 +537,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                     </div>
 
                     {/* Compact Stats Footer */}
-                    <div className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border-t border-gray-400 text-center">
+                    <div className="emoji-picker-footer">
                       {filteredEmotes.length} emoji{filteredEmotes.length !== 1 ? 's' : ''}
                     </div>
                   </div>

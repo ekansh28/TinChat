@@ -20,8 +20,7 @@ jobs:
           ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
 
       - name: 🧠 Add VPS Host to Known Hosts
-        run: |
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🚀 Deploy & Restart on VPS
         env:
@@ -30,19 +29,61 @@ jobs:
           VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
         run: |
           ssh $VPS_USER@$VPS_HOST << EOF
-            set -e  # Stop if any command fails
+            set -e
             echo "📂 Changing to project directory: $VPS_PROJECT_PATH"
             cd $VPS_PROJECT_PATH
-
             echo "🔄 Pulling latest changes from GitHub"
             git pull origin main
-
             echo "📦 Installing dependencies"
             npm install
-
             echo "🏗️ Building the project"
             npm run build
-
             echo "🔁 Restarting PM2 process"
             pm2 restart tinchat || pm2 start npm --name "tinchat" -- start
           EOF
+
+      - name: 📣 Notify Discord of Deployment Success
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_URL: "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"username\": \"Deploy Bot\",
+            \"embeds\": [{
+              \"title\": \"✅ Deployment Successful\",
+              \"color\": 3066993,
+              \"fields\": [
+                { \"name\": \"Commit\", \"value\": \"[${SHORT_SHA}](${COMMIT_URL})\", \"inline\": true },
+                { \"name\": \"Triggered by\", \"value\": \"${ACTOR}\", \"inline\": true }
+              ],
+              \"footer\": { \"text\": \"TinChat Deployment\" },
+              \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+            }]
+          }" $DISCORD_WEBHOOK_URL
+
+      - name: ❌ Notify Discord of Deployment Failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_URL: "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"username\": \"Deploy Bot\",
+            \"embeds\": [{
+              \"title\": \"🚨 Deployment Failed\",
+              \"color\": 15158332,
+              \"fields\": [
+                { \"name\": \"Commit\", \"value\": \"[${SHORT_SHA}](${COMMIT_URL})\", \"inline\": true },
+                { \"name\": \"Triggered by\", \"value\": \"${ACTOR}\", \"inline\": true }
+              ],
+              \"footer\": { \"text\": \"TinChat Deployment\" },
+              \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+            }]
+          }" $DISCORD_WEBHOOK_URL
