@@ -1,9 +1,8 @@
-// src/app/chat/components/InputArea.tsx - WITH MOBILE VISIBILITY FIXES
+// src/app/chat/components/InputArea.tsx - WITH CDN EMOJI PICKER
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
-import EmoteGallery from '@/components/EmoteGallery'; // ✅ INTEGRATED
 
 interface InputAreaProps {
   value: string;
@@ -18,12 +17,22 @@ interface InputAreaProps {
   findOrDisconnectText: string;
 }
 
-// Emoji constants
-const EMOJI_BASE_URL_DISPLAY = "./display/";
+// CDN URLs
+const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+const EMOJI_INDEX_URL = "/emote_index.json";
+
+// Static emoji for the button icon
 const STATIC_DISPLAY_EMOJI_FILENAMES = [
   'confused.gif', 'cool.gif','cry.gif','eek.gif','evil.gif'
 ];
 const SMILE_EMOJI_FILENAME = 'biggrin.gif';
+
+interface EmoteData {
+  filename: string;
+  width: number;
+  height: number;
+  size_bytes?: number;
+}
 
 const InputArea: React.FC<InputAreaProps> = ({ 
   value, 
@@ -43,19 +52,18 @@ const InputArea: React.FC<InputAreaProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [currentEmojiIconUrl, setCurrentEmojiIconUrl] = useState(() => 
-    `${EMOJI_BASE_URL_DISPLAY}${SMILE_EMOJI_FILENAME}`
+    `${EMOJI_CDN_BASE}${SMILE_EMOJI_FILENAME}`
   );
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  
-  // ✅ NEW: Emote gallery state
-  const [showEmoteGallery, setShowEmoteGallery] = useState(false);
-  const [activeTab, setActiveTab] = useState<'quick' | 'gallery'>('quick');
+  const [emotes, setEmotes] = useState<EmoteData[]>([]);
+  const [emotesLoading, setEmotesLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // MOBILE: Track keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [initialViewportHeight, setInitialViewportHeight] = useState(0);
   
-  // Check if Windows 7 theme is active (same logic as ChatWindow)
+  // Check if Windows 7 theme is active
   const [isWindows7Theme, setIsWindows7Theme] = useState(false);
   
   const checkWindows7Theme = useCallback(() => {
@@ -103,6 +111,40 @@ const InputArea: React.FC<InputAreaProps> = ({
       headObserver.disconnect();
     };
   }, [checkWindows7Theme]);
+
+  // Load emotes from CDN
+  const loadEmotes = useCallback(async () => {
+    if (emotes.length > 0) return; // Already loaded
+    
+    setEmotesLoading(true);
+    try {
+      console.log('[InputArea] Loading emotes from CDN:', EMOJI_INDEX_URL);
+      const response = await fetch(EMOJI_INDEX_URL);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: EmoteData[] = await response.json();
+      console.log('[InputArea] Loaded', data.length, 'emotes from CDN');
+      setEmotes(data);
+    } catch (error) {
+      console.error('[InputArea] Failed to load emotes:', error);
+      setEmotes([]);
+    } finally {
+      setEmotesLoading(false);
+    }
+  }, [emotes.length]);
+
+  // Filter emotes based on search term
+  const filteredEmotes = React.useMemo(() => {
+    if (!searchTerm.trim()) return emotes;
+    
+    const term = searchTerm.toLowerCase();
+    return emotes.filter(emote => 
+      emote.filename.toLowerCase().includes(term)
+    );
+  }, [emotes, searchTerm]);
 
   // ✅ MOBILE: Force visibility on mount and theme changes
   useEffect(() => {
@@ -196,7 +238,6 @@ const InputArea: React.FC<InputAreaProps> = ({
           emojiIconTrigger && 
           !emojiIconTrigger.contains(event.target as Node)) {
         setIsEmojiPickerOpen(false);
-        setShowEmoteGallery(false);
       }
     };
     if (isEmojiPickerOpen) document.addEventListener('mousedown', handleClickOutside);
@@ -247,27 +288,31 @@ const InputArea: React.FC<InputAreaProps> = ({
     if (STATIC_DISPLAY_EMOJI_FILENAMES.length === 0) return;
     hoverIntervalRef.current = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * STATIC_DISPLAY_EMOJI_FILENAMES.length);
-      setCurrentEmojiIconUrl(`${EMOJI_BASE_URL_DISPLAY}${STATIC_DISPLAY_EMOJI_FILENAMES[randomIndex]}`);
+      setCurrentEmojiIconUrl(`${EMOJI_CDN_BASE}${STATIC_DISPLAY_EMOJI_FILENAMES[randomIndex]}`);
     }, 300);
   }, []);
 
   const stopEmojiCycle = useCallback(() => {
     if (hoverIntervalRef.current) clearInterval(hoverIntervalRef.current);
     hoverIntervalRef.current = null;
-    setCurrentEmojiIconUrl(`${EMOJI_BASE_URL_DISPLAY}${SMILE_EMOJI_FILENAME}`);
+    setCurrentEmojiIconUrl(`${EMOJI_CDN_BASE}${SMILE_EMOJI_FILENAME}`);
   }, []);
 
-  const toggleEmojiPicker = useCallback(() => {
-    setIsEmojiPickerOpen(prev => !prev);
+  const toggleEmojiPicker = useCallback(async () => {
     if (!isEmojiPickerOpen) {
-      setShowEmoteGallery(false);
-      setActiveTab('quick');
+      // Load emotes when opening picker
+      await loadEmotes();
     }
-  }, [isEmojiPickerOpen]);
+    setIsEmojiPickerOpen(prev => !prev);
+    setSearchTerm(''); // Reset search when opening
+  }, [isEmojiPickerOpen, loadEmotes]);
 
-  // ✅ NEW: Handle emote selection from gallery
-  const handleEmoteSelect = useCallback((shortcode: string) => {
+  // Handle emote selection
+  const handleEmoteSelect = useCallback((emote: EmoteData) => {
+    const shortcode = emote.filename.split('.')[0]; // Remove file extension
     const emoteText = `:${shortcode}: `;
+    
+    // Insert emote into current message
     onChange(value + emoteText);
     
     // Focus back to input after selection
@@ -275,14 +320,11 @@ const InputArea: React.FC<InputAreaProps> = ({
       inputRef.current.focus();
     }
     
-    console.log('InputArea: Inserted emote:', emoteText);
+    // Close picker
+    setIsEmojiPickerOpen(false);
+    
+    console.log('[InputArea] Inserted emote:', emoteText);
   }, [value, onChange]);
-
-  // ✅ NEW: Toggle emote gallery
-  const toggleEmoteGallery = useCallback(() => {
-    setShowEmoteGallery(prev => !prev);
-    setActiveTab('gallery');
-  }, []);
 
   return (
     <div 
@@ -384,7 +426,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               })}
             />
             
-            {/* Emoji/Emote Picker - Only on desktop theme-98 */}
+            {/* Emoji Picker - Only on desktop theme-98 */}
             {theme === 'theme-98' && !isMobile && (
               <div className="relative flex-shrink-0">
                 <img 
@@ -403,69 +445,128 @@ const InputArea: React.FC<InputAreaProps> = ({
                   aria-expanded={isEmojiPickerOpen} 
                 />
                 
-                {/* ✅ ENHANCED: Emoji/Emote Picker with tabs */}
+                {/* CDN Emoji Picker */}
                 {isEmojiPickerOpen && (
                   <div 
                     ref={emojiPickerRef} 
-                    className="absolute bottom-full right-0 mb-2 w-80 bg-silver border border-raised z-30 window shadow-lg" 
+                    className="absolute bottom-full right-0 mb-1 w-64 bg-silver border border-raised z-30 window shadow-lg" 
                     style={{ 
                       boxShadow: 'inset 1px 1px #fff, inset -1px -1px gray, 1px 1px gray',
-                      maxHeight: '400px'
+                      maxHeight: '320px'
                     }} 
                     role="dialog" 
-                    aria-label="Emoji and emote picker"
+                    aria-label="Emoji picker"
                   >
-                    {/* Tab Headers */}
-                    <div className="flex border-b border-gray-400">
+                    {/* Compact Header */}
+                    <div className="flex items-center justify-between px-2 py-1 border-b border-gray-400 bg-navy text-white">
+                      <h3 className="text-xs font-medium">Emojis</h3>
                       <button
                         type="button"
-                        onClick={() => setActiveTab('quick')}
-                        className={cn(
-                          "flex-1 px-3 py-2 text-xs font-medium transition-colors",
-                          activeTab === 'quick' 
-                            ? "bg-navy text-white" 
-                            : "bg-silver hover:bg-gray-300"
-                        )}
+                        onClick={() => setIsEmojiPickerOpen(false)}
+                        className="text-white hover:text-gray-300 text-sm leading-none w-4 h-4 flex items-center justify-center"
+                        aria-label="Close emoji picker"
                       >
-                        🙂 Quick
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('gallery');
-                          setShowEmoteGallery(true);
-                        }}
-                        className={cn(
-                          "flex-1 px-3 py-2 text-xs font-medium transition-colors",
-                          activeTab === 'gallery' 
-                            ? "bg-navy text-white" 
-                            : "bg-silver hover:bg-gray-300"
-                        )}
-                      >
-                        🎭 Gallery
+                        ×
                       </button>
                     </div>
 
-                    {/* Tab Content */}
-                    <div className="p-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                      {activeTab === 'quick' && (
-                        <div>
-                          <p className="text-center w-full text-xs mb-2">Quick emojis loading...</p>
-                          <div className="text-center text-xs text-gray-600">
-                            Switch to Gallery tab for full emote collection
+                    {/* Compact Search */}
+                    <div className="p-1">
+                      <input
+                        type="text"
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-gray-400 rounded"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Emoji Grid - No horizontal scroll, fixed columns */}
+                    <div 
+                      className="p-1 overflow-y-auto overflow-x-hidden" 
+                      style={{ 
+                        maxHeight: '240px',
+                        minHeight: '120px'
+                      }}
+                    >
+                      {emotesLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="text-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto mb-1"></div>
+                            <p className="text-xs text-gray-600">Loading...</p>
                           </div>
                         </div>
+                      ) : filteredEmotes.length === 0 ? (
+                        <div className="text-center py-4 text-gray-500">
+                          {searchTerm ? (
+                            <>
+                              <p className="mb-1 text-xs">No results</p>
+                              <button 
+                                onClick={() => setSearchTerm('')}
+                                className="text-blue-600 hover:text-blue-800 underline text-xs"
+                                type="button"
+                              >
+                                Clear
+                              </button>
+                            </>
+                          ) : (
+                            <p className="text-xs">No emojis</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div 
+                          className="grid gap-1" 
+                          style={{ 
+                            gridTemplateColumns: 'repeat(8, 1fr)',
+                            width: '100%'
+                          }}
+                        >
+                          {filteredEmotes.map((emote, index) => {
+                            const shortcode = emote.filename.split('.')[0];
+                            
+                            return (
+                              <div 
+                                key={`${emote.filename}-${index}`}
+                                className="flex items-center justify-center p-1 rounded cursor-pointer transition-all duration-200 hover:bg-gray-200 hover:scale-110 aspect-square"
+                                onClick={() => handleEmoteSelect(emote)}
+                                title={`:${shortcode}:`}
+                                role="button"
+                                aria-label={`Insert ${shortcode} emoji`}
+                                style={{ 
+                                  minWidth: '24px',
+                                  maxWidth: '28px',
+                                  minHeight: '24px',
+                                  maxHeight: '28px'
+                                }}
+                              >
+                                <img
+                                  src={`${EMOJI_CDN_BASE}${emote.filename}`}
+                                  alt={shortcode}
+                                  className="max-w-full max-h-full object-contain"
+                                  style={{
+                                    width: 'auto',
+                                    height: 'auto',
+                                    maxWidth: '20px',
+                                    maxHeight: '20px'
+                                  }}
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const img = e.target as HTMLImageElement;
+                                    img.style.display = 'none';
+                                    console.warn('Failed to load emoji:', emote.filename);
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                      
-                      {activeTab === 'gallery' && showEmoteGallery && (
-                        <EmoteGallery 
-                          onEmoteSelect={handleEmoteSelect}
-                          isModal={true}
-                          maxHeight="250px"
-                          searchable={true}
-                          className="emote-picker-gallery"
-                        />
-                      )}
+                    </div>
+
+                    {/* Compact Stats Footer */}
+                    <div className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border-t border-gray-400 text-center">
+                      {filteredEmotes.length} emoji{filteredEmotes.length !== 1 ? 's' : ''}
                     </div>
                   </div>
                 )}

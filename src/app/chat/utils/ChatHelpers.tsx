@@ -1,4 +1,4 @@
-// src/app/chat/utils/chatHelpers.ts
+// src/app/chat/utils/ChatHelpers.tsx - Updated with CDN support
 import React from 'react';
 import { toast } from '@/hooks/use-toast';
 
@@ -35,7 +35,50 @@ export interface EmoteData {
   height?: number;
 }
 
-// Render message with emoji support
+// CDN Configuration
+const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+
+// Cache for loaded emote data
+let emoteCache: string[] | null = null;
+let emoteLoadPromise: Promise<string[]> | null = null;
+
+// Load emote list from CDN
+const loadEmoteList = async (): Promise<string[]> => {
+  if (emoteCache) {
+    return emoteCache;
+  }
+
+  if (emoteLoadPromise) {
+    return emoteLoadPromise;
+  }
+
+  emoteLoadPromise = (async () => {
+    try {
+      console.log('[ChatHelpers] Loading emote list from CDN');
+      const response = await fetch('/emote_index.json');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: EmoteData[] = await response.json();
+      const filenames = data.map(emote => emote.filename);
+      
+      emoteCache = filenames;
+      console.log('[ChatHelpers] Loaded', filenames.length, 'emotes from CDN');
+      
+      return filenames;
+    } catch (error) {
+      console.error('[ChatHelpers] Failed to load emotes:', error);
+      emoteCache = []; // Cache empty array to prevent repeated failures
+      return [];
+    }
+  })();
+
+  return emoteLoadPromise;
+};
+
+// Render message with emoji support using CDN
 export const renderMessageWithEmojis = (
   text: string, 
   emojiFilenames: string[], 
@@ -64,10 +107,16 @@ export const renderMessageWithEmojis = (
       parts.push(
         React.createElement('img', {
           key: `${match.index}-${shortcodeName}`,
-          src: `${baseUrl}${matchedFilename}`,
+          src: `${EMOJI_CDN_BASE}${matchedFilename}`, // Use CDN URL
           alt: shortcodeName,
           className: "inline max-h-5 w-auto mx-0.5 align-middle",
-          'data-ai-hint': "chat emoji"
+          'data-ai-hint': "chat emoji",
+          loading: "lazy",
+          onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
+            const img = e.currentTarget;
+            img.style.display = 'none';
+            console.warn('[ChatHelpers] Failed to load emoji:', matchedFilename);
+          }
         })
       );
     } else {
@@ -81,6 +130,19 @@ export const renderMessageWithEmojis = (
   }
 
   return parts.length > 0 ? parts : [text];
+};
+
+// Enhanced render function that loads emotes automatically
+export const renderMessageWithEmojisAsync = async (
+  text: string
+): Promise<(string | React.ReactElement)[]> => {
+  try {
+    const emojiFilenames = await loadEmoteList();
+    return renderMessageWithEmojis(text, emojiFilenames, EMOJI_CDN_BASE);
+  } catch (error) {
+    console.error('[ChatHelpers] Error rendering emojis:', error);
+    return [text]; // Return plain text on error
+  }
 };
 
 // Get display name CSS class for animations
@@ -332,21 +394,74 @@ export const scrollToBottom = (container: HTMLElement | null, force: boolean = f
   }
 };
 
-// Emoji utilities
-export const getRandomEmoji = (emojiFilenames: string[], baseUrl: string): string => {
-  if (emojiFilenames.length === 0) return '';
-  const randomIndex = Math.floor(Math.random() * emojiFilenames.length);
-  return `${baseUrl}${emojiFilenames[randomIndex]}`;
+// CDN Emoji utilities
+export const getRandomEmoji = async (): Promise<string> => {
+  try {
+    const emojiFilenames = await loadEmoteList();
+    if (emojiFilenames.length === 0) return '';
+    const randomIndex = Math.floor(Math.random() * emojiFilenames.length);
+    return `${EMOJI_CDN_BASE}${emojiFilenames[randomIndex]}`;
+  } catch (error) {
+    console.warn('Failed to get random emoji:', error);
+    return '';
+  }
 };
 
-export const createEmojiCycleInterval = (
-  emojiFilenames: string[], 
-  baseUrl: string, 
+export const createEmojiCycleInterval = async (
   callback: (url: string) => void,
   intervalMs: number = 300
-): NodeJS.Timeout => {
-  return setInterval(() => {
-    const randomUrl = getRandomEmoji(emojiFilenames, baseUrl);
-    if (randomUrl) callback(randomUrl);
-  }, intervalMs);
+): Promise<NodeJS.Timeout | null> => {
+  try {
+    const emojiFilenames = await loadEmoteList();
+    if (emojiFilenames.length === 0) return null;
+    
+    return setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * emojiFilenames.length);
+      const randomUrl = `${EMOJI_CDN_BASE}${emojiFilenames[randomIndex]}`;
+      callback(randomUrl);
+    }, intervalMs);
+  } catch (error) {
+    console.warn('Failed to create emoji cycle:', error);
+    return null;
+  }
 };
+
+// Preload popular emojis for better performance
+export const preloadPopularEmojis = async (): Promise<void> => {
+  try {
+    const emojiFilenames = await loadEmoteList();
+    const popularEmojis = emojiFilenames.slice(0, 20); // Preload first 20 emojis
+    
+    popularEmojis.forEach(filename => {
+      const img = new Image();
+      img.src = `${EMOJI_CDN_BASE}${filename}`;
+    });
+    
+    console.log('[ChatHelpers] Preloaded', popularEmojis.length, 'popular emojis');
+  } catch (error) {
+    console.warn('[ChatHelpers] Failed to preload emojis:', error);
+  }
+};
+
+// Get emoji suggestions based on text
+export const getEmojiSuggestions = async (text: string): Promise<string[]> => {
+  try {
+    const emojiFilenames = await loadEmoteList();
+    const lowercaseText = text.toLowerCase();
+    
+    const suggestions = emojiFilenames
+      .filter(filename => {
+        const name = filename.split('.')[0].toLowerCase();
+        return name.includes(lowercaseText);
+      })
+      .slice(0, 5); // Limit to 5 suggestions
+    
+    return suggestions;
+  } catch (error) {
+    console.warn('Failed to get emoji suggestions:', error);
+    return [];
+  }
+};
+
+// Export the emote loading function for use in components
+export { loadEmoteList };

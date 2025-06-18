@@ -1,8 +1,8 @@
-// src/app/chat/components/MessageRow.tsx - UNIFIED LAYOUT (No mobile bubbles)
+// src/app/chat/components/MessageRow.tsx - WITH CDN EMOJI SUPPORT
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
-import { getDisplayNameClass, renderMessageWithEmojis } from '../utils/ChatHelpers';
+import { getDisplayNameClass, renderMessageWithEmojis, loadEmoteList } from '../utils/ChatHelpers';
 
 interface MessageRowProps {
   message: {
@@ -37,8 +37,8 @@ interface MessageRowProps {
   isMobile: boolean; // Keep the prop but don't use it for different layouts
 }
 
-// Emote system constants
-const EMOJI_BASE_URL_PICKER = "/emotes/";
+// CDN Configuration
+const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
 
 const MessageRow: React.FC<MessageRowProps> = ({ 
   message, 
@@ -51,32 +51,33 @@ const MessageRow: React.FC<MessageRowProps> = ({
 }) => {
   const { showProfile } = useProfilePopup();
   
-  // Load emote filenames for proper rendering
-  const [pickerEmojiFilenames, setPickerEmojiFilenames] = useState<string[]>([]);
+  // Load emote filenames from CDN
+  const [emojiFilenames, setEmojiFilenames] = useState<string[]>([]);
   const [emotesLoading, setEmotesLoading] = useState(true);
 
-  // Load emojis for theme-98 (same as InputArea)
+  // Load emojis from CDN
   useEffect(() => {
-    if (theme === 'theme-98') {
-      setEmotesLoading(true);
-      fetch('/emote_index.json')
-        .then(res => { 
-          if (!res.ok) throw new Error(`HTTP ${res.status}`); 
-          return res.json(); 
-        })
-        .then((data: any[]) => {
-          const filenames = data.map(e => e.filename);
-          setPickerEmojiFilenames(filenames);
-        })
-        .catch(err => {
-          console.error('Error fetching emote_index.json in MessageRow:', err);
-          setPickerEmojiFilenames([]);
-        })
-        .finally(() => setEmotesLoading(false));
-    } else {
-      setEmotesLoading(false);
-      setPickerEmojiFilenames([]);
-    }
+    const loadEmojis = async () => {
+      if (theme === 'theme-98') {
+        setEmotesLoading(true);
+        try {
+          console.log('[MessageRow] Loading emojis from CDN');
+          const filenames = await loadEmoteList();
+          setEmojiFilenames(filenames);
+          console.log('[MessageRow] Loaded', filenames.length, 'emojis from CDN');
+        } catch (error) {
+          console.error('[MessageRow] Error loading emojis:', error);
+          setEmojiFilenames([]);
+        } finally {
+          setEmotesLoading(false);
+        }
+      } else {
+        setEmotesLoading(false);
+        setEmojiFilenames([]);
+      }
+    };
+
+    loadEmojis();
   }, [theme]);
 
   // Prefetch profile data on hover
@@ -110,13 +111,13 @@ const MessageRow: React.FC<MessageRowProps> = ({
       message.sender !== previousMessageSender;
   }, [theme, previousMessageSender, message.sender]);
 
-  // Enhanced message content with emojis
+  // Enhanced message content with CDN emojis
   const messageContent = useMemo(() => {
-    if (theme === 'theme-98' && !emotesLoading) {
-      return renderMessageWithEmojis(message.content, pickerEmojiFilenames, EMOJI_BASE_URL_PICKER);
+    if (theme === 'theme-98' && !emotesLoading && emojiFilenames.length > 0) {
+      return renderMessageWithEmojis(message.content, emojiFilenames, EMOJI_CDN_BASE);
     }
     return [message.content];
-  }, [message.content, theme, pickerEmojiFilenames, emotesLoading]);
+  }, [message.content, theme, emojiFilenames, emotesLoading]);
 
   // Display name and styling logic
   const isSelf = message.sender === 'self';
@@ -265,8 +266,8 @@ const MessageRow: React.FC<MessageRowProps> = ({
               theme === 'theme-7' && 'theme-7-text-shadow',
               "break-words hyphens-auto"
             )}>
-              {emotesLoading ? (
-                <span className="opacity-75">Loading emotes...</span>
+              {emotesLoading && theme === 'theme-98' ? (
+                <span className="opacity-75">Loading emojis...</span>
               ) : (
                 messageContent
               )}
