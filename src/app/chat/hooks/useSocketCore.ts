@@ -1,4 +1,6 @@
-// src/app/chat/hooks/useSocketCore.ts - Core Socket Management
+// ===== FIX 1: CLIENT-SIDE - Prevent Multiple Socket Connections =====
+// src/app/chat/hooks/useSocketCore.ts - FIXED VERSION
+
 import { useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
@@ -40,6 +42,9 @@ export const useSocketCore = ({
 
     console.log('[SocketCore] Creating socket connection');
     
+    // ✅ CRITICAL FIX: Generate unique tab ID to prevent duplicate connections
+    const tabId = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     const socket = io(socketServerUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -48,10 +53,14 @@ export const useSocketCore = ({
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
-      forceNew: true,
+      forceNew: true, // ✅ CRITICAL: Force new connection
       upgrade: true,
       rememberUpgrade: false,
-      autoConnect: true
+      autoConnect: true,
+      query: {
+        tabId: tabId, // ✅ NEW: Send unique tab ID
+        timestamp: Date.now()
+      }
     });
 
     return socket;
@@ -71,6 +80,14 @@ export const useSocketCore = ({
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      
+      // ✅ NEW: Identify this tab to prevent duplicate handling
+      const tabId = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      socket.emit('identify_tab', { 
+        tabId,
+        isReconnect: connectionAttemptsRef.current > 0 
+      });
+      
       onConnect();
     };
 
@@ -84,7 +101,7 @@ export const useSocketCore = ({
       
       onDisconnect(reason);
 
-      // Smart reconnection
+      // Smart reconnection with backoff
       if (reason === 'io server disconnect') {
         setState(prev => ({ ...prev, connectionError: 'Disconnected by server' }));
       } else if (reason === 'transport close' || reason === 'ping timeout') {
@@ -126,9 +143,18 @@ export const useSocketCore = ({
   }, [onConnect, onDisconnect, onConnectError]);
 
   const initializeSocket = useCallback(() => {
-    if (isInitializedRef.current) {
-      console.log('[SocketCore] Already initialized');
+    // ✅ CRITICAL FIX: Prevent multiple socket instances
+    if (isInitializedRef.current && socketRef.current) {
+      console.log('[SocketCore] Socket already initialized, reusing existing connection');
       return;
+    }
+
+    // ✅ CRITICAL FIX: Clean up any existing socket first
+    if (socketRef.current) {
+      console.log('[SocketCore] Cleaning up existing socket before creating new one');
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
 
     isInitializedRef.current = true;
@@ -186,4 +212,3 @@ export const useSocketCore = ({
     forceReconnect
   };
 };
-
