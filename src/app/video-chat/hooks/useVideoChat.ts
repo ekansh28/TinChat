@@ -1,4 +1,4 @@
-// src/app/video-chat/hooks/useVideoChat.ts - IMMEDIATE FIX FOR DEV MODE
+// src/app/video-chat/hooks/useVideoChat.ts - CRITICAL FIX FOR REACT STRICT MODE
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useChatState } from '../../chat/hooks/useChatState';
@@ -16,23 +16,25 @@ export const useVideoChat = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   
-  // ✅ CRITICAL FIX: Stable state initialization to prevent React.StrictMode issues
+  // ✅ CRITICAL FIX: Prevent React Strict Mode infinite loops
   const [isMounted, setIsMounted] = useState(false);
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   
-  // ✅ CRITICAL: Development mode protection - prevent multiple initializations
-  const devModeRef = useRef({
+  // ✅ CRITICAL: Single source of truth for component lifecycle
+  const lifecycleRef = useRef({
     isInitialized: false,
+    isDestroyed: false,
     mountCount: 0,
     lastMountTime: 0,
-    sessionId: `dev-session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
+    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
     autoSearchStarted: false,
     searchAttemptCount: 0,
     lastSearchTime: 0,
-    stabilityTimer: null as NodeJS.Timeout | null
+    stabilityTimer: null as NodeJS.Timeout | null,
+    initializationPromise: null as Promise<void> | null
   });
 
   // ✅ CRITICAL: Stable interests memoization to prevent dependency loops
@@ -42,50 +44,58 @@ export const useVideoChat = () => {
     return interestsParam.split(',').filter(i => i.trim() !== '');
   }, [searchParams]);
 
-  // ✅ All hooks called unconditionally but with stability protection
+  // ✅ Initialize hooks with stability protection
   const auth = useAuth();
   const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
   const webrtc = useWebRTC();
 
-  // ✅ CRITICAL: Development mode stability check
+  // ✅ CRITICAL: Component lifecycle management with Strict Mode protection
   useEffect(() => {
     const now = Date.now();
-    devModeRef.current.mountCount++;
+    lifecycleRef.current.mountCount++;
     
-    // Detect rapid remounting (development mode issue)
-    if (now - devModeRef.current.lastMountTime < 1000) {
-      console.warn(`[VideoChat] RAPID REMOUNT DETECTED: ${devModeRef.current.mountCount} mounts in development mode`);
+    console.log(`[VideoChat] Mount #${lifecycleRef.current.mountCount} at ${now}`);
+    
+    // ✅ CRITICAL: Detect rapid remounting (React Strict Mode)
+    if (now - lifecycleRef.current.lastMountTime < 500) {
+      console.warn(`[VideoChat] RAPID REMOUNT DETECTED: ${lifecycleRef.current.mountCount} mounts`);
       
       // Clear any existing stability timer
-      if (devModeRef.current.stabilityTimer) {
-        clearTimeout(devModeRef.current.stabilityTimer);
+      if (lifecycleRef.current.stabilityTimer) {
+        clearTimeout(lifecycleRef.current.stabilityTimer);
       }
       
-      // Set a stability timer to prevent actions until remounting stops
-      devModeRef.current.stabilityTimer = setTimeout(() => {
-        console.log(`[VideoChat] Stability period ended, allowing normal operation`);
-        devModeRef.current.isInitialized = false; // Allow re-initialization
-      }, 2000);
+      // Wait for stability before initializing
+      lifecycleRef.current.stabilityTimer = setTimeout(() => {
+        if (!lifecycleRef.current.isDestroyed) {
+          console.log(`[VideoChat] Stability period ended, allowing initialization`);
+          setIsMounted(true);
+        }
+      }, 1000);
       
-      devModeRef.current.lastMountTime = now;
+      lifecycleRef.current.lastMountTime = now;
       return;
     }
     
-    devModeRef.current.lastMountTime = now;
+    lifecycleRef.current.lastMountTime = now;
+    lifecycleRef.current.isDestroyed = false;
     setIsMounted(true);
     
     return () => {
+      console.log('[VideoChat] Component unmounting');
+      lifecycleRef.current.isDestroyed = true;
+      
       // Clear stability timer on unmount
-      if (devModeRef.current.stabilityTimer) {
-        clearTimeout(devModeRef.current.stabilityTimer);
-        devModeRef.current.stabilityTimer = null;
+      if (lifecycleRef.current.stabilityTimer) {
+        clearTimeout(lifecycleRef.current.stabilityTimer);
+        lifecycleRef.current.stabilityTimer = null;
       }
     };
-  }, []);
+  }, []); // ✅ CRITICAL: Empty dependency array
 
-  // ✅ ENHANCED: Socket event handlers with development mode protection
+  // ✅ ENHANCED: Socket event handlers with stable references
   const socketHandlers = useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[VideoChat] Handling message:', data);
@@ -128,7 +138,7 @@ export const useVideoChat = () => {
       }
       
       if (data.partnerAuthId && auth.authId && data.partnerAuthId === auth.authId) {
-        console.error('[VideoChat] CRITICAL: Self-match detected by auth ID!');
+        console.error('[VideoChat] CRITICAL: Same-auth match detected!');
         chatState.addSystemMessage('Cannot match with yourself. Please refresh the page.');
         return;
       }
@@ -220,17 +230,17 @@ export const useVideoChat = () => {
       webrtc.cleanupConnections(false);
       
       // Reset initialization flags on disconnect
-      devModeRef.current.autoSearchStarted = false;
-      devModeRef.current.isInitialized = false;
+      lifecycleRef.current.autoSearchStarted = false;
+      lifecycleRef.current.isInitialized = false;
     },
     onConnectErrorHandler: () => {
       console.log('[VideoChat] Socket connection error');
       chatState.setIsFindingPartner(false);
-      devModeRef.current.autoSearchStarted = false;
+      lifecycleRef.current.autoSearchStarted = false;
     }
   }), [chatState, webrtc, isMounted, auth.authId]);
 
-  // ✅ Socket hook
+  // ✅ Socket hook with stable handlers
   const socketResult = useVideoChatSocket({
     ...socketHandlers,
     authId: auth.authId,
@@ -286,19 +296,25 @@ export const useVideoChat = () => {
     setupPeerConnection: (roomId: string) => webrtc.setupPeerConnection(roomId, true)
   });
 
-  // ✅ CRITICAL: Development-mode-safe auto-search with stability protection
+  // ✅ CRITICAL: Controlled auto-search with proper dependency management
   useEffect(() => {
-    // ✅ CRITICAL: Skip auto-search during development mode instability
-    if (devModeRef.current.stabilityTimer) {
-      console.log('[VideoChat] Skipping auto-search during stability period');
+    // Skip if component is being destroyed
+    if (lifecycleRef.current.isDestroyed) {
+      console.log('[VideoChat] Skipping auto-search - component destroyed');
+      return;
+    }
+
+    // Skip during stability period
+    if (lifecycleRef.current.stabilityTimer) {
+      console.log('[VideoChat] Skipping auto-search - waiting for stability');
       return;
     }
 
     console.log('[VideoChat] Auto-search effect triggered:', {
-      autoSearchStarted: devModeRef.current.autoSearchStarted,
-      searchAttemptCount: devModeRef.current.searchAttemptCount,
-      isInitialized: devModeRef.current.isInitialized,
-      mountCount: devModeRef.current.mountCount,
+      autoSearchStarted: lifecycleRef.current.autoSearchStarted,
+      searchAttemptCount: lifecycleRef.current.searchAttemptCount,
+      isInitialized: lifecycleRef.current.isInitialized,
+      mountCount: lifecycleRef.current.mountCount,
       isConnected: socketResult.isConnected,
       authLoading: auth.isLoading,
       authId: auth.authId,
@@ -308,27 +324,27 @@ export const useVideoChat = () => {
       hasLocalStream: !!webrtc.localStream
     });
 
-    // Prevent multiple initialization in development mode
-    if (devModeRef.current.isInitialized) {
+    // Prevent multiple initialization
+    if (lifecycleRef.current.isInitialized) {
       console.log('[VideoChat] Already initialized, skipping auto-search');
       return;
     }
 
     // Prevent auto-search if already started
-    if (devModeRef.current.autoSearchStarted) {
+    if (lifecycleRef.current.autoSearchStarted) {
       console.log('[VideoChat] Auto-search already started, skipping');
       return;
     }
 
     // Rate limiting to prevent rapid searches
     const now = Date.now();
-    if (now - devModeRef.current.lastSearchTime < 10000) { // 10 second cooldown
+    if (now - lifecycleRef.current.lastSearchTime < 15000) { // 15 second cooldown
       console.log('[VideoChat] Auto-search rate limited');
       return;
     }
 
-    // Prevent too many search attempts
-    if (devModeRef.current.searchAttemptCount >= 2) {
+    // Limit search attempts
+    if (lifecycleRef.current.searchAttemptCount >= 2) {
       console.log('[VideoChat] Max search attempts reached, manual action required');
       chatState.addSystemMessage('Please click "Find" to start video chat.');
       return;
@@ -350,16 +366,21 @@ export const useVideoChat = () => {
       return;
     }
 
-    // ✅ CRITICAL: Mark as initialized before starting to prevent re-entry
-    devModeRef.current.isInitialized = true;
-    devModeRef.current.autoSearchStarted = true;
-    devModeRef.current.lastSearchTime = now;
-    devModeRef.current.searchAttemptCount++;
+    // ✅ CRITICAL: Single initialization promise to prevent race conditions
+    if (!lifecycleRef.current.initializationPromise) {
+      lifecycleRef.current.initializationPromise = initializeVideoChat();
+    }
 
-    console.log('[VideoChat] ✅ Starting video chat initialization');
-
-    const startVideoChat = async () => {
+    async function initializeVideoChat() {
       try {
+        // Mark as initialized before starting to prevent re-entry
+        lifecycleRef.current.isInitialized = true;
+        lifecycleRef.current.autoSearchStarted = true;
+        lifecycleRef.current.lastSearchTime = now;
+        lifecycleRef.current.searchAttemptCount++;
+
+        console.log('[VideoChat] ✅ Starting video chat initialization');
+
         chatState.setIsFindingPartner(true);
         chatState.addSystemMessage('Searching for a video chat partner...');
         setIsSelfDisconnectedRecently(false);
@@ -369,7 +390,7 @@ export const useVideoChat = () => {
           chatType: 'video',
           interests,
           authId: auth.authId,
-          sessionId: devModeRef.current.sessionId,
+          sessionId: lifecycleRef.current.sessionId,
           timestamp: now
         });
         
@@ -385,18 +406,12 @@ export const useVideoChat = () => {
         chatState.addSystemMessage('Failed to start video chat. Please try again.');
         
         // Reset flags on error
-        devModeRef.current.autoSearchStarted = false;
-        devModeRef.current.isInitialized = false;
-        devModeRef.current.searchAttemptCount = Math.max(0, devModeRef.current.searchAttemptCount - 1);
+        lifecycleRef.current.autoSearchStarted = false;
+        lifecycleRef.current.isInitialized = false;
+        lifecycleRef.current.searchAttemptCount = Math.max(0, lifecycleRef.current.searchAttemptCount - 1);
+        lifecycleRef.current.initializationPromise = null;
       }
-    };
-
-    // Small delay to ensure everything is stable
-    const delayedStart = setTimeout(startVideoChat, 3000);
-    
-    return () => {
-      clearTimeout(delayedStart);
-    };
+    }
   }, [
     socketResult.isConnected,
     socketResult.connectionError,
@@ -406,7 +421,10 @@ export const useVideoChat = () => {
     chatState.isFindingPartner,
     webrtc.hasCameraPermission,
     webrtc.localStream,
-    interests
+    interests,
+    socketResult.emitFindPartner,
+    chatState.setIsFindingPartner,
+    chatState.addSystemMessage
   ]);
 
   // ✅ Reset initialization state when conditions change
@@ -416,15 +434,16 @@ export const useVideoChat = () => {
                        socketResult.connectionError ||
                        webrtc.hasCameraPermission === false;
 
-    if (shouldReset && devModeRef.current.autoSearchStarted) {
+    if (shouldReset && lifecycleRef.current.autoSearchStarted) {
       console.log('[VideoChat] Resetting auto-search state due to condition change');
-      devModeRef.current.autoSearchStarted = false;
-      devModeRef.current.isInitialized = false;
+      lifecycleRef.current.autoSearchStarted = false;
+      lifecycleRef.current.isInitialized = false;
+      lifecycleRef.current.initializationPromise = null;
     }
 
     // Reset search attempt count on successful connection
     if (chatState.isPartnerConnected) {
-      devModeRef.current.searchAttemptCount = 0;
+      lifecycleRef.current.searchAttemptCount = 0;
     }
   }, [chatState.isPartnerConnected, socketResult.isConnected, socketResult.connectionError, webrtc.hasCameraPermission]);
   
@@ -438,12 +457,13 @@ export const useVideoChat = () => {
       setPartnerInterests([]);
       setRoomId(null);
       
-      // Reset all development mode flags
-      devModeRef.current.autoSearchStarted = false;
-      devModeRef.current.isInitialized = false;
-      devModeRef.current.searchAttemptCount = 0;
-      devModeRef.current.lastSearchTime = 0;
-      devModeRef.current.sessionId = `dev-session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
+      // Reset all lifecycle flags
+      lifecycleRef.current.autoSearchStarted = false;
+      lifecycleRef.current.isInitialized = false;
+      lifecycleRef.current.searchAttemptCount = 0;
+      lifecycleRef.current.lastSearchTime = 0;
+      lifecycleRef.current.initializationPromise = null;
+      lifecycleRef.current.sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
     }
   }, [pathname, chatState]);
 
@@ -454,12 +474,13 @@ export const useVideoChat = () => {
       webrtc.cleanupConnections(true);
       
       // Clear all timers and reset flags
-      if (devModeRef.current.stabilityTimer) {
-        clearTimeout(devModeRef.current.stabilityTimer);
-        devModeRef.current.stabilityTimer = null;
+      if (lifecycleRef.current.stabilityTimer) {
+        clearTimeout(lifecycleRef.current.stabilityTimer);
+        lifecycleRef.current.stabilityTimer = null;
       }
-      devModeRef.current.autoSearchStarted = false;
-      devModeRef.current.isInitialized = false;
+      lifecycleRef.current.autoSearchStarted = false;
+      lifecycleRef.current.isInitialized = false;
+      lifecycleRef.current.initializationPromise = null;
     };
   }, [webrtc]);
 
@@ -586,12 +607,12 @@ export const useVideoChat = () => {
     
     // Debug info for development
     debugInfo: {
-      sessionId: devModeRef.current.sessionId,
-      searchAttempts: devModeRef.current.searchAttemptCount,
-      autoSearchStarted: devModeRef.current.autoSearchStarted,
-      isInitialized: devModeRef.current.isInitialized,
-      mountCount: devModeRef.current.mountCount,
-      hasStabilityTimer: !!devModeRef.current.stabilityTimer
+      sessionId: lifecycleRef.current.sessionId,
+      searchAttempts: lifecycleRef.current.searchAttemptCount,
+      autoSearchStarted: lifecycleRef.current.autoSearchStarted,
+      isInitialized: lifecycleRef.current.isInitialized,
+      mountCount: lifecycleRef.current.mountCount,
+      hasStabilityTimer: !!lifecycleRef.current.stabilityTimer
     }
   };
 };

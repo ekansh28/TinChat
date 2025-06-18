@@ -1,4 +1,4 @@
-// src/app/video-chat/hooks/useVideoChatSocket.ts - ENHANCED VERSION
+// src/app/video-chat/hooks/useVideoChatSocket.ts - CRITICAL FIX FOR INFINITE LOOP
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { showChatToast } from '../../chat/utils/ChatHelpers';
@@ -27,15 +27,71 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
   const roomIdRef = useRef<string | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const tabIdRef = useRef<string | null>(null);
-  const maxReconnectAttempts = 3; // Reduced to prevent infinite loops
+  const maxReconnectAttempts = 3;
+
+  // ✅ CRITICAL FIX: Prevent infinite loops with connection state tracking
+  const connectionStateRef = useRef({
+    isInitialized: false,
+    isDestroyed: false,
+    lastConnectionTime: 0,
+    mountCount: 0,
+    stabilityTimer: null as NodeJS.Timeout | null
+  });
+
+  // ✅ CRITICAL: Stable params reference to prevent dependency loops
+  const stableParamsRef = useRef(params);
+  stableParamsRef.current = params;
 
   // Update room ID ref when it changes
   useEffect(() => {
     roomIdRef.current = params.roomId || null;
   }, [params.roomId]);
 
-  // ✅ CRITICAL: Enhanced socket connection with better conflict prevention
+  // ✅ CRITICAL FIX: Enhanced socket connection with React Strict Mode protection
   useEffect(() => {
+    const now = Date.now();
+    connectionStateRef.current.mountCount++;
+    
+    // ✅ CRITICAL: Prevent rapid remounting in development mode
+    if (now - connectionStateRef.current.lastConnectionTime < 1000) {
+      console.warn('[VideoChatSocket] RAPID REMOUNT DETECTED - applying stability delay');
+      
+      // Clear any existing stability timer
+      if (connectionStateRef.current.stabilityTimer) {
+        clearTimeout(connectionStateRef.current.stabilityTimer);
+      }
+      
+      // Wait for stability before creating connection
+      connectionStateRef.current.stabilityTimer = setTimeout(() => {
+        if (!connectionStateRef.current.isDestroyed) {
+          initializeConnection();
+        }
+      }, 2000);
+      
+      return () => {
+        if (connectionStateRef.current.stabilityTimer) {
+          clearTimeout(connectionStateRef.current.stabilityTimer);
+          connectionStateRef.current.stabilityTimer = null;
+        }
+      };
+    }
+    
+    connectionStateRef.current.lastConnectionTime = now;
+    initializeConnection();
+
+    return () => {
+      connectionStateRef.current.isDestroyed = true;
+      cleanup();
+    };
+  }, []); // ✅ CRITICAL: Empty dependency array to prevent loops
+
+  const initializeConnection = useCallback(() => {
+    // ✅ CRITICAL: Prevent multiple initializations
+    if (connectionStateRef.current.isInitialized || connectionStateRef.current.isDestroyed) {
+      console.log('[VideoChatSocket] Skipping initialization - already initialized or destroyed');
+      return;
+    }
+
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
     
     if (!socketServerUrl) {
@@ -57,8 +113,8 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: maxReconnectAttempts,
-      reconnectionDelay: 2000, // Increased delay
-      reconnectionDelayMax: 8000, // Increased max delay
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 8000,
       timeout: 20000,
       forceNew: true,
       upgrade: true,
@@ -68,18 +124,17 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
         timestamp: Date.now(),
         chatType: 'video',
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 100) : 'unknown',
-        // ✅ Add additional unique identifiers
         sessionId: `${Date.now()}-${Math.random()}`,
         clientId: `video-client-${Date.now()}`
       }
     });
     
     socketRef.current = socket;
+    connectionStateRef.current.isInitialized = true;
 
     // ✅ CRITICAL: Enhanced WebRTC signal emission with validation
     if (typeof window !== 'undefined') {
       window.videoChatEmitWebRTCSignal = (data) => {
-        // ✅ Comprehensive validation
         if (!data || !data.signalData) {
           console.error('[VideoChatSocket] Invalid WebRTC signal data:', data);
           return false;
@@ -95,7 +150,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
           socket.emit('webrtcSignal', {
             roomId: roomIdRef.current,
             signalData: data.signalData,
-            fromTabId: tabIdRef.current, // ✅ Include tab ID for tracking
+            fromTabId: tabIdRef.current,
             timestamp: Date.now()
           });
           return true;
@@ -106,7 +161,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       };
     }
 
-    // ✅ ENHANCED: Connection event handlers with better conflict handling
+    // ✅ Enhanced connection event handlers
     const handleConnect = () => {
       console.log('[VideoChatSocket] Connected:', socket.id);
       setIsConnected(true);
@@ -118,7 +173,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       socket.emit('identify_tab', { 
         tabId,
         chatType: 'video',
-        authId: params.authId,
+        authId: stableParamsRef.current.authId,
         isReconnect: reconnectAttemptsRef.current > 0,
         timestamp: Date.now(),
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 50) : 'unknown'
@@ -130,9 +185,8 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       setIsConnected(false);
       setIsConnecting(false);
       roomIdRef.current = null;
-      params.onDisconnectHandler(reason);
+      stableParamsRef.current.onDisconnectHandler(reason);
       
-      // ✅ Enhanced disconnect reason handling
       if (reason === 'io server disconnect') {
         setConnectionError('Disconnected by server');
       } else if (reason === 'transport close' || reason === 'ping timeout') {
@@ -143,7 +197,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
           setConnectionError('Connection lost - please refresh page');
         }
       } else if (reason === 'io client disconnect') {
-        // Normal disconnect, don't show error
         setConnectionError(null);
       }
     };
@@ -160,25 +213,20 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
         setConnectionError(`Connection error - retrying... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
       }
       
-      params.onConnectErrorHandler(err);
+      stableParamsRef.current.onConnectErrorHandler(err);
     };
 
-    // ✅ ENHANCED: Handle duplicate tab detection
+    // ✅ Enhanced duplicate tab detection
     const handleDuplicateTab = (data: any) => {
       console.warn('[VideoChatSocket] Duplicate tab detected:', data);
       setConnectionError('This chat was opened in another tab');
-      
-      // Disconnect immediately to prevent conflicts
       socket.disconnect();
-      
-      // Show user-friendly message
       showChatToast.error('Video chat opened in another tab. Please use only one tab.');
     };
 
     const handleAuthConflict = (data: any) => {
       console.warn('[VideoChatSocket] Auth conflict detected:', data);
       setConnectionError('Another video chat session detected');
-      
       socket.disconnect();
       showChatToast.error('You have another video chat session open. Please close other tabs.');
     };
@@ -187,7 +235,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     const handlePartnerFound = (data: any) => {
       console.log('[VideoChatSocket] Partner found:', data?.partnerId);
       
-      // ✅ CRITICAL: Validate partner data and prevent self-matching
       if (!data || !data.partnerId || !data.roomId) {
         console.error('[VideoChatSocket] Invalid partner found data:', data);
         return;
@@ -201,8 +248,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
         return;
       }
       
-      // ✅ Check for auth ID self-matching
-      if (data.partnerAuthId && params.authId && data.partnerAuthId === params.authId) {
+      if (data.partnerAuthId && stableParamsRef.current.authId && data.partnerAuthId === stableParamsRef.current.authId) {
         console.error('[VideoChatSocket] CRITICAL: Same auth ID match detected!', data);
         socket.emit('leaveChat', { roomId: data.roomId });
         showChatToast.error('Cannot match with yourself. Please try again.');
@@ -210,7 +256,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       }
       
       roomIdRef.current = data.roomId;
-      params.onPartnerFound({
+      stableParamsRef.current.onPartnerFound({
         partnerId: data.partnerId,
         roomId: data.roomId,
         interests: data.interests || [],
@@ -231,7 +277,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     const handleReceiveMessage = (data: any) => {
       console.log('[VideoChatSocket] Message received from:', data?.senderId);
       
-      // ✅ Validate message data and check for self-messages
       if (!data || !data.message) {
         console.warn('[VideoChatSocket] Invalid message data:', data);
         return;
@@ -243,7 +288,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
         return;
       }
       
-      params.onMessage({
+      stableParamsRef.current.onMessage({
         senderId: data.senderId,
         message: data.message,
         senderUsername: data.senderUsername,
@@ -257,21 +302,15 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     const handlePartnerLeft = () => {
       console.log('[VideoChatSocket] Partner left');
       roomIdRef.current = null;
-      params.onPartnerLeft();
+      stableParamsRef.current.onPartnerLeft();
     };
 
     // ✅ CRITICAL: Enhanced WebRTC signal handling with self-prevention
     const handleWebRTCSignal = (data: any) => {
       console.log('[VideoChatSocket] WebRTC signal received:', data?.signalData?.type || 'unknown');
       
-      // ✅ CRITICAL: Comprehensive validation
-      if (!data) {
-        console.error('[VideoChatSocket] Received null WebRTC signal data');
-        return;
-      }
-      
-      if (!data.signalData) {
-        console.error('[VideoChatSocket] WebRTC signal missing signalData:', data);
+      if (!data || !data.signalData) {
+        console.error('[VideoChatSocket] Invalid WebRTC signal data:', data);
         return;
       }
       
@@ -281,14 +320,13 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
         return;
       }
       
-      // ✅ Validate signal data structure
       if (typeof data.signalData !== 'object') {
         console.error('[VideoChatSocket] Invalid signalData type:', typeof data.signalData);
         return;
       }
       
       try {
-        params.onWebRTCSignal(data.signalData);
+        stableParamsRef.current.onWebRTCSignal(data.signalData);
       } catch (error) {
         console.error('[VideoChatSocket] Error in WebRTC signal handler:', error);
       }
@@ -297,11 +335,10 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     const handlePartnerStatusChanged = (data: any) => {
       console.log('[VideoChatSocket] Partner status changed:', data?.status);
       if (data?.status) {
-        params.onStatusChange(data.status);
+        stableParamsRef.current.onStatusChange(data.status);
       }
     };
 
-    // ✅ Enhanced heartbeat handling
     const handleHeartbeat = (data: any) => {
       if (data?.timestamp) {
         socket.emit('heartbeat_response', {
@@ -325,7 +362,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       }
     };
 
-    // ✅ Enhanced batched message handling
     const handleBatchedMessages = (messages: Array<{ event: string; data: any }>) => {
       if (!Array.isArray(messages)) {
         console.warn('[VideoChatSocket] Invalid batched messages format');
@@ -334,9 +370,8 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       
       messages.forEach(({ event, data }) => {
         try {
-          // ✅ CRITICAL: Check for self-messages in batched messages
           if ((event === 'receiveMessage' || event === 'webrtcSignal') && 
-              data?.senderId === socket.id || data?.fromUser === socket.id) {
+              (data?.senderId === socket.id || data?.fromUser === socket.id)) {
             console.warn(`[VideoChatSocket] Ignoring batched ${event} from self`);
             return;
           }
@@ -349,10 +384,10 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
               handlePartnerStatusChanged(data);
               break;
             case 'partner_typing_start':
-              params.onTypingStart();
+              stableParamsRef.current.onTypingStart();
               break;
             case 'partner_typing_stop':
-              params.onTypingStop();
+              stableParamsRef.current.onTypingStop();
               break;
             case 'webrtcSignal':
               handleWebRTCSignal(data);
@@ -366,7 +401,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       });
     };
 
-    // ✅ Tab identification confirmation
     const handleTabIdentified = (data: any) => {
       console.log('[VideoChatSocket] Tab identified:', data);
       if (data?.tabId === tabIdRef.current) {
@@ -388,57 +422,56 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     socket.on('partnerLeft', handlePartnerLeft);
     socket.on('partnerStatusChanged', handlePartnerStatusChanged);
     socket.on('webrtcSignal', handleWebRTCSignal);
-    socket.on('partner_typing_start', params.onTypingStart);
-    socket.on('partner_typing_stop', params.onTypingStop);
-    socket.on('waitingForPartner', params.onWaiting);
-    socket.on('findPartnerCooldown', params.onCooldown);
+    socket.on('partner_typing_start', stableParamsRef.current.onTypingStart);
+    socket.on('partner_typing_stop', stableParamsRef.current.onTypingStop);
+    socket.on('waitingForPartner', stableParamsRef.current.onWaiting);
+    socket.on('findPartnerCooldown', stableParamsRef.current.onCooldown);
     socket.on('batchedMessages', handleBatchedMessages);
     socket.on('heartbeat', handleHeartbeat);
     socket.on('connection_warning', handleConnectionWarning);
+  }, []);
 
-    // ✅ Enhanced cleanup
-    return () => {
-      console.log('[VideoChatSocket] Cleaning up connection');
-      
-      // Leave room if connected
-      if (roomIdRef.current && socket.connected) {
-        try {
-          socket.emit('leaveChat', { 
-            roomId: roomIdRef.current,
-            tabId: tabIdRef.current,
-            reason: 'component_cleanup'
-          });
-        } catch (error) {
-          console.warn('[VideoChatSocket] Error leaving chat:', error);
-        }
+  const cleanup = useCallback(() => {
+    console.log('[VideoChatSocket] Cleaning up connection');
+    
+    // ✅ Mark as destroyed to prevent new connections
+    connectionStateRef.current.isDestroyed = true;
+    connectionStateRef.current.isInitialized = false;
+    
+    // Clear stability timer
+    if (connectionStateRef.current.stabilityTimer) {
+      clearTimeout(connectionStateRef.current.stabilityTimer);
+      connectionStateRef.current.stabilityTimer = null;
+    }
+    
+    // Leave room if connected
+    if (roomIdRef.current && socketRef.current?.connected) {
+      try {
+        socketRef.current.emit('leaveChat', { 
+          roomId: roomIdRef.current,
+          tabId: tabIdRef.current,
+          reason: 'component_cleanup'
+        });
+      } catch (error) {
+        console.warn('[VideoChatSocket] Error leaving chat:', error);
       }
-      
-      // Remove global function
-      if (typeof window !== 'undefined') {
-        delete window.videoChatEmitWebRTCSignal;
-      }
-      
-      // Clean up socket
-      socket.removeAllListeners();
-      socket.disconnect();
+    }
+    
+    // Remove global function
+    if (typeof window !== 'undefined') {
+      delete window.videoChatEmitWebRTCSignal;
+    }
+    
+    // Clean up socket
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
       socketRef.current = null;
-      roomIdRef.current = null;
-      tabIdRef.current = null;
-    };
-  }, [
-    params.onMessage,
-    params.onPartnerFound,
-    params.onPartnerLeft,
-    params.onStatusChange,
-    params.onTypingStart,
-    params.onTypingStop,
-    params.onWebRTCSignal,
-    params.onWaiting,
-    params.onCooldown,
-    params.onDisconnectHandler,
-    params.onConnectErrorHandler,
-    params.authId // ✅ Include authId to detect changes
-  ]);
+    }
+    
+    roomIdRef.current = null;
+    tabIdRef.current = null;
+  }, []);
 
   // ✅ ENHANCED: Emit functions with better validation and error handling
   const emitFindPartner = useCallback((payload: {
@@ -452,13 +485,11 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       return false;
     }
     
-    // ✅ Validate payload
     if (!payload || payload.chatType !== 'video') {
       console.error('[VideoChatSocket] Invalid findPartner payload:', payload);
       return false;
     }
     
-    // ✅ CRITICAL: Include unique identifiers to prevent self-matching
     const enhancedPayload = {
       ...payload,
       tabId: tabIdRef.current,
@@ -493,7 +524,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       return false;
     }
     
-    // ✅ Validate message
     if (!payload?.message?.trim()) {
       console.warn('[VideoChatSocket] Empty message not sent');
       return false;
@@ -571,7 +601,6 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       return false;
     }
     
-    // ✅ Validate signal payload
     if (!payload?.signalData) {
       console.error('[VideoChatSocket] Invalid WebRTC signal payload:', payload);
       return false;
@@ -594,7 +623,7 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
   }, []);
 
   const emitUpdateStatus = useCallback((status: 'online' | 'idle' | 'dnd' | 'offline') => {
-    if (socketRef.current?.connected && params.authId) {
+    if (socketRef.current?.connected && stableParamsRef.current.authId) {
       console.log('[VideoChatSocket] Updating status:', status);
       try {
         socketRef.current.emit('updateStatus', { 
@@ -607,9 +636,8 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       }
     }
     return false;
-  }, [params.authId]);
+  }, []);
 
-  // ✅ Enhanced connection health check
   const getConnectionHealth = useCallback(() => {
     return {
       isConnected,
@@ -620,9 +648,9 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       roomId: roomIdRef.current,
       reconnectAttempts: reconnectAttemptsRef.current,
       transport: socketRef.current?.io?.engine?.transport?.name || null,
-      authId: params.authId
+      authId: stableParamsRef.current.authId
     };
-  }, [isConnected, connectionError, isConnecting, params.authId]);
+  }, [isConnected, connectionError, isConnecting]);
 
   return {
     // State
