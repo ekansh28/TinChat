@@ -1,14 +1,15 @@
-// src/app/chat/hooks/useChat.ts - CONSOLIDATED HOOK SOLUTION
+// src/app/chat/hooks/useChat.ts - FIXED VERSION WITH MODULAR STRUCTURE
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
-import { useChatSocket } from './useChatSocket';
 import { useChatState } from './useChatState';
 import { useAuth } from './useAuth';
 import { useThemeDetection } from './useThemeDetection';
 import { useViewport } from './useViewport';
 import { useFaviconManager } from './useFaviconManager';
 import { useSystemMessages } from './useSystemMessages';
+import { useChatSocket } from './useChatSocket';
 import { useChatActions } from './useChatActions';
+import { useAutoSearch } from './useAutoSearch';
 import { playSound } from '@/lib/utils';
 
 interface UseChatReturn {
@@ -49,7 +50,7 @@ export const useChat = (): UseChatReturn => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   
-  // ✅ FIXED: All hooks called unconditionally in same order every time
+  // ✅ FIXED: All hooks called unconditionally in consistent order
   const [isMounted, setIsMounted] = useState(false);
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
@@ -60,7 +61,7 @@ export const useChat = (): UseChatReturn => {
   const initRef = useRef({
     isInitialized: false,
     autoSearchStarted: false,
-    socketInitialized: false
+    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`
   });
 
   // ✅ FIXED: Stable interests memoization
@@ -76,7 +77,7 @@ export const useChat = (): UseChatReturn => {
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
 
-  // ✅ FIXED: Stable socket handlers with consistent order
+  // ✅ FIXED: Stable socket handlers with memoization
   const socketHandlers = useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[Chat] Handling message:', data);
@@ -173,15 +174,15 @@ export const useChat = (): UseChatReturn => {
       console.log('[Chat] Socket connection error');
       chatState.setIsFindingPartner(false);
     }
-  }), []); // ✅ Empty deps - handlers use current state via closure
+  }), [chatState]); // ✅ Only depend on stable chatState
 
-  // ✅ FIXED: Socket hook called unconditionally
+  // ✅ FIXED: Socket hook with stable handlers
   const socket = useChatSocket({
     ...socketHandlers,
     authId: auth.authId
   });
 
-  // ✅ FIXED: Favicon manager hook called unconditionally
+  // ✅ FIXED: Favicon manager hook
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -190,7 +191,7 @@ export const useChat = (): UseChatReturn => {
     isPartnerLeftRecently
   });
 
-  // ✅ FIXED: System messages hook called unconditionally
+  // ✅ FIXED: System messages hook
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -203,7 +204,7 @@ export const useChat = (): UseChatReturn => {
     setMessages: chatState.setMessages
   });
 
-  // ✅ FIXED: Chat actions hook called unconditionally
+  // ✅ FIXED: Chat actions hook
   const chatActions = useChatActions({
     isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
@@ -228,102 +229,18 @@ export const useChat = (): UseChatReturn => {
     username: auth.username
   });
 
-useEffect(() => {
-  console.log('[Chat] Auto-search effect triggered:', {
-    autoSearchStarted: initRef.current.autoSearchStarted,
-    isConnected: socket.isConnected,
-    authLoading: auth.isLoading,
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    authId: auth.authId,
-    connectionError: socket.connectionError,
-    isConnecting: socket.isConnecting
+  // ✅ FIXED: Auto-search hook (extracted to separate module)
+  useAutoSearch({
+    socket,
+    auth,
+    chatState,
+    interests,
+    initRef,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently
   });
-
-  if (initRef.current.autoSearchStarted) {
-    console.log('[Chat] Auto-search already started, skipping');
-    return;
-  }
-
-  // ✅ CRITICAL FIX: Add small delay to ensure socket is fully ready
-  const isSocketReady = socket.isConnected && !socket.connectionError && !socket.isConnecting;
-  const isAuthReady = !auth.isLoading && auth.authId !== undefined;
-  const isChatReady = !chatState.isPartnerConnected && !chatState.isFindingPartner;
-
-  console.log('[Chat] Auto-search readiness check:', {
-    isSocketReady,
-    isAuthReady, 
-    isChatReady,
-    overall: isSocketReady && isAuthReady && isChatReady
-  });
-
-  if (!isSocketReady || !isAuthReady || !isChatReady) {
-    console.log('[Chat] Auto-search conditions not met - waiting...');
-    return;
-  }
-
-  // ✅ CRITICAL FIX: Add additional delay to prevent race conditions
-  const delayedStart = setTimeout(() => {
-    if (!initRef.current.autoSearchStarted && socket.isConnected) {
-      console.log('[Chat] ✅ Starting delayed auto-search for partner');
-      initRef.current.autoSearchStarted = true;
-      
-      chatState.setIsFindingPartner(true);
-      chatState.addSystemMessage('Searching for a partner...');
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      
-      // ✅ ENHANCED: More robust partner search
-      const success = socket.emitFindPartner({
-        chatType: 'text',
-        interests,
-        authId: auth.authId
-      });
-      
-      if (!success) {
-        console.error('[Chat] Failed to emit findPartner');
-        chatState.setIsFindingPartner(false);
-        chatState.addSystemMessage('Failed to start partner search. Please try again.');
-        initRef.current.autoSearchStarted = false;
-      } else {
-        console.log('[Chat] ✅ findPartner emitted successfully');
-      }
-    }
-  }, 1000); // ✅ 1 second delay to ensure everything is ready
-
-  return () => {
-    clearTimeout(delayedStart);
-  };
-}, [
-  socket.isConnected,
-  socket.connectionError,
-  socket.isConnecting,
-  auth.isLoading,
-  auth.authId,
-  chatState.isPartnerConnected,
-  chatState.isFindingPartner,
-  interests
-]);
-
-// ✅ IMPROVED: Reset auto-search flag when conditions change
-useEffect(() => {
-  const shouldReset = chatState.isPartnerConnected || 
-                     !socket.isConnected || 
-                     socket.connectionError ||
-                     socket.isConnecting;
-
-  if (shouldReset && initRef.current.autoSearchStarted) {
-    console.log('[Chat] Resetting auto-search flag due to state change:', {
-      isPartnerConnected: chatState.isPartnerConnected,
-      isConnected: socket.isConnected,
-      connectionError: socket.connectionError,
-      isConnecting: socket.isConnecting
-    });
-    initRef.current.autoSearchStarted = false;
-  }
-}, [chatState.isPartnerConnected, socket.isConnected, socket.connectionError, socket.isConnecting]);
   
-// ✅ FIXED: Navigation cleanup effect
+  // ✅ FIXED: Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/chat') {
       console.log('[Chat] Route change cleanup');
@@ -333,7 +250,7 @@ useEffect(() => {
       setPartnerInterests([]);
       initRef.current.autoSearchStarted = false;
     }
-  }, [pathname]);
+  }, [pathname, chatState.resetChatState]);
 
   // ✅ FIXED: Mount effect
   useEffect(() => { 
@@ -352,7 +269,7 @@ useEffect(() => {
     console.log('[Chat] Username clicked:', authId, clickPosition);
   }, []);
 
-  // ✅ FIXED: Memoized computations (always called, consistent order)
+  // ✅ FIXED: Memoized computations
   const mappedMessages = useMemo(() => {
     return chatState.messages.map(msg => ({
       id: msg.id,
