@@ -1,297 +1,180 @@
-// src/app/chat/hooks/useSocketCore.ts - CRITICAL FIX FOR SOCKET CONNECTIONS
-import { useRef, useState, useCallback } from 'react';
+// src/app/chat/hooks/useSocketCore.ts
+
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { generateDeviceFingerprint } from '@/lib/utils/fingerprint';
+import { useStableCallback } from '@/hooks/useStableCallback';
 
 interface SocketState {
   isConnected: boolean;
   connectionError: string | null;
   isConnecting: boolean;
+  currentRoom: string | null;
 }
 
-interface UseSocketCoreParams {
-  socketServerUrl: string | undefined;
-  onConnect: () => void;
-  onDisconnect: (reason: string) => void;
-  onConnectError: (error: Error) => void;
+interface UseSocketCoreOptions {
+  socketServerUrl: string;
+  onConnect?: () => void;
+  onDisconnect?: (reason: string) => void;
+  onConnectError?: (error: Error) => void;
+  autoReconnect?: boolean;
+  debug?: boolean;
 }
 
-export const useSocketCore = ({ 
-  socketServerUrl, 
-  onConnect, 
-  onDisconnect, 
-  onConnectError 
-}: UseSocketCoreParams) => {
+export const useSocketCore = ({
+  socketServerUrl,
+  onConnect,
+  onDisconnect,
+  onConnectError,
+  autoReconnect = true,
+  debug = false
+}: UseSocketCoreOptions) => {
   const socketRef = useRef<Socket | null>(null);
   const [state, setState] = useState<SocketState>({
     isConnected: false,
     connectionError: null,
-    isConnecting: false
+    isConnecting: false,
+    currentRoom: null
   });
-  
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const connectionAttemptsRef = useRef(0);
-  const isInitializedRef = useRef(false);
-  const stabilityTracker = useRef({
-    lastConnectionTime: 0,
-    connectionCount: 0,
-    stabilityTimer: null as NodeJS.Timeout | null
+  const mountedRef = useRef(false);
+  const cleanupFunctionsRef = useRef<(() => void)[]>([]);
+
+  const log = useCallback((message: string, ...args: any[]) => {
+    if (debug) {
+      console.log(`[SocketCore] ${message}`, ...args);
+    }
+  }, [debug]);
+
+  // Stable event handlers
+  const handleConnect = useStableCallback(() => {
+    log('Connected');
+    setState(prev => ({
+      ...prev,
+      isConnected: true,
+      isConnecting: false,
+      connectionError: null
+    }));
+    connectionAttemptsRef.current = 0;
+    onConnect?.();
   });
 
-  const createSocket = useCallback(() => {
-    if (!socketServerUrl) {
-      setState(prev => ({ ...prev, connectionError: 'Socket server URL not configured' }));
-      return null;
-    }
+  const handleDisconnect = useStableCallback((reason: string) => {
+    log('Disconnected:', reason);
+    setState(prev => ({
+      ...prev,
+      isConnected: false,
+      isConnecting: false
+    }));
+    onDisconnect?.(reason);
+  });
 
-    console.log('[SocketCore] Creating socket connection');
-    
-    // ✅ CRITICAL FIX: Enhanced unique tab ID generation
-    const tabId = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 12)}-${performance.now()}`;
-    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 100) : 'unknown';
-    
+  const handleError = useStableCallback((error: Error) => {
+    log('Error:', error);
+    setState(prev => ({
+      ...prev,
+      connectionError: error.message,
+      isConnecting: false
+    }));
+    onConnectError?.(error);
+  });
+
+  // Socket creation with proper configuration
+  const createSocket = useCallback(() => {
+    if (!socketServerUrl || socketRef.current) return null;
+
+    log('Creating socket connection');
+    connectionAttemptsRef.current++;
+
     const socket = io(socketServerUrl, {
       withCredentials: true,
-      transports: ['websocket', 'polling'],
-      reconnection: true,
+      transports: ['websocket'],
+      reconnection: autoReconnect,
       reconnectionAttempts: 5,
-      reconnectionDelay: 2000,        // ✅ Increased from 1000ms
-      reconnectionDelayMax: 8000,     // ✅ Increased from 5000ms
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
       timeout: 20000,
-      forceNew: true,
-      upgrade: true,
-      rememberUpgrade: false,
-      autoConnect: true,
       query: {
-        tabId: tabId,
+        clientId: generateDeviceFingerprint(),
         timestamp: Date.now(),
-        userAgent: userAgent,
-        sessionId: `${Date.now()}-${Math.random()}`,
-        clientId: `client-${Date.now()}`,
-        connectionAttempt: connectionAttemptsRef.current
+        attempt: connectionAttemptsRef.current
       }
     });
 
     return socket;
-  }, [socketServerUrl]);
+  }, [socketServerUrl, autoReconnect, log]);
 
-  const setupSocketEvents = useCallback((socket: Socket) => {
-    const handleConnect = () => {
-      console.log('[SocketCore] Connected:', socket.id);
-      setState({
-        isConnected: true,
-        isConnecting: false,
-        connectionError: null
-      });
-      connectionAttemptsRef.current = 0;
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      
-      // ✅ ENHANCED: Tab identification to prevent duplicate handling
-      const tabId = socket.handshake.query.tabId as string;
-      socket.emit('identify_tab', { 
-        tabId,
-        isReconnect: connectionAttemptsRef.current > 0,
-        timestamp: Date.now(),
-        userAgent: socket.handshake.query.userAgent
-      });
-      
-      onConnect();
-    };
+  // Initialize socket connection
+  useEffect(() => {
+    mountedRef.current = true;
 
-    const handleDisconnect = (reason: string) => {
-      console.log('[SocketCore] Disconnected:', reason);
-      setState(prev => ({
-        ...prev,
-        isConnected: false,
-        isConnecting: false
-      }));
-      
-      onDisconnect(reason);
+    const socket = createSocket();
+    if (!socket) return;
 
-      // ✅ ENHANCED: Smart reconnection with exponential backoff
-      if (reason === 'io server disconnect') {
-        setState(prev => ({ ...prev, connectionError: 'Disconnected by server' }));
-      } else if (reason === 'transport close' || reason === 'ping timeout') {
-        if (connectionAttemptsRef.current < 3) {
-          const delay = Math.min(2000 * Math.pow(2, connectionAttemptsRef.current), 10000);
-          console.log(`[SocketCore] Scheduling reconnect in ${delay}ms (attempt ${connectionAttemptsRef.current + 1})`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (!socketRef.current?.connected) {
-              connectionAttemptsRef.current += 1;
-              socket.connect();
-            }
-          }, delay);
-        } else {
-          setState(prev => ({ ...prev, connectionError: 'Connection lost - please refresh' }));
-        }
-      }
-    };
+    socketRef.current = socket;
+    setState(prev => ({ ...prev, isConnecting: true }));
 
-    const handleConnectError = (err: Error) => {
-      console.error('[SocketCore] Connection error:', err);
-      setState({
-        isConnected: false,
-        isConnecting: false,
-        connectionError: err.message
-      });
-      onConnectError(err);
-    };
-
-    // ✅ ENHANCED: Duplicate tab detection handler
-    const handleDuplicateTab = (data: any) => {
-      console.warn('[SocketCore] Duplicate tab detected:', data);
-      setState(prev => ({ ...prev, connectionError: 'Chat opened in another tab' }));
-      socket.disconnect();
-    };
-
+    // Register event handlers
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
-    socket.on('connect_error', handleConnectError);
-    socket.on('duplicate_tab_detected', handleDuplicateTab);
+    socket.on('connect_error', handleError);
 
+    // Cleanup function
     return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-      socket.off('connect_error', handleConnectError);
-      socket.off('duplicate_tab_detected', handleDuplicateTab);
-    };
-  }, [onConnect, onDisconnect, onConnectError]);
+      mountedRef.current = false;
+      log('Cleaning up socket connection');
 
-  const initializeSocket = useCallback(() => {
-    // ✅ CRITICAL FIX: Enhanced stability checking for React Strict Mode
-    const now = Date.now();
-    stabilityTracker.current.connectionCount++;
-    
-    // Detect rapid re-initialization (React Strict Mode)
-    if (now - stabilityTracker.current.lastConnectionTime < 1000) {
-      console.warn(`[SocketCore] Rapid re-initialization detected (${stabilityTracker.current.connectionCount})`);
-      
-      // Clear existing stability timer
-      if (stabilityTracker.current.stabilityTimer) {
-        clearTimeout(stabilityTracker.current.stabilityTimer);
-      }
-      
-      // Wait for stability before creating socket
-      stabilityTracker.current.stabilityTimer = setTimeout(() => {
-        if (!isInitializedRef.current) {
-          console.log('[SocketCore] Stability achieved, creating socket');
-          createSocketConnection();
-        }
-      }, 1500);
-      
-      stabilityTracker.current.lastConnectionTime = now;
-      return;
-    }
-    
-    stabilityTracker.current.lastConnectionTime = now;
-    createSocketConnection();
+      // Execute all registered cleanup functions
+      cleanupFunctionsRef.current.forEach(cleanup => cleanup());
+      cleanupFunctionsRef.current = [];
 
-    function createSocketConnection() {
-      // Prevent multiple socket instances
-      if (isInitializedRef.current && socketRef.current) {
-        console.log('[SocketCore] Socket already initialized');
-        return;
-      }
-
-      // Clean up any existing socket first
+      // Cleanup socket
       if (socketRef.current) {
-        console.log('[SocketCore] Cleaning up existing socket');
         socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
         socketRef.current = null;
       }
 
-      isInitializedRef.current = true;
-      setState(prev => ({ ...prev, isConnecting: true }));
-      connectionAttemptsRef.current += 1;
-
-      const socket = createSocket();
-      if (!socket) return;
-
-      socketRef.current = socket;
-      const cleanup = setupSocketEvents(socket);
-
-      return cleanup;
-    }
-  }, [createSocket, setupSocketEvents]);
-
-  const destroySocket = useCallback(() => {
-    console.log('[SocketCore] Destroying socket');
-    
-    // Clear all timers
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    if (stabilityTracker.current.stabilityTimer) {
-      clearTimeout(stabilityTracker.current.stabilityTimer);
-      stabilityTracker.current.stabilityTimer = null;
-    }
-    
-    // Cleanup socket
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners();
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    
-    setState({
-      isConnected: false,
-      isConnecting: false,
-      connectionError: null
-    });
-    
-    isInitializedRef.current = false;
-    connectionAttemptsRef.current = 0;
-    stabilityTracker.current = {
-      lastConnectionTime: 0,
-      connectionCount: 0,
-      stabilityTimer: null
+      setState({
+        isConnected: false,
+        isConnecting: false,
+        connectionError: null,
+        currentRoom: null
+      });
     };
+  }, [createSocket, handleConnect, handleDisconnect, handleError, log]);
+
+  // Helper for registering event handlers with automatic cleanup
+  const registerHandler = useCallback(<T extends any[]>(
+    eventName: string,
+    handler: (...args: T) => void
+  ) => {
+    if (!socketRef.current) return;
+
+    const wrappedHandler = (...args: T) => {
+      if (mountedRef.current) {
+        handler(...args);
+      }
+    };
+
+    socketRef.current.on(eventName, wrappedHandler);
+    cleanupFunctionsRef.current.push(() => {
+      socketRef.current?.off(eventName, wrappedHandler);
+    });
   }, []);
 
-  const forceReconnect = useCallback(() => {
-    if (socketRef.current) {
-      console.log('[SocketCore] Force reconnecting');
-      socketRef.current.disconnect();
-      setTimeout(() => {
-        socketRef.current?.connect();
-      }, 1000);
-    }
-  }, []);
-
-  // ✅ ENHANCED: Connection health check
-  const getConnectionHealth = useCallback(() => {
-    if (!socketRef.current) {
-      return { healthy: false, reason: 'no_socket' };
-    }
-
-    if (!socketRef.current.connected) {
-      return { healthy: false, reason: 'not_connected' };
-    }
-
-    const lastPong = (socketRef.current as any).conn?.lastPong;
-    const now = Date.now();
-    const timeSinceLastPong = lastPong ? now - lastPong : 0;
-
-    if (timeSinceLastPong > 90000) { // 90 seconds
-      return { healthy: false, reason: 'stale_connection', timeSinceLastPong };
-    }
-
-    return { healthy: true, timeSinceLastPong };
-  }, []);
-
+  // Expose a clean API
   return {
     socket: socketRef.current,
     ...state,
-    initializeSocket,
-    destroySocket,
-    forceReconnect,
-    getConnectionHealth
+    registerHandler,
+    isInitialized: Boolean(socketRef.current),
+    emit: useCallback((...args: Parameters<Socket['emit']>) => {
+      socketRef.current?.emit(...args);
+    }, []),
+    disconnect: useCallback(() => {
+      socketRef.current?.disconnect();
+    }, [])
   };
 };

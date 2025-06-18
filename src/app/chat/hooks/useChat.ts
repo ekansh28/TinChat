@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChat.ts - CRITICAL FIX FOR INFINITE LOOPS
+// src/app/chat/hooks/useChat.ts - FIXED VERSION WITH MODULAR STRUCTURE
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useChatState } from './useChatState';
@@ -9,19 +9,78 @@ import { useFaviconManager } from './useFaviconManager';
 import { useSystemMessages } from './useSystemMessages';
 import { useChatSocket } from './useChatSocket';
 import { useChatActions } from './useChatActions';
+import { useAutoSearch } from './useAutoSearch';
 import { playSound } from '@/lib/utils';
 
-// ✅ CRITICAL FIX: Stable socket handlers to prevent dependency loops
-const useStableSocketHandlers = (chatState: any, auth: any) => {
-  return useMemo(() => ({
+interface UseChatReturn {
+  // State
+  isMounted: boolean;
+  isScrollEnabled: boolean;
+  isSelfDisconnectedRecently: boolean;
+  isPartnerLeftRecently: boolean;
+  partnerInterests: string[];
+  interests: string[];
+  
+  // Computed values
+  pinkThemeActive: boolean;
+  effectivePageTheme: string;
+  isMobile: boolean;
+  chatWindowStyle: React.CSSProperties;
+  
+  // Chat state
+  chatState: ReturnType<typeof useChatState>;
+  auth: ReturnType<typeof useAuth>;
+  socket: ReturnType<typeof useChatSocket>;
+  
+  // Actions
+  chatActions: ReturnType<typeof useChatActions>;
+  handleUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
+  
+  // Data
+  mappedMessages: any[];
+  memoizedPartnerInfo: any;
+  memoizedOwnInfo: any;
+  
+  // Loading states
+  isLoading: boolean;
+  hasConnectionError: boolean;
+}
+
+export const useChat = (): UseChatReturn => {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  
+  // ✅ FIXED: All hooks called unconditionally in consistent order
+  const [isMounted, setIsMounted] = useState(false);
+  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
+  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
+  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
+  const [isScrollEnabled] = useState(true);
+  
+  // ✅ FIXED: Initialization tracking with single ref
+  const initRef = useRef({
+    isInitialized: false,
+    autoSearchStarted: false,
+    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`
+  });
+
+  // ✅ FIXED: Stable interests memoization
+  const interests = useMemo(() => {
+    const interestsParam = searchParams.get('interests');
+    if (!interestsParam) return [];
+    return interestsParam.split(',').filter(i => i.trim() !== '');
+  }, [searchParams]);
+
+  // ✅ FIXED: All modular hooks called unconditionally
+  const auth = useAuth();
+  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
+  const { isMobile, chatWindowStyle } = useViewport();
+  const chatState = useChatState();
+
+  // ✅ FIXED: Stable socket handlers with memoization
+  const socketHandlers = useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[Chat] Handling message:', data);
-      
-      // Prevent processing messages from self
-      if (data.senderAuthId && auth.authId && data.senderAuthId === auth.authId) {
-        console.warn('[Chat] Ignoring message from self:', data.senderAuthId);
-        return;
-      }
       
       if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
         chatState.setPartnerInfo(prev => {
@@ -72,8 +131,11 @@ const useStableSocketHandlers = (chatState: any, auth: any) => {
         badges: data.partnerBadges || []
       });
       
+      setPartnerInterests(data.interests || []);
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerConnected(true);
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
       chatState.setMessages([]);
     },
 
@@ -83,6 +145,9 @@ const useStableSocketHandlers = (chatState: any, auth: any) => {
       chatState.setIsFindingPartner(false);
       chatState.setPartnerInfo(null);
       chatState.setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      setIsPartnerLeftRecently(true);
+      setIsSelfDisconnectedRecently(false);
     },
 
     onStatusChange: (status: string) => {
@@ -109,226 +174,15 @@ const useStableSocketHandlers = (chatState: any, auth: any) => {
       console.log('[Chat] Socket connection error');
       chatState.setIsFindingPartner(false);
     }
-  }), [chatState, auth.authId]); // ✅ Only stable dependencies
-};
+  }), [chatState]); // ✅ Only depend on stable chatState
 
-// ✅ CRITICAL FIX: Lifecycle management with React Strict Mode protection
-const useLifecycleManager = () => {
-  const lifecycleRef = useRef({
-    isInitialized: false,
-    isDestroyed: false,
-    mountCount: 0,
-    lastMountTime: 0,
-    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
-    autoSearchStarted: false,
-    searchAttemptCount: 0,
-    lastSearchTime: 0,
-    stabilityTimer: null as NodeJS.Timeout | null
-  });
-
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    const now = Date.now();
-    lifecycleRef.current.mountCount++;
-    
-    console.log(`[Chat] Mount #${lifecycleRef.current.mountCount} at ${now}`);
-    
-    // ✅ CRITICAL: Detect rapid remounting (React Strict Mode)
-    if (now - lifecycleRef.current.lastMountTime < 500) {
-      console.warn(`[Chat] Rapid remount detected - applying stability delay`);
-      
-      if (lifecycleRef.current.stabilityTimer) {
-        clearTimeout(lifecycleRef.current.stabilityTimer);
-      }
-      
-      lifecycleRef.current.stabilityTimer = setTimeout(() => {
-        if (!lifecycleRef.current.isDestroyed) {
-          console.log(`[Chat] Stability achieved, mounting component`);
-          setIsMounted(true);
-        }
-      }, 1000);
-      
-      lifecycleRef.current.lastMountTime = now;
-      return;
-    }
-    
-    lifecycleRef.current.lastMountTime = now;
-    lifecycleRef.current.isDestroyed = false;
-    setIsMounted(true);
-    
-    return () => {
-      console.log('[Chat] Component unmounting');
-      lifecycleRef.current.isDestroyed = true;
-      
-      if (lifecycleRef.current.stabilityTimer) {
-        clearTimeout(lifecycleRef.current.stabilityTimer);
-        lifecycleRef.current.stabilityTimer = null;
-      }
-    };
-  }, []); // ✅ CRITICAL: Empty dependency array
-
-  return { lifecycleRef, isMounted };
-};
-
-// ✅ CRITICAL FIX: Controlled auto-search with proper state management
-const useControlledAutoSearch = ({
-  lifecycleRef,
-  socket,
-  auth,
-  chatState,
-  interests,
-  setIsSelfDisconnectedRecently,
-  setIsPartnerLeftRecently
-}: any) => {
-  const autoSearchInitialized = useRef(false);
-
-  useEffect(() => {
-    // Skip if already initialized or component is being destroyed
-    if (autoSearchInitialized.current || lifecycleRef.current.isDestroyed) {
-      return;
-    }
-
-    // Skip during stability period
-    if (lifecycleRef.current.stabilityTimer) {
-      console.log('[Chat] Skipping auto-search - waiting for stability');
-      return;
-    }
-
-    console.log('[Chat] Auto-search effect triggered:', {
-      isConnected: socket.isConnected,
-      authLoading: auth.isLoading,
-      authId: auth.authId,
-      isPartnerConnected: chatState.isPartnerConnected,
-      isFindingPartner: chatState.isFindingPartner,
-      connectionError: socket.connectionError
-    });
-
-    // Enhanced readiness checks
-    const isSocketReady = socket.isConnected && !socket.connectionError && !socket.isConnecting;
-    const isAuthReady = !auth.isLoading && auth.authId !== undefined;
-    const isChatReady = !chatState.isPartnerConnected && !chatState.isFindingPartner;
-
-    if (!isSocketReady || !isAuthReady || !isChatReady) {
-      console.log('[Chat] Auto-search conditions not met');
-      return;
-    }
-
-    // Rate limiting
-    const now = Date.now();
-    if (now - lifecycleRef.current.lastSearchTime < 15000) {
-      console.log('[Chat] Auto-search rate limited');
-      return;
-    }
-
-    // Limit search attempts
-    if (lifecycleRef.current.searchAttemptCount >= 2) {
-      console.log('[Chat] Max search attempts reached');
-      chatState.addSystemMessage('Please click "Find" to start chatting.');
-      return;
-    }
-
-    // ✅ Start controlled auto-search with delay
-    const searchTimeout = setTimeout(() => {
-      if (!lifecycleRef.current.isDestroyed && !autoSearchInitialized.current) {
-        autoSearchInitialized.current = true;
-        lifecycleRef.current.lastSearchTime = now;
-        lifecycleRef.current.searchAttemptCount++;
-
-        console.log('[Chat] ✅ Starting auto-search for partner');
-        
-        chatState.setIsFindingPartner(true);
-        chatState.addSystemMessage('Searching for a partner...');
-        setIsSelfDisconnectedRecently(false);
-        setIsPartnerLeftRecently(false);
-        
-        const success = socket.emitFindPartner({
-          chatType: 'text',
-          interests,
-          authId: auth.authId,
-          sessionId: lifecycleRef.current.sessionId,
-          timestamp: now
-        });
-        
-        if (!success) {
-          console.error('[Chat] Failed to emit findPartner');
-          chatState.setIsFindingPartner(false);
-          chatState.addSystemMessage('Failed to start partner search. Please try again.');
-          autoSearchInitialized.current = false;
-        }
-      }
-    }, 1000); // ✅ 1 second delay prevents race conditions
-
-    return () => clearTimeout(searchTimeout);
-  }, [
-    // ✅ CRITICAL: Only primitive dependencies
-    socket.isConnected,
-    socket.connectionError,
-    socket.isConnecting,
-    auth.isLoading,
-    auth.authId,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner
-  ]);
-
-  // Reset auto-search when conditions change
-  useEffect(() => {
-    const shouldReset = chatState.isPartnerConnected || 
-                       !socket.isConnected || 
-                       socket.connectionError ||
-                       socket.isConnecting;
-
-    if (shouldReset && autoSearchInitialized.current) {
-      console.log('[Chat] Resetting auto-search state');
-      autoSearchInitialized.current = false;
-    }
-
-    if (chatState.isPartnerConnected) {
-      lifecycleRef.current.searchAttemptCount = 0;
-    }
-  }, [
-    chatState.isPartnerConnected, 
-    socket.isConnected, 
-    socket.connectionError, 
-    socket.isConnecting
-  ]);
-};
-
-export const useChat = () => {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  
-  // ✅ CRITICAL: Lifecycle management first
-  const { lifecycleRef, isMounted } = useLifecycleManager();
-  
-  // State management
-  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
-  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
-  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
-  const [isScrollEnabled] = useState(true);
-
-  // ✅ FIXED: Stable interests memoization
-  const interests = useMemo(() => {
-    const interestsParam = searchParams.get('interests');
-    if (!interestsParam) return [];
-    return interestsParam.split(',').filter(i => i.trim() !== '');
-  }, [searchParams]);
-
-  // Core hooks - called unconditionally
-  const auth = useAuth();
-  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
-  const { isMobile, chatWindowStyle } = useViewport();
-  const chatState = useChatState();
-
-  // ✅ CRITICAL: Stable socket handlers
-  const stableHandlers = useStableSocketHandlers(chatState, auth);
-  
+  // ✅ FIXED: Socket hook with stable handlers
   const socket = useChatSocket({
-    ...stableHandlers,
+    ...socketHandlers,
     authId: auth.authId
   });
 
-  // Other hooks
+  // ✅ FIXED: Favicon manager hook
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -337,6 +191,7 @@ export const useChat = () => {
     isPartnerLeftRecently
   });
 
+  // ✅ FIXED: System messages hook
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -349,6 +204,7 @@ export const useChat = () => {
     setMessages: chatState.setMessages
   });
 
+  // ✅ FIXED: Chat actions hook
   const chatActions = useChatActions({
     isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
@@ -373,18 +229,18 @@ export const useChat = () => {
     username: auth.username
   });
 
-  // ✅ CRITICAL: Controlled auto-search
-  useControlledAutoSearch({
-    lifecycleRef,
+  // ✅ FIXED: Auto-search hook (extracted to separate module)
+  useAutoSearch({
     socket,
     auth,
     chatState,
     interests,
+    initRef,
     setIsSelfDisconnectedRecently,
     setIsPartnerLeftRecently
   });
   
-  // Navigation cleanup
+  // ✅ FIXED: Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/chat') {
       console.log('[Chat] Route change cleanup');
@@ -392,14 +248,28 @@ export const useChat = () => {
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
       setPartnerInterests([]);
+      initRef.current.autoSearchStarted = false;
     }
-  }, [pathname]);
+  }, [pathname, chatState.resetChatState]);
 
+  // ✅ FIXED: Mount effect
+  useEffect(() => { 
+    console.log('[Chat] Component mounted');
+    setIsMounted(true);
+    initRef.current.isInitialized = true;
+    
+    return () => {
+      console.log('[Chat] Component unmounting');
+      initRef.current.isInitialized = false;
+    };
+  }, []);
+
+  // ✅ FIXED: Username click handler
   const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
     console.log('[Chat] Username clicked:', authId, clickPosition);
   }, []);
 
-  // ✅ Memoized computations
+  // ✅ FIXED: Memoized computations
   const mappedMessages = useMemo(() => {
     return chatState.messages.map(msg => ({
       id: msg.id,
@@ -435,7 +305,7 @@ export const useChat = () => {
     displayNameAnimation: auth.displayNameAnimation
   }), [auth.username, auth.authId, auth.displayNameColor, auth.displayNameAnimation]);
 
-  // Loading and error states
+  // ✅ FIXED: Loading and error states
   const isLoading = !isMounted || auth.isLoading;
   const hasConnectionError = !!socket.connectionError && !socket.isConnected && !socket.isConnecting;
 
