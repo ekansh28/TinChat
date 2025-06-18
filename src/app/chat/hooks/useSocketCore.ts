@@ -1,8 +1,8 @@
-// src/app/chat/hooks/useSocketCore.ts
+// src/app/chat/hooks/useSocketCore.ts - FIXED VERSION
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { generateDeviceFingerprint } from '@/lib/utils/fingerprint';
+import { generateDeviceFingerprint } from '@/lib/fingerprint';
 import { useStableCallback } from '@/hooks/useStableCallback';
 
 interface SocketState {
@@ -13,7 +13,7 @@ interface SocketState {
 }
 
 interface UseSocketCoreOptions {
-  socketServerUrl: string;
+  socketServerUrl?: string;
   onConnect?: () => void;
   onDisconnect?: (reason: string) => void;
   onConnectError?: (error: Error) => void;
@@ -40,6 +40,7 @@ export const useSocketCore = ({
   const connectionAttemptsRef = useRef(0);
   const mountedRef = useRef(false);
   const cleanupFunctionsRef = useRef<(() => void)[]>([]);
+  const initializationRef = useRef({ isInitialized: false, isDestroyed: false });
 
   const log = useCallback((message: string, ...args: any[]) => {
     if (debug) {
@@ -50,51 +51,60 @@ export const useSocketCore = ({
   // Stable event handlers
   const handleConnect = useStableCallback(() => {
     log('Connected');
-    setState(prev => ({
-      ...prev,
-      isConnected: true,
-      isConnecting: false,
-      connectionError: null
-    }));
-    connectionAttemptsRef.current = 0;
-    onConnect?.();
+    if (mountedRef.current && !initializationRef.current.isDestroyed) {
+      setState(prev => ({
+        ...prev,
+        isConnected: true,
+        isConnecting: false,
+        connectionError: null
+      }));
+      connectionAttemptsRef.current = 0;
+      onConnect?.();
+    }
   });
 
   const handleDisconnect = useStableCallback((reason: string) => {
     log('Disconnected:', reason);
-    setState(prev => ({
-      ...prev,
-      isConnected: false,
-      isConnecting: false
-    }));
-    onDisconnect?.(reason);
+    if (mountedRef.current && !initializationRef.current.isDestroyed) {
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false
+      }));
+      onDisconnect?.(reason);
+    }
   });
 
   const handleError = useStableCallback((error: Error) => {
     log('Error:', error);
-    setState(prev => ({
-      ...prev,
-      connectionError: error.message,
-      isConnecting: false
-    }));
-    onConnectError?.(error);
+    if (mountedRef.current && !initializationRef.current.isDestroyed) {
+      setState(prev => ({
+        ...prev,
+        connectionError: error.message,
+        isConnecting: false
+      }));
+      onConnectError?.(error);
+    }
   });
 
   // Socket creation with proper configuration
   const createSocket = useCallback(() => {
-    if (!socketServerUrl || socketRef.current) return null;
+    if (!socketServerUrl || socketRef.current || initializationRef.current.isDestroyed) {
+      return null;
+    }
 
     log('Creating socket connection');
     connectionAttemptsRef.current++;
 
     const socket = io(socketServerUrl, {
       withCredentials: true,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: autoReconnect,
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
       timeout: 20000,
+      forceNew: true,
       query: {
         clientId: generateDeviceFingerprint(),
         timestamp: Date.now(),
@@ -105,55 +115,112 @@ export const useSocketCore = ({
     return socket;
   }, [socketServerUrl, autoReconnect, log]);
 
-  // Initialize socket connection
-  useEffect(() => {
-    mountedRef.current = true;
+  // Initialize socket function
+  const initializeSocket = useCallback(() => {
+    if (initializationRef.current.isInitialized || initializationRef.current.isDestroyed) {
+      return;
+    }
 
     const socket = createSocket();
     if (!socket) return;
 
     socketRef.current = socket;
-    setState(prev => ({ ...prev, isConnecting: true }));
+    initializationRef.current.isInitialized = true;
+
+    if (mountedRef.current && !initializationRef.current.isDestroyed) {
+      setState(prev => ({ ...prev, isConnecting: true }));
+    }
 
     // Register event handlers
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleError);
 
-    // Cleanup function
     return () => {
-      mountedRef.current = false;
-      log('Cleaning up socket connection');
-
-      // Execute all registered cleanup functions
-      cleanupFunctionsRef.current.forEach(cleanup => cleanup());
-      cleanupFunctionsRef.current = [];
-
-      // Cleanup socket
       if (socketRef.current) {
         socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
         socketRef.current = null;
       }
+      initializationRef.current.isInitialized = false;
+    };
+  }, [createSocket, handleConnect, handleDisconnect, handleError]);
 
+  // Force reconnect function
+  const forceReconnect = useCallback(() => {
+    log('Force reconnecting...');
+    
+    // Clean up existing connection
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    initializationRef.current.isInitialized = false;
+    setState(prev => ({
+      ...prev,
+      isConnected: false,
+      isConnecting: false,
+      connectionError: null
+    }));
+
+    // Reinitialize after a delay
+    setTimeout(() => {
+      if (mountedRef.current && !initializationRef.current.isDestroyed) {
+        initializeSocket();
+      }
+    }, 1000);
+  }, [initializeSocket, log]);
+
+  // Destroy socket function
+  const destroySocket = useCallback(() => {
+    log('Destroying socket connection');
+    initializationRef.current.isDestroyed = true;
+
+    // Execute all registered cleanup functions
+    cleanupFunctionsRef.current.forEach(cleanup => cleanup());
+    cleanupFunctionsRef.current = [];
+
+    // Cleanup socket
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    initializationRef.current.isInitialized = false;
+
+    if (mountedRef.current) {
       setState({
         isConnected: false,
         isConnecting: false,
         connectionError: null,
         currentRoom: null
       });
+    }
+  }, [log]);
+
+  // Initialize on mount
+  useEffect(() => {
+    mountedRef.current = true;
+    initializationRef.current.isDestroyed = false;
+
+    return () => {
+      mountedRef.current = false;
+      destroySocket();
     };
-  }, [createSocket, handleConnect, handleDisconnect, handleError, log]);
+  }, [destroySocket]);
 
   // Helper for registering event handlers with automatic cleanup
   const registerHandler = useCallback(<T extends any[]>(
     eventName: string,
     handler: (...args: T) => void
   ) => {
-    if (!socketRef.current) return;
+    if (!socketRef.current || initializationRef.current.isDestroyed) return;
 
     const wrappedHandler = (...args: T) => {
-      if (mountedRef.current) {
+      if (mountedRef.current && !initializationRef.current.isDestroyed) {
         handler(...args);
       }
     };
@@ -169,9 +236,14 @@ export const useSocketCore = ({
     socket: socketRef.current,
     ...state,
     registerHandler,
-    isInitialized: Boolean(socketRef.current),
+    isInitialized: initializationRef.current.isInitialized,
+    initializeSocket,
+    forceReconnect,
+    destroySocket,
     emit: useCallback((...args: Parameters<Socket['emit']>) => {
-      socketRef.current?.emit(...args);
+      if (socketRef.current?.connected && !initializationRef.current.isDestroyed) {
+        socketRef.current.emit(...args);
+      }
     }, []),
     disconnect: useCallback(() => {
       socketRef.current?.disconnect();

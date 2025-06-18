@@ -1,8 +1,7 @@
+// src/app/chat/hooks/useSocketEmitters.ts - FIXED VERSION
 
-// src/app/chat/hooks/useSocketEmitters.ts - Emit Functions
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
-import { showChatToast } from '../utils/ChatHelpers';
 
 export const useSocketEmitters = (
   socket: Socket | null, 
@@ -14,13 +13,18 @@ export const useSocketEmitters = (
     authId?: string | null;
   }) => {
     if (!socket?.connected) {
-      showChatToast.connectionError('Not connected to server');
+      console.warn('[SocketEmitters] Not connected to server');
       return false;
     }
     
     console.log('[SocketEmitters] Finding partner');
-    socket.emit('findPartner', payload);
-    return true;
+    try {
+      socket.emit('findPartner', payload);
+      return true;
+    } catch (error) {
+      console.error('[SocketEmitters] Error emitting findPartner:', error);
+      return false;
+    }
   }, [socket]);
 
   const emitMessage = useCallback((payload: {
@@ -30,34 +34,47 @@ export const useSocketEmitters = (
     authId?: string | null;
   }) => {
     if (!socket?.connected) {
-      showChatToast.connectionError('Not connected to server');
+      console.warn('[SocketEmitters] Not connected to server');
       return false;
     }
     
     if (!roomIdRef.current) {
-      showChatToast.messageError('Not in a chat room');
+      console.warn('[SocketEmitters] Not in a chat room');
       return false;
     }
     
-    socket.emit('sendMessage', {
-      ...payload,
-      roomId: roomIdRef.current
-    });
-    return true;
+    try {
+      socket.emit('sendMessage', {
+        ...payload,
+        roomId: roomIdRef.current
+      });
+      return true;
+    } catch (error) {
+      console.error('[SocketEmitters] Error emitting message:', error);
+      return false;
+    }
   }, [socket, roomIdRef]);
 
   const emitTypingStart = useCallback(() => {
     if (socket?.connected && roomIdRef.current) {
-      socket.emit('typing_start', { roomId: roomIdRef.current });
-      return true;
+      try {
+        socket.emit('typing_start', { roomId: roomIdRef.current });
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting typing start:', error);
+      }
     }
     return false;
   }, [socket, roomIdRef]);
 
   const emitTypingStop = useCallback(() => {
     if (socket?.connected && roomIdRef.current) {
-      socket.emit('typing_stop', { roomId: roomIdRef.current });
-      return true;
+      try {
+        socket.emit('typing_stop', { roomId: roomIdRef.current });
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting typing stop:', error);
+      }
     }
     return false;
   }, [socket, roomIdRef]);
@@ -65,9 +82,13 @@ export const useSocketEmitters = (
   const emitLeaveChat = useCallback(() => {
     if (socket?.connected && roomIdRef.current) {
       console.log('[SocketEmitters] Leaving chat room');
-      socket.emit('leaveChat', { roomId: roomIdRef.current });
-      roomIdRef.current = null;
-      return true;
+      try {
+        socket.emit('leaveChat', { roomId: roomIdRef.current });
+        roomIdRef.current = null;
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting leave chat:', error);
+      }
     }
     return false;
   }, [socket, roomIdRef]);
@@ -77,19 +98,27 @@ export const useSocketEmitters = (
     signalData: any;
   }) => {
     if (socket?.connected && roomIdRef.current) {
-      socket.emit('webrtcSignal', {
-        roomId: roomIdRef.current,
-        signalData: payload.signalData
-      });
-      return true;
+      try {
+        socket.emit('webrtcSignal', {
+          roomId: roomIdRef.current,
+          signalData: payload.signalData
+        });
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting WebRTC signal:', error);
+      }
     }
     return false;
   }, [socket, roomIdRef]);
 
   const emitUpdateStatus = useCallback((status: 'online' | 'idle' | 'dnd' | 'offline') => {
     if (socket?.connected) {
-      socket.emit('updateStatus', { status });
-      return true;
+      try {
+        socket.emit('updateStatus', { status });
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting status update:', error);
+      }
     }
     return false;
   }, [socket]);

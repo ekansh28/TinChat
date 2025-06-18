@@ -1,5 +1,6 @@
-// src/app/chat/hooks/useChatSocket.ts - SIMPLIFIED MODULAR VERSION
-import { useEffect, useRef } from 'react';
+// src/app/chat/hooks/useChatSocket.ts - FIXED VERSION
+
+import { useEffect, useRef, useCallback } from 'react';
 import { useSocketCore } from './useSocketCore';
 import { useSocketEvents } from './useSocketEvents';
 import { useSocketEmitters } from './useSocketEmitters';
@@ -22,10 +23,11 @@ interface UseChatSocketParams {
 
 export function useChatSocket(params: UseChatSocketParams) {
   const roomIdRef = useRef<string | null>(params.roomId || null);
+  const isInitializedRef = useRef(false);
   
-  // ✅ MODULAR: Core socket management
+  // ✅ FIXED: Core socket management with proper server URL
   const socketCore = useSocketCore({
-    socketServerUrl: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
+    socketServerUrl: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001',
     onConnect: () => {
       console.log('[ChatSocket] Connected successfully');
     },
@@ -35,10 +37,11 @@ export function useChatSocket(params: UseChatSocketParams) {
     },
     onConnectError: (error: Error) => {
       params.onConnectErrorHandler(error);
-    }
+    },
+    debug: process.env.NODE_ENV === 'development'
   });
 
-  // ✅ MODULAR: Event management
+  // ✅ FIXED: Event management with stable handlers
   const { setupEvents } = useSocketEvents({
     onMessage: params.onMessage,
     onPartnerFound: params.onPartnerFound,
@@ -51,35 +54,39 @@ export function useChatSocket(params: UseChatSocketParams) {
     onWebRTCSignal: params.onWebRTCSignal
   });
 
-  // ✅ MODULAR: Emit functions
+  // ✅ FIXED: Emit functions
   const emitters = useSocketEmitters(socketCore.socket, roomIdRef);
 
-  // ✅ Update room ID reference
+  // Update room ID reference
   useEffect(() => {
     roomIdRef.current = params.roomId || null;
   }, [params.roomId]);
 
-  // ✅ SIMPLIFIED: Single initialization effect
+  // ✅ FIXED: Single initialization effect with proper cleanup
   useEffect(() => {
-    console.log('[ChatSocket] Initializing socket');
+    if (isInitializedRef.current) return;
     
+    console.log('[ChatSocket] Initializing socket connection');
+    isInitializedRef.current = true;
+    
+    // Initialize socket connection
     const cleanup = socketCore.initializeSocket();
     
     return () => {
+      isInitializedRef.current = false;
       if (cleanup) cleanup();
-      socketCore.destroySocket();
     };
   }, []); // Empty deps - initialize once
 
-  // ✅ SIMPLIFIED: Setup events when socket is available
+  // ✅ FIXED: Setup events when socket is available
   useEffect(() => {
-    if (socketCore.socket) {
+    if (socketCore.socket && socketCore.isInitialized) {
       console.log('[ChatSocket] Setting up socket events');
       
       // Setup WebRTC global function if needed
       if (params.onWebRTCSignal) {
         (window as any).videoChatEmitWebRTCSignal = (data: any) => {
-          if (socketCore.socket?.connected && roomIdRef.current) {
+          if (socketCore.socket?.connected && roomIdRef.current && data?.signalData) {
             socketCore.socket.emit('webrtcSignal', {
               roomId: roomIdRef.current,
               signalData: data.signalData
@@ -92,58 +99,54 @@ export function useChatSocket(params: UseChatSocketParams) {
       
       return () => {
         cleanup();
-        delete (window as any).videoChatEmitWebRTCSignal;
+        if (params.onWebRTCSignal) {
+          delete (window as any).videoChatEmitWebRTCSignal;
+        }
       };
     }
-  }, [socketCore.socket, setupEvents, params.onWebRTCSignal]);
+  }, [socketCore.socket, socketCore.isInitialized, setupEvents, params.onWebRTCSignal]);
 
-  // ✅ Enhanced emit functions with room ID validation
-  const enhancedEmitters = {
-    ...emitters,
-    emitWebRTCSignal: params.onWebRTCSignal ? emitters.emitWebRTCSignal : undefined,
-    
-    // Additional utility functions
-    getOnlineUserCount: () => {
-      if (socketCore.socket?.connected) {
-        socketCore.socket.emit('getOnlineUserCount');
-        return true;
-      }
-      return false;
-    },
-    
-    emitDebugRequest: () => {
-      if (socketCore.socket?.connected) {
-        socketCore.socket.emit('getDebugInfo');
-        return true;
-      }
-      return false;
-    },
-    
-    checkConnectionHealth: () => {
-      if (!socketCore.socket?.connected) {
-        return { healthy: false, reason: 'not_connected' };
-      }
+  // ✅ Enhanced utility functions
+  const getOnlineUserCount = useCallback(() => {
+    if (socketCore.socket?.connected) {
+      socketCore.socket.emit('getOnlineUserCount');
+      return true;
+    }
+    return false;
+  }, [socketCore.socket]);
+  
+  const emitDebugRequest = useCallback(() => {
+    if (socketCore.socket?.connected) {
+      socketCore.socket.emit('getDebugInfo');
+      return true;
+    }
+    return false;
+  }, [socketCore.socket]);
+  
+  const checkConnectionHealth = useCallback(() => {
+    if (!socketCore.socket?.connected) {
+      return { healthy: false, reason: 'not_connected' };
+    }
 
-      const lastPong = (socketCore.socket as any).conn?.lastPong;
-      const now = Date.now();
-      const timeSinceLastPong = lastPong ? now - lastPong : 0;
+    const lastPong = (socketCore.socket as any).conn?.lastPong;
+    const now = Date.now();
+    const timeSinceLastPong = lastPong ? now - lastPong : 0;
 
-      if (timeSinceLastPong > 90000) { // 90 seconds
-        return { healthy: false, reason: 'stale_connection', timeSinceLastPong };
-      }
+    if (timeSinceLastPong > 90000) { // 90 seconds
+      return { healthy: false, reason: 'stale_connection', timeSinceLastPong };
+    }
 
-      return { healthy: true, timeSinceLastPong };
-    },
-    
-    getConnectionInfo: () => ({
-      isConnected: socketCore.isConnected,
-      isConnecting: socketCore.isConnecting,
-      connectionError: socketCore.connectionError,
-      socketId: socketCore.socket?.id || null,
-      roomId: roomIdRef.current,
-      transport: socketCore.socket?.io.engine.transport.name || null
-    })
-  };
+    return { healthy: true, timeSinceLastPong };
+  }, [socketCore.socket]);
+  
+  const getConnectionInfo = useCallback(() => ({
+    isConnected: socketCore.isConnected,
+    isConnecting: socketCore.isConnecting,
+    connectionError: socketCore.connectionError,
+    socketId: socketCore.socket?.id || null,
+    roomId: roomIdRef.current,
+    transport: socketCore.socket?.io?.engine?.transport?.name || null
+  }), [socketCore.isConnected, socketCore.isConnecting, socketCore.connectionError, socketCore.socket]);
 
   return {
     // Core state
@@ -153,8 +156,14 @@ export function useChatSocket(params: UseChatSocketParams) {
     isConnecting: socketCore.isConnecting,
     roomId: roomIdRef.current,
     
-    // Enhanced emitters
-    ...enhancedEmitters,
+    // Emitters
+    ...emitters,
+    
+    // Utility functions
+    getOnlineUserCount,
+    emitDebugRequest,
+    checkConnectionHealth,
+    getConnectionInfo,
     
     // Core functions
     forceReconnect: socketCore.forceReconnect,
