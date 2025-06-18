@@ -1,7 +1,7 @@
-// src/app/video-chat/VideoChatPageClientContent.tsx - MODULAR VERSION
+// src/app/video-chat/VideoChatPageClientContent.tsx - DEVELOPMENT MODE FIX
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
@@ -58,8 +58,62 @@ const displayNameAnimationCSS = `
   }
 `;
 
+// ✅ CRITICAL: Development mode stability wrapper
+const DevModeStabilityWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isStable, setIsStable] = useState(false);
+  const [stabilityCount, setStabilityCount] = useState(0);
+
+  useEffect(() => {
+    console.log('[DevModeStabilityWrapper] Mount detected, count:', stabilityCount + 1);
+    
+    // Track mount count
+    setStabilityCount(prev => prev + 1);
+    
+    // Set stability timer
+    const stabilityTimer = setTimeout(() => {
+      console.log('[DevModeStabilityWrapper] Stability achieved');
+      setIsStable(true);
+    }, 1000); // 1 second stability period
+
+    return () => {
+      console.log('[DevModeStabilityWrapper] Unmount detected');
+      clearTimeout(stabilityTimer);
+      setIsStable(false);
+    };
+  }, []);
+
+  // Show loading until stable to prevent rapid re-renders
+  if (!isStable) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">
+            Initializing video chat...
+            {process.env.NODE_ENV === 'development' && (
+              <span className="block text-xs text-gray-400 mt-1">
+                Dev Mode: Waiting for stability (mount #{stabilityCount})
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 const VideoChatPageClientContent: React.FC = () => {
-  // ✅ MODULAR: All logic consolidated into one hook
+  return (
+    <DevModeStabilityWrapper>
+      <VideoChatPageContent />
+    </DevModeStabilityWrapper>
+  );
+};
+
+const VideoChatPageContent: React.FC = () => {
+  // ✅ All logic consolidated into one hook
   const {
     // Loading states
     isLoading,
@@ -87,16 +141,26 @@ const VideoChatPageClientContent: React.FC = () => {
     
     // Actions
     chatActions,
-    handleUsernameClick
+    handleUsernameClick,
+    
+    // Debug info
+    debugInfo
   } = useVideoChat();
 
-  // ✅ LOADING SCREEN: Clean and simple
+  // ✅ LOADING SCREEN: Clean and simple with development info
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading video chat...</p>
+          {process.env.NODE_ENV === 'development' && debugInfo && (
+            <div className="mt-2 text-xs text-gray-400 space-y-1">
+              <div>Session: {debugInfo.sessionId?.substring(0, 16)}...</div>
+              <div>Mounts: {debugInfo.mountCount}, Search Attempts: {debugInfo.searchAttempts}</div>
+              <div>Stable: {debugInfo.hasStabilityTimer ? 'No' : 'Yes'}</div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -116,6 +180,12 @@ const VideoChatPageClientContent: React.FC = () => {
           >
             Reload Page
           </button>
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 text-xs text-gray-400">
+              <p>Development Mode - Check server is running on port 3001</p>
+              <p>This error is common during development due to fast refresh</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -132,18 +202,20 @@ const VideoChatPageClientContent: React.FC = () => {
             Video chat requires camera and microphone permissions. 
             Please enable them and refresh the page.
           </p>
-          <button 
-            onClick={() => webrtc.initializeCamera()}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 mr-2"
-          >
-            Try Again
-          </button>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Reload Page
-          </button>
+          <div className="space-x-2">
+            <button 
+              onClick={() => webrtc.initializeCamera()}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              Try Again
+            </button>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -180,6 +252,11 @@ const VideoChatPageClientContent: React.FC = () => {
               <div className="flex items-center justify-between w-full">
                 <div className="title-bar-text">
                   Video Chat
+                  {process.env.NODE_ENV === 'development' && debugInfo && (
+                    <span className="ml-2 text-xs opacity-60">
+                      (Dev: {debugInfo.searchAttempts} attempts)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -252,6 +329,11 @@ const VideoChatPageClientContent: React.FC = () => {
           {socket.connectionError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm rounded window">
               Connection Error: {socket.connectionError}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="text-xs mt-1 opacity-75">
+                  This is common in development mode. Check if server is running.
+                </div>
+              )}
             </div>
           )}
 
@@ -261,13 +343,34 @@ const VideoChatPageClientContent: React.FC = () => {
             </div>
           )}
 
+          {/* ✅ DEVELOPMENT MODE DEBUG INFO */}
+          {process.env.NODE_ENV === 'development' && debugInfo && (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-3 py-2 text-sm rounded window">
+              <div className="text-xs font-mono space-y-1">
+                <div>🔧 Dev Mode Active</div>
+                <div>Session: {debugInfo.sessionId?.substring(0, 20)}...</div>
+                <div>
+                  Searches: {debugInfo.searchAttempts}, 
+                  Started: {debugInfo.autoSearchStarted ? 'Yes' : 'No'}, 
+                  Initialized: {debugInfo.isInitialized ? 'Yes' : 'No'}
+                </div>
+                <div>Mounts: {debugInfo.mountCount}, Stable: {debugInfo.hasStabilityTimer ? 'No' : 'Yes'}</div>
+                {debugInfo.hasStabilityTimer && (
+                  <div className="text-orange-600">⏳ Waiting for stability...</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ✅ WebRTC CONNECTION STATUS: For debugging */}
           {process.env.NODE_ENV === 'development' && webrtc.peerConnection && (
-            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-3 py-2 text-sm rounded window">
-              WebRTC: {webrtc.connectionState}
-              {webrtc.connectionState === 'connected' && ' 🎥'}
-              {webrtc.connectionState === 'connecting' && ' ⏳'}
-              {webrtc.connectionState === 'failed' && ' ❌'}
+            <div className="bg-green-100 border border-green-400 text-green-700 px-3 py-2 text-sm rounded window">
+              <div className="text-xs font-mono">
+                WebRTC: {webrtc.connectionState}
+                {webrtc.connectionState === 'connected' && ' 🎥'}
+                {webrtc.connectionState === 'connecting' && ' ⏳'}
+                {webrtc.connectionState === 'failed' && ' ❌'}
+              </div>
             </div>
           )}
         </div>

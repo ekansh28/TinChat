@@ -1,4 +1,4 @@
-// src/app/video-chat/hooks/useVideoChat.ts - MAIN CONSOLIDATED HOOK
+// src/app/video-chat/hooks/useVideoChat.ts - IMMEDIATE FIX FOR DEV MODE
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useChatState } from '../../chat/hooks/useChatState';
@@ -12,102 +12,88 @@ import { useVideoChatSocket } from './useVideoChatSocket';
 import { useVideoChatActions } from './useVideoChatActions';
 import { playSound } from '@/lib/utils';
 
-interface UseVideoChatReturn {
-  // State
-  isMounted: boolean;
-  isSelfDisconnectedRecently: boolean;
-  isPartnerLeftRecently: boolean;
-  partnerInterests: string[];
-  interests: string[];
-  roomId: string | null;
-  
-  // Computed values
-  pinkThemeActive: boolean;
-  effectivePageTheme: string;
-  isMobile: boolean;
-  chatWindowStyle: React.CSSProperties;
-  videoWindowStyle: React.CSSProperties;
-  chatWindowStyleAdjusted: React.CSSProperties;
-  
-  // Chat state
-  chatState: ReturnType<typeof useChatState>;
-  auth: ReturnType<typeof useAuth>;
-  
-  // WebRTC state
-  webrtc: ReturnType<typeof useWebRTC>;
-  
-  // Socket state  
-  socket: {
-    isConnected: boolean;
-    connectionError: string | null;
-    emitFindPartner: (data: any) => boolean;
-    emitMessage: (data: any) => boolean;
-    emitLeaveChat: () => boolean;
-  };
-  
-  // Actions
-  chatActions: ReturnType<typeof useVideoChatActions>;
-  handleUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
-  
-  // Data
-  mappedMessages: any[];
-  memoizedPartnerInfo: any;
-  memoizedOwnInfo: any;
-  
-  // Loading states
-  isLoading: boolean;
-  hasConnectionError: boolean;
-}
-
-export const useVideoChat = (): UseVideoChatReturn => {
+export const useVideoChat = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   
-  // ✅ FIXED: All hooks called unconditionally in same order every time
+  // ✅ CRITICAL FIX: Stable state initialization to prevent React.StrictMode issues
   const [isMounted, setIsMounted] = useState(false);
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   
-  // ✅ FIXED: Initialization tracking
-  const initRef = useRef({
+  // ✅ CRITICAL: Development mode protection - prevent multiple initializations
+  const devModeRef = useRef({
+    isInitialized: false,
+    mountCount: 0,
+    lastMountTime: 0,
+    sessionId: `dev-session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
     autoSearchStarted: false,
-    socketInitialized: false
+    searchAttemptCount: 0,
+    lastSearchTime: 0,
+    stabilityTimer: null as NodeJS.Timeout | null
   });
 
-  // ✅ FIXED: Stable interests memoization
+  // ✅ CRITICAL: Stable interests memoization to prevent dependency loops
   const interests = useMemo(() => {
     const interestsParam = searchParams.get('interests');
     if (!interestsParam) return [];
     return interestsParam.split(',').filter(i => i.trim() !== '');
   }, [searchParams]);
 
-  // ✅ FIXED: All modular hooks called unconditionally
+  // ✅ All hooks called unconditionally but with stability protection
   const auth = useAuth();
   const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
-  
-  // ✅ WebRTC hook for video functionality
   const webrtc = useWebRTC();
 
-  // ✅ FIXED: Enhanced socket event handlers with proper WebRTC support
+  // ✅ CRITICAL: Development mode stability check
+  useEffect(() => {
+    const now = Date.now();
+    devModeRef.current.mountCount++;
+    
+    // Detect rapid remounting (development mode issue)
+    if (now - devModeRef.current.lastMountTime < 1000) {
+      console.warn(`[VideoChat] RAPID REMOUNT DETECTED: ${devModeRef.current.mountCount} mounts in development mode`);
+      
+      // Clear any existing stability timer
+      if (devModeRef.current.stabilityTimer) {
+        clearTimeout(devModeRef.current.stabilityTimer);
+      }
+      
+      // Set a stability timer to prevent actions until remounting stops
+      devModeRef.current.stabilityTimer = setTimeout(() => {
+        console.log(`[VideoChat] Stability period ended, allowing normal operation`);
+        devModeRef.current.isInitialized = false; // Allow re-initialization
+      }, 2000);
+      
+      devModeRef.current.lastMountTime = now;
+      return;
+    }
+    
+    devModeRef.current.lastMountTime = now;
+    setIsMounted(true);
+    
+    return () => {
+      // Clear stability timer on unmount
+      if (devModeRef.current.stabilityTimer) {
+        clearTimeout(devModeRef.current.stabilityTimer);
+        devModeRef.current.stabilityTimer = null;
+      }
+    };
+  }, []);
+
+  // ✅ ENHANCED: Socket event handlers with development mode protection
   const socketHandlers = useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[VideoChat] Handling message:', data);
       
-      // Update partner info with display settings
-      if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
-        chatState.setPartnerInfo(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
-            displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
-            rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
-          };
-        });
+      // Prevent processing messages from self
+      if (data.senderAuthId && auth.authId && data.senderAuthId === auth.authId) {
+        console.warn('[VideoChat] Ignoring message from self:', data.senderAuthId);
+        return;
       }
       
       chatState.addMessage({
@@ -125,6 +111,27 @@ export const useVideoChat = (): UseVideoChatReturn => {
 
     onPartnerFound: async (data: any) => {
       console.log('[VideoChat] Partner found:', data);
+      
+      // ✅ CRITICAL: Enhanced self-match detection
+      if (!data || !data.partnerId || !data.roomId) {
+        console.error('[VideoChat] Invalid partner data:', data);
+        return;
+      }
+      
+      // Multiple layers of self-match prevention
+      const socketId = socketResult?.socket?.id;
+      
+      if (data.partnerId === socketId) {
+        console.error('[VideoChat] CRITICAL: Self-match detected by socket ID!');
+        chatState.addSystemMessage('Matching error detected. Please refresh the page.');
+        return;
+      }
+      
+      if (data.partnerAuthId && auth.authId && data.partnerAuthId === auth.authId) {
+        console.error('[VideoChat] CRITICAL: Self-match detected by auth ID!');
+        chatState.addSystemMessage('Cannot match with yourself. Please refresh the page.');
+        return;
+      }
       
       try {
         playSound('Match.wav');
@@ -156,7 +163,7 @@ export const useVideoChat = (): UseVideoChatReturn => {
       setIsPartnerLeftRecently(false);
       chatState.setMessages([]);
 
-      // ✅ ENHANCED: Setup WebRTC connection with better error handling
+      // Setup WebRTC connection
       if (webrtc.localStream && isMounted && data.roomId) {
         console.log('[VideoChat] Setting up WebRTC for room:', data.roomId);
         try {
@@ -178,27 +185,15 @@ export const useVideoChat = (): UseVideoChatReturn => {
       setIsPartnerLeftRecently(true);
       setIsSelfDisconnectedRecently(false);
       setRoomId(null);
-      
-      // Clean up WebRTC connections but keep local stream
       webrtc.cleanupConnections(false);
     },
 
     onWebRTCSignal: async (signalData: any) => {
-      console.log('[VideoChat] Received WebRTC signal:', signalData?.type || 'candidate');
-      
-      // ✅ CRITICAL FIX: Validate signalData before processing
-      if (!signalData) {
-        console.warn('[VideoChat] Received null/undefined WebRTC signal data');
-        return;
-      }
-      
-      // ✅ ENHANCED: Better error handling for WebRTC signals
+      if (!signalData) return;
       try {
         await webrtc.handleWebRTCSignal(signalData);
       } catch (error) {
         console.error('[VideoChat] Failed to handle WebRTC signal:', error);
-        // Don't break the chat if WebRTC fails
-        chatState.addSystemMessage('Video connection issue. Trying to reconnect...');
       }
     },
 
@@ -223,21 +218,26 @@ export const useVideoChat = (): UseVideoChatReturn => {
       chatState.setPartnerInfo(null);
       setRoomId(null);
       webrtc.cleanupConnections(false);
+      
+      // Reset initialization flags on disconnect
+      devModeRef.current.autoSearchStarted = false;
+      devModeRef.current.isInitialized = false;
     },
     onConnectErrorHandler: () => {
       console.log('[VideoChat] Socket connection error');
       chatState.setIsFindingPartner(false);
+      devModeRef.current.autoSearchStarted = false;
     }
-  }), [chatState, webrtc, isMounted]); // ✅ Minimal stable deps
+  }), [chatState, webrtc, isMounted, auth.authId]);
 
-  // ✅ FIXED: Socket hook called unconditionally
+  // ✅ Socket hook
   const socketResult = useVideoChatSocket({
     ...socketHandlers,
     authId: auth.authId,
     roomId
   });
 
-  // ✅ FIXED: Favicon manager hook called unconditionally
+  // ✅ Other hooks
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -246,7 +246,6 @@ export const useVideoChat = (): UseVideoChatReturn => {
     isPartnerLeftRecently
   });
 
-  // ✅ FIXED: System messages hook called unconditionally
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -259,9 +258,7 @@ export const useVideoChat = (): UseVideoChatReturn => {
     setMessages: chatState.setMessages
   });
 
-  // ✅ FIXED: Video chat actions hook called unconditionally
   const chatActions = useVideoChatActions({
-    // Base chat action props
     isConnected: socketResult.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -283,88 +280,119 @@ export const useVideoChat = (): UseVideoChatReturn => {
     interests,
     authId: auth.authId,
     username: auth.username,
-    
-    // Video-specific props
     hasCameraPermission: webrtc.hasCameraPermission,
     initializeCamera: webrtc.initializeCamera,
     cleanupConnections: webrtc.cleanupConnections,
     setupPeerConnection: (roomId: string) => webrtc.setupPeerConnection(roomId, true)
   });
 
-  // ✅ ENHANCED: Auto-search with better camera handling
+  // ✅ CRITICAL: Development-mode-safe auto-search with stability protection
   useEffect(() => {
+    // ✅ CRITICAL: Skip auto-search during development mode instability
+    if (devModeRef.current.stabilityTimer) {
+      console.log('[VideoChat] Skipping auto-search during stability period');
+      return;
+    }
+
     console.log('[VideoChat] Auto-search effect triggered:', {
-      autoSearchStarted: initRef.current.autoSearchStarted,
+      autoSearchStarted: devModeRef.current.autoSearchStarted,
+      searchAttemptCount: devModeRef.current.searchAttemptCount,
+      isInitialized: devModeRef.current.isInitialized,
+      mountCount: devModeRef.current.mountCount,
       isConnected: socketResult.isConnected,
       authLoading: auth.isLoading,
+      authId: auth.authId,
       isPartnerConnected: chatState.isPartnerConnected,
       isFindingPartner: chatState.isFindingPartner,
       hasCameraPermission: webrtc.hasCameraPermission,
       hasLocalStream: !!webrtc.localStream
     });
 
-    if (initRef.current.autoSearchStarted) {
+    // Prevent multiple initialization in development mode
+    if (devModeRef.current.isInitialized) {
+      console.log('[VideoChat] Already initialized, skipping auto-search');
+      return;
+    }
+
+    // Prevent auto-search if already started
+    if (devModeRef.current.autoSearchStarted) {
       console.log('[VideoChat] Auto-search already started, skipping');
       return;
     }
 
-    // ✅ CRITICAL FIX: Better readiness checks
+    // Rate limiting to prevent rapid searches
+    const now = Date.now();
+    if (now - devModeRef.current.lastSearchTime < 10000) { // 10 second cooldown
+      console.log('[VideoChat] Auto-search rate limited');
+      return;
+    }
+
+    // Prevent too many search attempts
+    if (devModeRef.current.searchAttemptCount >= 2) {
+      console.log('[VideoChat] Max search attempts reached, manual action required');
+      chatState.addSystemMessage('Please click "Find" to start video chat.');
+      return;
+    }
+
+    // Enhanced readiness checks
     const isSocketReady = socketResult.isConnected && !socketResult.connectionError;
     const isAuthReady = !auth.isLoading && auth.authId !== undefined;
     const isChatReady = !chatState.isPartnerConnected && !chatState.isFindingPartner;
-    const isCameraReady = webrtc.hasCameraPermission !== undefined;
+    const isCameraReady = webrtc.hasCameraPermission === true && !!webrtc.localStream;
 
     if (!isSocketReady || !isAuthReady || !isChatReady || !isCameraReady) {
-      console.log('[VideoChat] Auto-search conditions not met - waiting...');
+      console.log('[VideoChat] Auto-search conditions not met - waiting...', {
+        isSocketReady,
+        isAuthReady,
+        isChatReady,
+        isCameraReady
+      });
       return;
     }
 
-    // ✅ Handle camera permission explicitly
-    if (webrtc.hasCameraPermission === false) {
-      chatState.addSystemMessage('Camera access required for video chat.');
-      return;
-    }
+    // ✅ CRITICAL: Mark as initialized before starting to prevent re-entry
+    devModeRef.current.isInitialized = true;
+    devModeRef.current.autoSearchStarted = true;
+    devModeRef.current.lastSearchTime = now;
+    devModeRef.current.searchAttemptCount++;
 
-    // ✅ CRITICAL FIX: Initialize camera first, then start search
+    console.log('[VideoChat] ✅ Starting video chat initialization');
+
     const startVideoChat = async () => {
-      if (!initRef.current.autoSearchStarted) {
-        console.log('[VideoChat] ✅ Starting video chat initialization');
-        initRef.current.autoSearchStarted = true;
+      try {
+        chatState.setIsFindingPartner(true);
+        chatState.addSystemMessage('Searching for a video chat partner...');
+        setIsSelfDisconnectedRecently(false);
+        setIsPartnerLeftRecently(false);
         
-        try {
-          // Ensure camera is active
-          const stream = webrtc.localStream || await webrtc.initializeCamera();
-          if (!stream) {
-            throw new Error('Failed to access camera');
-          }
-          
-          chatState.setIsFindingPartner(true);
-          chatState.addSystemMessage('Searching for a video chat partner...');
-          setIsSelfDisconnectedRecently(false);
-          setIsPartnerLeftRecently(false);
-          
-          const success = socketResult.emitFindPartner({
-            chatType: 'video',
-            interests,
-            authId: auth.authId
-          });
-          
-          if (!success) {
-            throw new Error('Failed to emit findPartner');
-          }
-          
-          console.log('[VideoChat] ✅ Video chat search started successfully');
-        } catch (error) {
-          console.error('[VideoChat] Failed to start video chat:', error);
-          chatState.setIsFindingPartner(false);
-          chatState.addSystemMessage('Failed to start video chat. Please check camera permissions.');
-          initRef.current.autoSearchStarted = false;
+        const success = socketResult.emitFindPartner({
+          chatType: 'video',
+          interests,
+          authId: auth.authId,
+          sessionId: devModeRef.current.sessionId,
+          timestamp: now
+        });
+        
+        if (!success) {
+          throw new Error('Failed to emit findPartner');
         }
+        
+        console.log('[VideoChat] ✅ Video chat search started successfully');
+        
+      } catch (error) {
+        console.error('[VideoChat] Failed to start video chat:', error);
+        chatState.setIsFindingPartner(false);
+        chatState.addSystemMessage('Failed to start video chat. Please try again.');
+        
+        // Reset flags on error
+        devModeRef.current.autoSearchStarted = false;
+        devModeRef.current.isInitialized = false;
+        devModeRef.current.searchAttemptCount = Math.max(0, devModeRef.current.searchAttemptCount - 1);
       }
     };
 
-    // Add small delay to ensure everything is ready
-    const delayedStart = setTimeout(startVideoChat, 1000);
+    // Small delay to ensure everything is stable
+    const delayedStart = setTimeout(startVideoChat, 3000);
     
     return () => {
       clearTimeout(delayedStart);
@@ -381,19 +409,26 @@ export const useVideoChat = (): UseVideoChatReturn => {
     interests
   ]);
 
-  // ✅ IMPROVED: Reset auto-search flag when conditions change
+  // ✅ Reset initialization state when conditions change
   useEffect(() => {
     const shouldReset = chatState.isPartnerConnected || 
                        !socketResult.isConnected || 
-                       socketResult.connectionError;
+                       socketResult.connectionError ||
+                       webrtc.hasCameraPermission === false;
 
-    if (shouldReset && initRef.current.autoSearchStarted) {
-      console.log('[VideoChat] Resetting auto-search flag due to state change');
-      initRef.current.autoSearchStarted = false;
+    if (shouldReset && devModeRef.current.autoSearchStarted) {
+      console.log('[VideoChat] Resetting auto-search state due to condition change');
+      devModeRef.current.autoSearchStarted = false;
+      devModeRef.current.isInitialized = false;
     }
-  }, [chatState.isPartnerConnected, socketResult.isConnected, socketResult.connectionError]);
+
+    // Reset search attempt count on successful connection
+    if (chatState.isPartnerConnected) {
+      devModeRef.current.searchAttemptCount = 0;
+    }
+  }, [chatState.isPartnerConnected, socketResult.isConnected, socketResult.connectionError, webrtc.hasCameraPermission]);
   
-  // ✅ FIXED: Navigation cleanup effect
+  // ✅ Navigation cleanup effect
   useEffect(() => {
     if (pathname === '/video-chat') {
       console.log('[VideoChat] Route change cleanup');
@@ -402,33 +437,37 @@ export const useVideoChat = (): UseVideoChatReturn => {
       setIsPartnerLeftRecently(false);
       setPartnerInterests([]);
       setRoomId(null);
-      initRef.current.autoSearchStarted = false;
+      
+      // Reset all development mode flags
+      devModeRef.current.autoSearchStarted = false;
+      devModeRef.current.isInitialized = false;
+      devModeRef.current.searchAttemptCount = 0;
+      devModeRef.current.lastSearchTime = 0;
+      devModeRef.current.sessionId = `dev-session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
     }
   }, [pathname, chatState]);
 
-  // ✅ FIXED: Mount effect with camera initialization
-  useEffect(() => { 
-    console.log('[VideoChat] Component mounted');
-    setIsMounted(true);
-    
-    // Initialize camera on mount if permission is undefined
-    if (webrtc.hasCameraPermission === undefined) {
-      webrtc.initializeCamera();
-    }
-    
+  // ✅ WebRTC cleanup effect
+  useEffect(() => {
     return () => {
       console.log('[VideoChat] Component unmounting');
-      // Cleanup WebRTC connections on unmount
       webrtc.cleanupConnections(true);
+      
+      // Clear all timers and reset flags
+      if (devModeRef.current.stabilityTimer) {
+        clearTimeout(devModeRef.current.stabilityTimer);
+        devModeRef.current.stabilityTimer = null;
+      }
+      devModeRef.current.autoSearchStarted = false;
+      devModeRef.current.isInitialized = false;
     };
   }, [webrtc]);
 
-  // ✅ FIXED: Username click handler
   const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
     console.log('[VideoChat] Username clicked:', authId, clickPosition);
   }, []);
 
-  // ✅ FIXED: Responsive video layout calculations
+  // ✅ Responsive video layout calculations
   const { videoWindowStyle, chatWindowStyleAdjusted } = useMemo(() => {
     const videoStyle = isMobile ? {
       width: '100vw',
@@ -459,7 +498,7 @@ export const useVideoChat = (): UseVideoChatReturn => {
     };
   }, [isMobile]);
 
-  // ✅ FIXED: Memoized computations (always called, consistent order)
+  // ✅ Memoized computations
   const mappedMessages = useMemo(() => {
     return chatState.messages.map(msg => ({
       id: msg.id,
@@ -495,8 +534,8 @@ export const useVideoChat = (): UseVideoChatReturn => {
     displayNameAnimation: auth.displayNameAnimation
   }), [auth.username, auth.authId, auth.displayNameColor, auth.displayNameAnimation]);
 
-  // ✅ FIXED: Loading and error states
-  const isLoading = !isMounted || auth.isLoading;
+  // ✅ Loading and error states
+  const isLoading = !isMounted || auth.isLoading || webrtc.hasCameraPermission === undefined;
   const hasConnectionError = !!socketResult.connectionError && !socketResult.isConnected;
 
   return {
@@ -543,6 +582,16 @@ export const useVideoChat = (): UseVideoChatReturn => {
     
     // Loading states
     isLoading,
-    hasConnectionError
+    hasConnectionError,
+    
+    // Debug info for development
+    debugInfo: {
+      sessionId: devModeRef.current.sessionId,
+      searchAttempts: devModeRef.current.searchAttemptCount,
+      autoSearchStarted: devModeRef.current.autoSearchStarted,
+      isInitialized: devModeRef.current.isInitialized,
+      mountCount: devModeRef.current.mountCount,
+      hasStabilityTimer: !!devModeRef.current.stabilityTimer
+    }
   };
 };
