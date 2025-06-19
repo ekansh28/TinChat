@@ -197,7 +197,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     } else if (displayNameAnimation === 'gradient') {
       baseStyle.animationDuration = `4s`;
     } else {
-      baseStyle.color = displayNameColor || (isSelf ? '#0066cc' : '#ff6b6b');
+      baseStyle.color = displayNameColor || (isSelf ? '#0066cc' : '#ff0000'); // changed from white to red
     }
     
     return baseStyle;
