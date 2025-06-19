@@ -13,7 +13,28 @@ import { useVideoChatActions } from './useVideoChatActions';
 import { playSound } from '@/lib/utils';
 
 // ✅ CRITICAL FIX: Extract stable handlers to prevent dependency loops
-const useStableSocketHandlers = (chatState: any, auth: any, webrtc: any) => {
+interface ChatState {
+  addMessage: (message: any) => void;
+  setIsPartnerTyping: (isTyping: boolean) => void;
+  addSystemMessage: (message: string) => void;
+  setPartnerInfo: (info: any) => void;
+  setIsFindingPartner: (finding: boolean) => void;
+  setIsPartnerConnected: (connected: boolean) => void;
+  setMessages: (messages: any[]) => void;
+}
+
+interface SocketState {
+  socket?: {
+    id: string;
+  };
+}
+
+const useStableSocketHandlers = (
+  chatState: ChatState, 
+  auth: { authId?: string }, 
+  webrtc: any,
+  socketState: SocketState
+) => {
   return useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[VideoChat] Handling message:', data);
@@ -45,7 +66,7 @@ const useStableSocketHandlers = (chatState: any, auth: any, webrtc: any) => {
       }
       
       // Enhanced self-match detection
-      if (data.partnerId === socketResult?.socket?.id ||
+      if (data.partnerId === socketState?.socket?.id ||
           (data.partnerAuthId && auth.authId && data.partnerAuthId === auth.authId)) {
         console.error('[VideoChat] Self-match detected!');
         chatState.addSystemMessage('Matching error. Please try again.');
@@ -103,11 +124,9 @@ const useStableSocketHandlers = (chatState: any, auth: any, webrtc: any) => {
       } catch (error) {
         console.error('[VideoChat] WebRTC signal error:', error);
       }
-    },
-
-    onStatusChange: (status: string) => {
-      chatState.setPartnerInfo(prev => 
-        prev ? {...prev, status: status as any} : null
+    },    onStatusChange: (status: string) => {
+      chatState.setPartnerInfo((prev: { status: string } | null) => 
+        prev ? {...prev, status} : null
       );
     },
 
@@ -340,14 +359,112 @@ export const useVideoChat = () => {
   const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
-  const webrtc = useWebRTC();
+  const webrtc = useWebRTC();  const socketResult = useVideoChatSocket({
+    onMessage: (data: any) => {
+      console.log('[VideoChat] Handling message:', data);
+      
+      if (data.senderAuthId === auth.authId) {
+        console.warn('[VideoChat] Ignoring message from self');
+        return;
+      }
+      
+      chatState.addMessage({
+        text: data.message,
+        sender: 'partner',
+        senderUsername: data.senderUsername,
+        senderAuthId: data.senderAuthId,
+        senderDisplayNameColor: data.senderDisplayNameColor,
+        senderDisplayNameAnimation: data.senderDisplayNameAnimation,
+        senderRainbowSpeed: data.senderRainbowSpeed
+      });
+      
+      chatState.setIsPartnerTyping(false);
+    },
+    onPartnerFound: async (data: any) => {
+      if (!data?.partnerId || !data?.roomId) {
+        console.error('[VideoChat] Invalid partner data:', data);
+        return;
+      }
+      
+      if (data.partnerAuthId && auth.authId && data.partnerAuthId === auth.authId) {
+        console.error('[VideoChat] Self-match detected!');
+        chatState.addSystemMessage('Matching error. Please try again.');
+        return;
+      }
+      
+      try {
+        playSound('Match.wav');
+      } catch (error) {
+        console.warn('[VideoChat] Failed to play sound:', error);
+      }
+      
+      chatState.setPartnerInfo({
+        id: data.partnerId,
+        username: data.partnerUsername || 'Stranger',
+        displayName: data.partnerDisplayName,
+        avatarUrl: data.partnerAvatarUrl,
+        status: data.partnerStatus || 'online',
+        displayNameColor: data.partnerDisplayNameColor || '#ff0000',
+        displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
+        rainbowSpeed: data.partnerRainbowSpeed || 3,
+        authId: data.partnerAuthId,
+        badges: data.partnerBadges || []
+      });
+      
+      chatState.setIsFindingPartner(false);
+      chatState.setIsPartnerConnected(true);
+      chatState.setMessages([]);
 
-  // ✅ CRITICAL: Stable socket handlers
-  const stableHandlers = useStableSocketHandlers(chatState, auth, webrtc);
-  
-  const socketResult = useVideoChatSocket({
-    ...stableHandlers,
-    authId: auth.authId,
+      if (webrtc.localStream && data.roomId) {
+        console.log('[VideoChat] Setting up WebRTC for room:', data.roomId);
+        try {
+          await webrtc.setupPeerConnection(data.roomId, true);
+        } catch (error) {
+          console.error('[VideoChat] WebRTC setup failed:', error);
+          chatState.addSystemMessage('Video connection failed. Audio chat available.');
+        }
+      }
+    },
+    onPartnerLeft: () => {
+      console.log('[VideoChat] Partner left');
+      chatState.setIsPartnerConnected(false);
+      chatState.setIsFindingPartner(false);
+      chatState.setPartnerInfo(null);
+      chatState.setIsPartnerTyping(false);
+      webrtc.cleanupConnections(false);
+    },    onWebRTCSignal: async (signalData: any) => {
+      if (!signalData) return;
+      try {
+        await webrtc.handleWebRTCSignal(signalData);
+      } catch (error) {
+        console.error('[VideoChat] WebRTC signal error:', error);
+      }
+    },
+    onStatusChange: (status: string) => {
+      chatState.setPartnerInfo((prev: any) => 
+        prev ? { ...prev, status } : null
+      );
+    },
+    onTypingStart: () => chatState.setIsPartnerTyping(true),
+    onTypingStop: () => chatState.setIsPartnerTyping(false),
+    onWaiting: () => console.log('[VideoChat] Waiting for partner'),
+    onCooldown: () => {
+      console.log('[VideoChat] Find partner cooldown');
+      chatState.setIsFindingPartner(false);
+    },
+    onDisconnectHandler: () => {
+      console.log('[VideoChat] Socket disconnected');
+      chatState.setIsPartnerConnected(false);
+      chatState.setIsFindingPartner(false);
+      chatState.setIsPartnerTyping(false);
+      chatState.setPartnerInfo(null);
+      webrtc.cleanupConnections(false);
+    },
+    onConnectErrorHandler: () => {
+      console.log('[VideoChat] Connection error');
+      chatState.setIsFindingPartner(false);
+    },
+    authId: auth.authId ?? undefined,
     roomId
   });
 

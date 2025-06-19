@@ -308,11 +308,10 @@ const VideoChatPageContent: React.FC = () => {
                 onUsernameClick={handleUsernameClick}
                 isMobile={isMobile}
                 isScrollEnabled={true}
-                onFindOrDisconnect={chatActions.handleFindOrDisconnect}
-                findOrDisconnectDisabled={
+                onFindOrDisconnect={chatActions.handleFindOrDisconnect}                findOrDisconnectDisabled={
                   !socket.isConnected || 
                   !!socket.connectionError || 
-                  webrtc.hasCameraPermission === false
+                  !webrtc.hasCameraPermission
                 }
                 findOrDisconnectText={
                   chatState.isPartnerConnected 
@@ -335,9 +334,7 @@ const VideoChatPageContent: React.FC = () => {
                 </div>
               )}
             </div>
-          )}
-
-          {webrtc.hasCameraPermission === false && (
+          )}          {!webrtc.hasCameraPermission && (
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 text-sm rounded window">
               Camera access required for video chat. Please enable camera permissions.
             </div>
