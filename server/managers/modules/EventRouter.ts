@@ -1,4 +1,4 @@
-// server/managers/modules/EventRouter.ts - COMPLETE FIXED VERSION
+// server/managers/modules/EventRouter.ts - FIXED CONSTRUCTOR VERSION
 import { Socket, Server as SocketIOServer } from 'socket.io';
 import { TypingManager } from '../../services/TypingManager';
 import { logger } from '../../utils/logger';
@@ -11,7 +11,6 @@ import { UserStatusHandler } from './UserStatusHandler';
 
 export class EventRouter {
   constructor(
-    private io: SocketIOServer, // Store io instance
     private connectionManager: ConnectionManager,
     private messageHandler: MessageHandler,
     private matchmakingHandler: MatchmakingHandler,
@@ -151,7 +150,9 @@ export class EventRouter {
         return;
       }
 
-      const partnerSocket = this.io.sockets.sockets.get(partnerId);
+      // Get io instance from one of the handlers that has it
+      const io = (this.messageHandler as any).io;
+      const partnerSocket = io.sockets.sockets.get(partnerId);
 
       // Clean up the room with skip context (prevents "partnerLeft" message)
       await this.matchmakingHandler.cleanupRoomForSkip(roomId, socket.id);
