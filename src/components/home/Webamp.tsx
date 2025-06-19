@@ -59,7 +59,7 @@ const WebampPlayer: React.FC<WebampProps> = ({
     const playlistHeight = 116 + (4 * 29); // 4 rows * 29px per row
     
     // Calculate positions
-    const milkdropX = (windowWidth ) - 80;
+    const milkdropX = (windowWidth ) + 70;
     const milkdropY = headerHeight + 40;
     
     // Main, Equalizer, Playlist: Top right corner
@@ -79,7 +79,7 @@ const WebampPlayer: React.FC<WebampProps> = ({
       main: { position: { x: mainX, y: mainY + 20} },
       equalizer: { position: { x: equalizerX, y: equalizerY + 10} },
       playlist: { position: { x: playlistX, y: playlistY + 5}, size: [0, 4] },
-      milkdrop: { position: { x: milkdropX + 255, y: milkdropY }, size: milkdropSize },
+      milkdrop: { position: { x: milkdropX + 300, y: milkdropY }, size: milkdropSize },
     };
   }, []);
 
@@ -110,19 +110,25 @@ const WebampPlayer: React.FC<WebampProps> = ({
           importButterchurn: () => {
             return import("butterchurn");
           },
-          getPresets: async () => {
+          getPresets: (async () => {
             const resp = await fetch(
               "https://unpkg.com/butterchurn-presets-weekly@0.0.2/weeks/week1/presets.json"
             );
             const namesToPresetUrls = await resp.json();
-            return Object.keys(namesToPresetUrls).map((name) => {
-              return { name, butterchurnPresetUrl: namesToPresetUrls[name] };
-            });
-          },
+            const presetEntries = Object.entries(namesToPresetUrls);
+            const presets = await Promise.all(
+              presetEntries.map(async ([name, url]) => {
+                const presetResp = await fetch(url as string);
+                const butterchurnPresetObject = await presetResp.json();
+                return { name, butterchurnPresetObject };
+              })
+            );
+            return presets;
+          }) as any,
           butterchurnOpen: true,
         },
         __initialWindowLayout: layout,
-      });
+      } as any);
 
       if (!mountedRef.current) {
         try {
