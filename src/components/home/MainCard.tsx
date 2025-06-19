@@ -154,7 +154,7 @@ export default function MainCard({
               aria-label="Settings"
               onClick={onToggleSettings}
               disabled={isNavigating}
-              variant={isMobile ? "outline" : "default"}
+              variant={isMobile ? "outline" : "primary"}
               size="sm"
             >
               <img
