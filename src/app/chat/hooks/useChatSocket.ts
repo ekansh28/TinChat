@@ -9,6 +9,7 @@ interface UseChatSocketParams {
   onMessage: (msg: any) => void;
   onPartnerFound: (partner: any) => void;
   onPartnerLeft: () => void;
+  onPartnerSkipped: (data: any) => void;
   onStatusChange: (status: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
@@ -39,13 +40,12 @@ export function useChatSocket(params: UseChatSocketParams) {
       params.onConnectErrorHandler(error);
     },
     debug: process.env.NODE_ENV === 'development'
-  });
-
-  // ✅ FIXED: Event management with stable handlers
-  const { setupEvents } = useSocketEvents({
+  });  // ✅ FIXED: Event management with stable handlers
+  const socketEvents = useSocketEvents({
     onMessage: params.onMessage,
     onPartnerFound: params.onPartnerFound,
     onPartnerLeft: params.onPartnerLeft,
+    onPartnerSkipped: params.onPartnerSkipped,
     onStatusChange: params.onStatusChange,
     onTypingStart: params.onTypingStart,
     onTypingStop: params.onTypingStop,
@@ -53,6 +53,11 @@ export function useChatSocket(params: UseChatSocketParams) {
     onCooldown: params.onCooldown,
     onWebRTCSignal: params.onWebRTCSignal
   });
+
+  // ✅ FIXED: Event management with stable handlers
+  const setupEventsCallback = useCallback((socket: any, roomIdRef: any) => {
+    return socketEvents.setupEvents(socket, roomIdRef);
+  }, [socketEvents]);
 
   // ✅ FIXED: Emit functions
   const emitters = useSocketEmitters(socketCore.socket, roomIdRef);
@@ -95,7 +100,7 @@ export function useChatSocket(params: UseChatSocketParams) {
         };
       }
 
-      const cleanup = setupEvents(socketCore.socket, roomIdRef);
+      const cleanup = setupEventsCallback(socketCore.socket, roomIdRef);
       
       return () => {
         cleanup();
@@ -104,7 +109,7 @@ export function useChatSocket(params: UseChatSocketParams) {
         }
       };
     }
-  }, [socketCore.socket, socketCore.isInitialized, setupEvents, params.onWebRTCSignal]);
+  }, [socketCore.socket, socketCore.isInitialized, setupEventsCallback, params.onWebRTCSignal]);
 
   // ✅ Enhanced utility functions
   const getOnlineUserCount = useCallback(() => {

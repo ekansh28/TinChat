@@ -1,4 +1,5 @@
-// src/app/chat/hooks/useChat.ts - FIXED VERSION WITH MODULAR STRUCTURE
+// src/app/chat/hooks/useChat.ts - UPDATED WITH SKIP FUNCTIONALITY
+
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useChatState } from './useChatState';
@@ -18,6 +19,7 @@ interface UseChatReturn {
   isScrollEnabled: boolean;
   isSelfDisconnectedRecently: boolean;
   isPartnerLeftRecently: boolean;
+  wasSkippedByPartner: boolean; // ✅ NEW: Track if user was skipped
   partnerInterests: string[];
   interests: string[];
   
@@ -54,6 +56,7 @@ export const useChat = (): UseChatReturn => {
   const [isMounted, setIsMounted] = useState(false);
   const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
+  const [wasSkippedByPartner, setWasSkippedByPartner] = useState(false); // ✅ NEW
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   const [isScrollEnabled] = useState(true);
   
@@ -77,7 +80,7 @@ export const useChat = (): UseChatReturn => {
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
 
-  // ✅ FIXED: Stable socket handlers with memoization
+  // ✅ ENHANCED: Socket handlers with skip functionality
   const socketHandlers = useMemo(() => ({
     onMessage: (data: any) => {
       console.log('[Chat] Handling message:', data);
@@ -136,11 +139,12 @@ export const useChat = (): UseChatReturn => {
       chatState.setIsPartnerConnected(true);
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
+      setWasSkippedByPartner(false); // ✅ Reset skip status
       chatState.setMessages([]);
     },
 
     onPartnerLeft: () => {
-      console.log('[Chat] Partner left');
+      console.log('[Chat] Partner left normally');
       chatState.setIsPartnerConnected(false);
       chatState.setIsFindingPartner(false);
       chatState.setPartnerInfo(null);
@@ -148,6 +152,30 @@ export const useChat = (): UseChatReturn => {
       setPartnerInterests([]);
       setIsPartnerLeftRecently(true);
       setIsSelfDisconnectedRecently(false);
+      setWasSkippedByPartner(false);
+    },    // ✅ FIXED: Handle being skipped by partner with auto-search
+    onPartnerSkipped: (data: any) => {
+      console.log('[Chat] You were skipped by partner:', data);
+      
+      chatState.setIsPartnerConnected(false);
+      chatState.setPartnerInfo(null);
+      chatState.setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      
+      // Mark as skipped and trigger auto-search
+      setWasSkippedByPartner(true);
+      setIsPartnerLeftRecently(false);
+      setIsSelfDisconnectedRecently(false);
+      
+      // Add message and immediately start searching
+      chatState.addSystemMessage('Your partner skipped you. Searching for a new partner...');
+      chatState.setIsFindingPartner(true); // ✅ CRITICAL: Start auto-search immediately
+        // Emit find partner event to auto-search after being skipped
+      socket.emitFindPartner({
+        chatType: 'text',
+        interests: interests,
+        authId: auth.authId || null
+      });
     },
 
     onStatusChange: (status: string) => {
@@ -176,35 +204,35 @@ export const useChat = (): UseChatReturn => {
     }
   }), [chatState]); // ✅ Only depend on stable chatState
 
-  // ✅ FIXED: Socket hook with stable handlers
+  // ✅ FIXED: Socket hook with stable handlers and skip support
   const socket = useChatSocket({
     ...socketHandlers,
     authId: auth.authId
   });
 
-  // ✅ FIXED: Favicon manager hook
+  // ✅ ENHANCED: Favicon manager with skip state
   useFaviconManager({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
     connectionError: socket.connectionError,
     isSelfDisconnectedRecently,
-    isPartnerLeftRecently
+    isPartnerLeftRecently: isPartnerLeftRecently || wasSkippedByPartner // ✅ Include skip state
   });
 
-  // ✅ FIXED: System messages hook
+  // ✅ ENHANCED: System messages with skip awareness
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
     connectionError: socket.connectionError,
     isSelfDisconnectedRecently,
-    isPartnerLeftRecently,
+    isPartnerLeftRecently: isPartnerLeftRecently || wasSkippedByPartner, // ✅ Include skip state
     partnerInterests,
     interests,
     messages: chatState.messages,
     setMessages: chatState.setMessages
   });
 
-  // ✅ FIXED: Chat actions hook
+  // ✅ ENHANCED: Chat actions with skip functionality
   const chatActions = useChatActions({
     isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
@@ -219,6 +247,7 @@ export const useChat = (): UseChatReturn => {
     addMessage: chatState.addMessage,
     addSystemMessage: chatState.addSystemMessage,
     emitLeaveChat: socket.emitLeaveChat,
+    emitSkipPartner: socket.emitSkipPartner, // ✅ NEW: Skip emit function
     emitFindPartner: socket.emitFindPartner,
     emitMessage: socket.emitMessage,
     emitTypingStart: socket.emitTypingStart,
@@ -229,7 +258,7 @@ export const useChat = (): UseChatReturn => {
     username: auth.username
   });
 
-  // ✅ FIXED: Auto-search hook (extracted to separate module)
+  // ✅ ENHANCED: Auto-search with skip awareness
   useAutoSearch({
     socket,
     auth,
@@ -240,13 +269,14 @@ export const useChat = (): UseChatReturn => {
     setIsPartnerLeftRecently
   });
   
-  // ✅ FIXED: Navigation cleanup effect
+  // ✅ ENHANCED: Navigation cleanup with skip state reset
   useEffect(() => {
     if (pathname === '/chat') {
       console.log('[Chat] Route change cleanup');
       chatState.resetChatState();
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
+      setWasSkippedByPartner(false); // ✅ Reset skip state
       setPartnerInterests([]);
       initRef.current.autoSearchStarted = false;
     }
@@ -315,6 +345,7 @@ export const useChat = (): UseChatReturn => {
     isScrollEnabled,
     isSelfDisconnectedRecently,
     isPartnerLeftRecently,
+    wasSkippedByPartner, // ✅ NEW: Expose skip state
     partnerInterests,
     interests,
     

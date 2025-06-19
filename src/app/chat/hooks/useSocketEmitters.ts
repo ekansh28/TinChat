@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEmitters.ts - FIXED VERSION
+// src/app/chat/hooks/useSocketEmitters.ts - ENHANCED WITH SKIP FUNCTIONALITY
 
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -26,6 +26,42 @@ export const useSocketEmitters = (
       return false;
     }
   }, [socket]);
+
+  // ✅ NEW: Skip partner emit function
+  const emitSkipPartner = useCallback((payload: {
+    chatType: 'text' | 'video';
+    interests: string[];
+    authId?: string | null;
+    reason?: string;
+  }) => {
+    if (!socket?.connected) {
+      console.warn('[SocketEmitters] Not connected to server');
+      return false;
+    }
+    
+    if (!roomIdRef.current) {
+      console.warn('[SocketEmitters] Not in a chat room');
+      return false;
+    }
+    
+    console.log('[SocketEmitters] Skipping partner and searching for new one');
+    try {
+      // ✅ CRITICAL: Emit skip event with auto-search
+      socket.emit('skipPartner', {
+        roomId: roomIdRef.current,
+        ...payload,
+        autoSearch: true, // ✅ Tell server to auto-search for this user
+        skipperAuthId: payload.authId // ✅ Identify who initiated the skip
+      });
+      
+      // Clear room ID since we're leaving
+      roomIdRef.current = null;
+      return true;
+    } catch (error) {
+      console.error('[SocketEmitters] Error emitting skipPartner:', error);
+      return false;
+    }
+  }, [socket, roomIdRef]);
 
   const emitMessage = useCallback((payload: {
     roomId: string;
@@ -93,6 +129,24 @@ export const useSocketEmitters = (
     return false;
   }, [socket, roomIdRef]);
 
+  // ✅ NEW: Disconnect without auto-search
+  const emitDisconnectOnly = useCallback(() => {
+    if (socket?.connected && roomIdRef.current) {
+      console.log('[SocketEmitters] Disconnecting without auto-search');
+      try {
+        socket.emit('disconnectOnly', { 
+          roomId: roomIdRef.current,
+          reason: 'manual_disconnect'
+        });
+        roomIdRef.current = null;
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting disconnect only:', error);
+      }
+    }
+    return false;
+  }, [socket, roomIdRef]);
+
   const emitWebRTCSignal = useCallback((payload: {
     roomId: string;
     signalData: any;
@@ -123,13 +177,37 @@ export const useSocketEmitters = (
     return false;
   }, [socket]);
 
+  // ✅ NEW: Report user functionality
+  const emitReportUser = useCallback((payload: {
+    reportedAuthId: string;
+    reason: string;
+    description?: string;
+  }) => {
+    if (socket?.connected) {
+      try {
+        socket.emit('reportUser', {
+          ...payload,
+          roomId: roomIdRef.current,
+          timestamp: Date.now()
+        });
+        return true;
+      } catch (error) {
+        console.error('[SocketEmitters] Error emitting user report:', error);
+      }
+    }
+    return false;
+  }, [socket, roomIdRef]);
+
   return {
     emitFindPartner,
+    emitSkipPartner,     // ✅ NEW: Skip with auto-search
     emitMessage,
     emitTypingStart,
     emitTypingStop,
     emitLeaveChat,
+    emitDisconnectOnly,  // ✅ NEW: Disconnect without auto-search
     emitWebRTCSignal,
-    emitUpdateStatus
+    emitUpdateStatus,
+    emitReportUser       // ✅ NEW: Report functionality
   };
 };
