@@ -211,10 +211,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
           "font-bold mr-1 cursor-pointer hover:underline transition-all duration-200",
           displayNameClass
         )}
-        style={{
-          ...getDisplayNameStyle(),
-          color: getDisplayNameStyle().color || '#ff0000', // default to red if no color
-        }}
+        style={getDisplayNameStyle()}
         onClick={isClickable && authId ? (e) => {
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const clickPosition = {
