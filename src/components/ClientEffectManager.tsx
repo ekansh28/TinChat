@@ -10,11 +10,10 @@ declare global {
     startOriginalOneko?: () => void;
     stopOriginalOneko?: () => void;
     hideOriginalOneko?: () => void;
-    showOriginalOneko?: () => void;
-    startAnimatedGifCursor?: (gifUrl: string) => void;
-    stopAnimatedGifCursor?: () => void;
-    hideAnimatedGifCursor?: () => void;
-    showAnimatedGifCursor?: () => void;
+    showOriginalOneko?: () => void;    startAnimatedGifCursor?: (gifUrl: string) => boolean;
+    stopAnimatedGifCursor?: () => boolean;
+    hideAnimatedGifCursor?: () => boolean;
+    showAnimatedGifCursor?: () => boolean;
   }
 }
 
