@@ -22,12 +22,11 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useTheme } from '@/components/theme-provider';
 
 // Declare global types for TypeScript
-declare global {
-  interface Window {
+declare global {  interface Window {
     stopOriginalOneko?: () => void;
     startOriginalOneko?: () => void;
-    stopAnimatedGifCursor?: () => void;
-    startAnimatedGifCursor?: (url: string) => void;
+    stopAnimatedGifCursor?: () => boolean;
+    startAnimatedGifCursor?: (url: string) => boolean;
   }
 }
 
