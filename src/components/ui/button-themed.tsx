@@ -23,8 +23,16 @@ const ButtonThemed = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // Example of adding variant-specific class for potential overrides
     const variantClass = variant === 'destructive' ? 'destructive-button-override' : ''; // Add custom classes if 98/7.css doesn't cover all cases
 
+    if (asChild) {
+      const { className, children } = props as any;
+      return (
+        <div className={cn(baseClasses, variantClass, className)}>
+          {children}
+        </div>
+      );
+    }
     return (
-      <Comp
+      <button
         className={cn(baseClasses, variantClass, className)}
         ref={ref}
         {...props}

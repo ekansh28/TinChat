@@ -52,9 +52,9 @@ jobs:
         run: |
           SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
           curl -H "Content-Type: application/json" -X POST -d "{
-            \"username\": \"Deploy Bot\",
+            \"username\": \"Tinchat\",
             \"embeds\": [{
-              \"title\": \"✅ Deployment Successful\",
+              \"title\": \"✅ Website Deployed\",
               \"color\": 3066993,
               \"fields\": [
                 { \"name\": \"Commit\", \"value\": \"[${SHORT_SHA}](${COMMIT_URL})\", \"inline\": true },
