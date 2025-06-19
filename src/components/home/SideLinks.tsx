@@ -16,7 +16,7 @@ export default function SideLinks({ isMobile }: SideLinksProps) {
     )}>
       {/* Discord Link */}
       <Link 
-        href="https://discord.gg/gayporn" 
+        href="https://discord.gg/DCXx45ujxJ" 
         target="_blank" 
         rel="noopener noreferrer"
         className="transition-transform hover:scale-110"
