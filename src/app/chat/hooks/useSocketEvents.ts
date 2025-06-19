@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEvents.ts - ENHANCED WITH SKIP HANDLING
+// src/app/chat/hooks/useSocketEvents.ts - FIXED SKIP EVENT HANDLING
 
 import { useCallback, useRef } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -7,7 +7,8 @@ interface SocketHandlers {
   onMessage: (data: any) => void;
   onPartnerFound: (data: any) => void;
   onPartnerLeft: () => void;
-  onPartnerSkipped: (data: any) => void; // ✅ NEW: Handle being skipped
+  onPartnerSkipped: (data: any) => void;
+  onSkipConfirmed: (data: any) => void; // ✅ NEW: Handle skip confirmation
   onStatusChange: (status: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
@@ -50,22 +51,30 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
       handlersRef.current.onPartnerLeft();
     };
 
-    // ✅ NEW: Handle being skipped by partner
+    // ✅ CRITICAL: Handle being skipped by partner (NO AUTO-SEARCH)
     const handlePartnerSkipped = (data: any) => {
       console.log('[SocketEvents] You were skipped by partner:', data);
       roomIdRef.current = null;
       
-      // ✅ CRITICAL: Pass skip data to handler for different UI behavior
+      // ✅ CRITICAL: The skipped user should NOT auto-search
+      // They must manually click "Find" to search again
       handlersRef.current.onPartnerSkipped?.(data);
     };
 
-    // ✅ NEW: Handle skip confirmation (when you skip someone)
+    // ✅ NEW: Handle skip confirmation when YOU skip someone (AUTO-SEARCH)
     const handleSkipConfirmed = (data: any) => {
-      console.log('[SocketEvents] Skip confirmed, searching for new partner:', data);
+      console.log('[SocketEvents] Skip confirmed - you skipped someone:', data);
       
-      // ✅ The server should automatically start finding a new partner for the skipper
-      if (data?.searchingForNew) {
-        console.log('[SocketEvents] Server is finding new partner after skip');
+      // ✅ CRITICAL: When you skip someone, the server should auto-search for you
+      if (data?.autoSearchStarted) {
+        console.log('[SocketEvents] Auto-search started after you skipped someone');
+        handlersRef.current.onWaiting?.(); // Trigger "waiting" state
+      }
+      
+      // ✅ NEW: If server found immediate match after skip
+      if (data?.immediateMatch) {
+        console.log('[SocketEvents] Immediate match found after skip');
+        handlePartnerFound(data.immediateMatch);
       }
     };
 
@@ -83,13 +92,24 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
 
     const handleTypingStart = () => handlersRef.current.onTypingStart();
     const handleTypingStop = () => handlersRef.current.onTypingStop();
-    const handleWaitingForPartner = () => handlersRef.current.onWaiting();
-    const handleFindPartnerCooldown = () => handlersRef.current.onCooldown();
+    const handleWaitingForPartner = () => {
+      console.log('[SocketEvents] Waiting for partner');
+      handlersRef.current.onWaiting();
+    };
+    const handleFindPartnerCooldown = () => {
+      console.log('[SocketEvents] Find partner cooldown');
+      handlersRef.current.onCooldown();
+    };
 
-    // ✅ NEW: Handle automatic partner search after skip
+    // ✅ NEW: Handle automatic partner search events
     const handleAutoSearchStarted = (data: any) => {
-      console.log('[SocketEvents] Auto-search started after skip:', data);
+      console.log('[SocketEvents] Auto-search started:', data);
       handlersRef.current.onWaiting?.();
+    };
+
+    const handleAutoSearchFailed = (data: any) => {
+      console.log('[SocketEvents] Auto-search failed:', data);
+      // Could show error message or allow manual retry
     };
 
     const handleBatchedMessages = (messages: Array<{ event: string; data: any }>) => {
@@ -112,6 +132,9 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
               break;
             case 'partnerSkipped':
               handlePartnerSkipped(data);
+              break;
+            case 'skipConfirmed':
+              handleSkipConfirmed(data);
               break;
             case 'webrtcSignal':
               if (handlersRef.current.onWebRTCSignal) {
@@ -169,14 +192,41 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
       roomIdRef.current = null;
     };
 
+    // ✅ NEW: Handle connection status events that might help with "Connecting..." issue
+    const handleConnected = () => {
+      console.log('[SocketEvents] Socket connected successfully');
+    };
+
+    const handleConnect = () => {
+      console.log('[SocketEvents] Socket connect event');
+    };
+
+    const handleDisconnect = (reason: string) => {
+      console.log('[SocketEvents] Socket disconnected:', reason);
+      roomIdRef.current = null;
+    };
+
+    // ✅ NEW: Handle server-side matchmaking updates
+    const handleMatchmakingUpdate = (data: any) => {
+      console.log('[SocketEvents] Matchmaking update:', data);
+      if (data?.status === 'searching') {
+        handlersRef.current.onWaiting?.();
+      }
+    };
+
     // Store event handlers for cleanup
     const eventHandlers = [
+      { event: 'connect', handler: handleConnect }, // ✅ NEW
+      { event: 'connected', handler: handleConnected }, // ✅ NEW
+      { event: 'disconnect', handler: handleDisconnect }, // ✅ NEW
       { event: 'partnerFound', handler: handlePartnerFound },
       { event: 'receiveMessage', handler: handleReceiveMessage },
       { event: 'partnerLeft', handler: handlePartnerLeft },
-      { event: 'partnerSkipped', handler: handlePartnerSkipped }, // ✅ NEW
-      { event: 'skipConfirmed', handler: handleSkipConfirmed }, // ✅ NEW
+      { event: 'partnerSkipped', handler: handlePartnerSkipped }, // ✅ Being skipped (no auto-search)
+      { event: 'skipConfirmed', handler: handleSkipConfirmed }, // ✅ You skipped someone (auto-search)
       { event: 'autoSearchStarted', handler: handleAutoSearchStarted }, // ✅ NEW
+      { event: 'autoSearchFailed', handler: handleAutoSearchFailed }, // ✅ NEW
+      { event: 'matchmakingUpdate', handler: handleMatchmakingUpdate }, // ✅ NEW
       { event: 'partnerStatusChanged', handler: handlePartnerStatusChanged },
       { event: 'partner_typing_start', handler: handleTypingStart },
       { event: 'partner_typing_stop', handler: handleTypingStop },

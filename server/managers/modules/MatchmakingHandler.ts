@@ -1,7 +1,8 @@
-// server/managers/modules/MatchmakingHandler.ts - FIXED VERSION
+// server/managers/modules/MatchmakingHandler.ts - COMPLETE FIXED VERSION
+
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { MatchmakingEngine } from '../../services/MatchmakingEngine';
-import { RoomManager, Room } from '../../services/RoomManager'; // ✅ Import Room interface
+import { RoomManager, Room } from '../../services/RoomManager';
 import { ProfileManager } from '../ProfileManager';
 import { ProfileCache } from '../../utils/ProfileCache';
 import { PerformanceMonitor } from '../../utils/PerformanceMonitor';
@@ -60,6 +61,92 @@ export class MatchmakingHandler {
     } catch (error: any) {
       logger.error(`❌ MATCHMAKING ERROR for ${socket.id}:`, error);
       socket.emit('error', { message: 'Invalid payload for findPartner.' });
+    }
+  }
+
+  // Handle skip partner with proper differentiation
+  async handleSkipPartner(socket: Socket, payload: unknown): Promise<void> {
+    try {
+      logger.info(`🔄 SKIP PARTNER request from ${socket.id}:`, payload);
+
+      const data = payload as any;
+      if (!data || typeof data !== 'object') {
+        socket.emit('skipError', { message: 'Invalid skip payload' });
+        return;
+      }
+
+      const roomId = data.roomId || this.socketToRoom.get(socket.id);
+      if (!roomId) {
+        socket.emit('skipError', { message: 'Not in a chat room' });
+        return;
+      }
+
+      const room = this.roomManager.getRoom(roomId);
+      if (!room || !room.users.includes(socket.id)) {
+        socket.emit('skipError', { message: 'Invalid room or not in room' });
+        return;
+      }
+
+      // Find the partner
+      const partnerId = room.users.find(id => id !== socket.id);
+      if (!partnerId) {
+        socket.emit('skipError', { message: 'No partner found in room' });
+        return;
+      }
+
+      const partnerSocket = this.io.sockets.sockets.get(partnerId);
+
+      // Clean up the room first
+      await this.cleanupRoom(roomId);
+
+      // Notify both users about the skip
+      // The skipper gets confirmation and auto-search
+      socket.emit('skipConfirmed', {
+        skippedUserId: partnerId,
+        autoSearchStarted: true,
+        timestamp: Date.now()
+      });
+
+      // The skipped user gets notified but NO auto-search
+      if (partnerSocket && partnerSocket.connected) {
+        partnerSocket.emit('partnerSkipped', {
+          skippedBy: socket.id,
+          skipperAuthId: data.skipperAuthId,
+          timestamp: Date.now(),
+          message: 'Your partner skipped you'
+        });
+      }
+
+      // Auto-search ONLY for the skipper
+      if (data.autoSearchForSkipper) {
+        logger.info(`🔍 Starting auto-search for skipper ${socket.id}`);
+        
+        // Small delay to ensure cleanup is complete
+        setTimeout(async () => {
+          try {
+            await this.handleFindPartner(socket, {
+              chatType: data.chatType || 'text',
+              interests: data.interests || [],
+              authId: data.skipperAuthId,
+              reason: 'auto_search_after_skip'
+            });
+          } catch (error) {
+            logger.error(`❌ Auto-search failed for skipper ${socket.id}:`, error);
+            socket.emit('autoSearchFailed', { 
+              reason: 'Failed to start auto-search after skip'
+            });
+          }
+        }, 500);
+      }
+
+      logger.info(`✅ Skip handled: ${socket.id} skipped ${partnerId}`);
+
+    } catch (error) {
+      logger.error(`❌ Error handling skip partner for ${socket.id}:`, error);
+      socket.emit('skipError', { 
+        message: 'Failed to skip partner',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -213,7 +300,7 @@ export class MatchmakingHandler {
     }
   }
 
-  // ✅ FIXED: Proper room cleanup with Room interface
+  // Regular room cleanup with "partnerLeft" message
   async cleanupRoom(roomId: string): Promise<void> {
     const room: Room | null = this.roomManager.getRoom(roomId);
     if (!room) return;
@@ -240,6 +327,39 @@ export class MatchmakingHandler {
     this.roomManager.deleteRoom(roomId);
     
     logger.info(`🧹 Room ${roomId} completely cleaned up`);
+  }
+
+  // Get room ID for a socket
+  getRoomIdForSocket(socketId: string): string | null {
+    return this.socketToRoom.get(socketId) || null;
+  }
+
+  // Get room for debugging
+  getRoom(roomId: string): Room | null {
+    return this.roomManager.getRoom(roomId);
+  }
+
+  // Clean up room for skip (prevents "partnerLeft" message)
+  async cleanupRoomForSkip(roomId: string, skipperSocketId: string): Promise<void> {
+    const room: Room | null = this.roomManager.getRoom(roomId);
+    if (!room) return;
+
+    // Don't send "partnerLeft" - this is a skip scenario
+    room.users.forEach((userId: string) => {
+      const socket = this.io.sockets.sockets.get(userId);
+      if (socket) {
+        socket.leave(roomId);
+      }
+      
+      // Clean up mappings
+      this.socketToRoom.delete(userId);
+    });
+
+    // Clean up room tracking
+    this.roomToSockets.delete(roomId);
+    this.roomManager.deleteRoom(roomId);
+    
+    logger.info(`🧹 Room ${roomId} cleaned up for skip by ${skipperSocketId}`);
   }
 
   private isUserInQueue(socketId: string): boolean {

@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEmitters.ts - ENHANCED WITH SKIP FUNCTIONALITY
+// src/app/chat/hooks/useSocketEmitters.ts - FIXED SKIP IMPLEMENTATION
 
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -11,13 +11,15 @@ export const useSocketEmitters = (
     chatType: 'text' | 'video';
     interests: string[];
     authId?: string | null;
+    sessionId?: string;
+    timestamp?: number;
   }) => {
     if (!socket?.connected) {
       console.warn('[SocketEmitters] Not connected to server');
       return false;
     }
     
-    console.log('[SocketEmitters] Finding partner');
+    console.log('[SocketEmitters] Finding partner with payload:', payload);
     try {
       socket.emit('findPartner', payload);
       return true;
@@ -27,7 +29,7 @@ export const useSocketEmitters = (
     }
   }, [socket]);
 
-  // ✅ NEW: Skip partner emit function
+  // ✅ CRITICAL: Skip partner emit function - ONLY auto-searches for the skipper
   const emitSkipPartner = useCallback((payload: {
     chatType: 'text' | 'video';
     interests: string[];
@@ -35,23 +37,27 @@ export const useSocketEmitters = (
     reason?: string;
   }) => {
     if (!socket?.connected) {
-      console.warn('[SocketEmitters] Not connected to server');
+      console.warn('[SocketEmitters] Not connected to server - cannot skip');
       return false;
     }
     
     if (!roomIdRef.current) {
-      console.warn('[SocketEmitters] Not in a chat room');
+      console.warn('[SocketEmitters] Not in a chat room - cannot skip');
       return false;
     }
     
-    console.log('[SocketEmitters] Skipping partner and searching for new one');
+    console.log('[SocketEmitters] Skipping partner and auto-searching for new one');
     try {
-      // ✅ CRITICAL: Emit skip event with auto-search
+      // ✅ CRITICAL: Emit skip event that auto-searches for the skipper only
       socket.emit('skipPartner', {
         roomId: roomIdRef.current,
-        ...payload,
-        autoSearch: true, // ✅ Tell server to auto-search for this user
-        skipperAuthId: payload.authId // ✅ Identify who initiated the skip
+        chatType: payload.chatType,
+        interests: payload.interests,
+        authId: payload.authId,
+        reason: payload.reason || 'skip',
+        autoSearchForSkipper: true, // ✅ Only auto-search for the person who skipped
+        skipperAuthId: payload.authId, // ✅ Identify who initiated the skip
+        timestamp: Date.now()
       });
       
       // Clear room ID since we're leaving
@@ -115,11 +121,15 @@ export const useSocketEmitters = (
     return false;
   }, [socket, roomIdRef]);
 
+  // ✅ STANDARD: Leave chat without auto-search (for normal disconnects)
   const emitLeaveChat = useCallback(() => {
     if (socket?.connected && roomIdRef.current) {
-      console.log('[SocketEmitters] Leaving chat room');
+      console.log('[SocketEmitters] Leaving chat room normally');
       try {
-        socket.emit('leaveChat', { roomId: roomIdRef.current });
+        socket.emit('leaveChat', { 
+          roomId: roomIdRef.current,
+          reason: 'normal_leave'
+        });
         roomIdRef.current = null;
         return true;
       } catch (error) {
@@ -129,7 +139,7 @@ export const useSocketEmitters = (
     return false;
   }, [socket, roomIdRef]);
 
-  // ✅ NEW: Disconnect without auto-search
+  // ✅ NEW: Disconnect without auto-search (for manual disconnects)
   const emitDisconnectOnly = useCallback(() => {
     if (socket?.connected && roomIdRef.current) {
       console.log('[SocketEmitters] Disconnecting without auto-search');
@@ -200,14 +210,14 @@ export const useSocketEmitters = (
 
   return {
     emitFindPartner,
-    emitSkipPartner,     // ✅ NEW: Skip with auto-search
+    emitSkipPartner,     // ✅ Skip with auto-search for skipper only
     emitMessage,
     emitTypingStart,
     emitTypingStop,
-    emitLeaveChat,
-    emitDisconnectOnly,  // ✅ NEW: Disconnect without auto-search
+    emitLeaveChat,       // ✅ Normal leave without auto-search
+    emitDisconnectOnly,  // ✅ Disconnect without auto-search
     emitWebRTCSignal,
     emitUpdateStatus,
-    emitReportUser       // ✅ NEW: Report functionality
+    emitReportUser
   };
 };

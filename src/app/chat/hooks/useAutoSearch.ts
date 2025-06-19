@@ -1,4 +1,5 @@
-// src/app/chat/hooks/useAutoSearch.ts - EXTRACTED AUTO-SEARCH LOGIC
+// src/app/chat/hooks/useAutoSearch.ts - FIXED TO PREVENT AUTO-SEARCH AFTER SKIP
+
 import { useEffect } from 'react';
 
 interface UseAutoSearchProps {
@@ -13,6 +14,7 @@ interface UseAutoSearchProps {
   }>;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
+  wasSkippedByPartner?: boolean; // ✅ NEW: Track if user was skipped
 }
 
 export const useAutoSearch = ({
@@ -22,10 +24,11 @@ export const useAutoSearch = ({
   interests,
   initRef,
   setIsSelfDisconnectedRecently,
-  setIsPartnerLeftRecently
+  setIsPartnerLeftRecently,
+  wasSkippedByPartner = false // ✅ NEW: Default to false
 }: UseAutoSearchProps) => {
   
-  // ✅ CRITICAL FIX: Controlled auto-search with proper dependency management
+  // ✅ CRITICAL FIX: Only auto-search on initial load, NOT after being skipped
   useEffect(() => {
     console.log('[AutoSearch] Effect triggered:', {
       autoSearchStarted: initRef.current.autoSearchStarted,
@@ -35,8 +38,15 @@ export const useAutoSearch = ({
       isFindingPartner: chatState.isFindingPartner,
       authId: auth.authId,
       connectionError: socket.connectionError,
-      isConnecting: socket.isConnecting
+      isConnecting: socket.isConnecting,
+      wasSkippedByPartner // ✅ NEW: Log skip state
     });
+
+    // ✅ CRITICAL: Prevent auto-search if user was skipped
+    if (wasSkippedByPartner) {
+      console.log('[AutoSearch] User was skipped, preventing auto-search');
+      return;
+    }
 
     if (initRef.current.autoSearchStarted) {
       console.log('[AutoSearch] Already started, skipping');
@@ -62,6 +72,12 @@ export const useAutoSearch = ({
 
     // ✅ CRITICAL FIX: Add delay to prevent race conditions
     const delayedStart = setTimeout(() => {
+      // ✅ DOUBLE-CHECK: Make sure user wasn't skipped during delay
+      if (wasSkippedByPartner) {
+        console.log('[AutoSearch] User was skipped during delay, cancelling auto-search');
+        return;
+      }
+
       if (!initRef.current.autoSearchStarted && socket.isConnected) {
         console.log('[AutoSearch] ✅ Starting delayed auto-search for partner');
         initRef.current.autoSearchStarted = true;
@@ -102,7 +118,8 @@ export const useAutoSearch = ({
     auth.authId,
     chatState.isPartnerConnected,
     chatState.isFindingPartner,
-    interests
+    interests,
+    wasSkippedByPartner // ✅ NEW: Include skip state in dependencies
   ]);
 
   // ✅ IMPROVED: Reset auto-search flag when conditions change
@@ -110,16 +127,24 @@ export const useAutoSearch = ({
     const shouldReset = chatState.isPartnerConnected || 
                        !socket.isConnected || 
                        socket.connectionError ||
-                       socket.isConnecting;
+                       socket.isConnecting ||
+                       wasSkippedByPartner; // ✅ NEW: Reset if user was skipped
 
     if (shouldReset && initRef.current.autoSearchStarted) {
       console.log('[AutoSearch] Resetting auto-search flag due to state change:', {
         isPartnerConnected: chatState.isPartnerConnected,
         isConnected: socket.isConnected,
         connectionError: socket.connectionError,
-        isConnecting: socket.isConnecting
+        isConnecting: socket.isConnecting,
+        wasSkippedByPartner
       });
       initRef.current.autoSearchStarted = false;
     }
-  }, [chatState.isPartnerConnected, socket.isConnected, socket.connectionError, socket.isConnecting]);
+  }, [
+    chatState.isPartnerConnected, 
+    socket.isConnected, 
+    socket.connectionError, 
+    socket.isConnecting,
+    wasSkippedByPartner // ✅ NEW: Include skip state
+  ]);
 };

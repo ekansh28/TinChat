@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChatActions.ts - ENHANCED VERSION WITH SKIP LOGIC
+// src/app/chat/hooks/useChatActions.ts - COMPLETE FIXED VERSION
 
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -14,10 +14,11 @@ interface ChatActionsProps {
   setPartnerInterests: (value: string[]) => void;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
+  setDidSkipPartner: (value: boolean) => void;
   addMessage: (message: any) => void;
   addSystemMessage: (text: string) => void;
   emitLeaveChat: () => void;
-  emitSkipPartner: (data: any) => void; // ✅ NEW: Skip-specific emit function
+  emitSkipPartner: (data: any) => void;
   emitFindPartner: (data: any) => void;
   emitMessage: (data: any) => void;
   emitTypingStart: () => void;
@@ -32,13 +33,11 @@ export const useChatActions = (props: ChatActionsProps) => {
   const { toast } = useToast();
   const isProcessingFindOrDisconnect = useRef(false);
   
-  // ✅ CRITICAL FIX: Store props in ref to prevent callback recreation
+  // Store props in ref to prevent callback recreation
   const propsRef = useRef(props);
-  
-  // Update props ref without causing re-renders
   propsRef.current = props;
 
-  // ✅ NEW: Separate skip function that auto-searches for the skipper only
+  // Skip function with auto-search for skipper
   const handleSkipPartner = useCallback(() => {
     const currentProps = propsRef.current;
     
@@ -65,33 +64,36 @@ export const useChatActions = (props: ChatActionsProps) => {
 
     console.log('[ChatActions] Skipping partner and auto-searching');
     
-    // ✅ CRITICAL: Emit skip event instead of regular leave
-    // This tells the server that this user initiated the skip
-    currentProps.emitSkipPartner?.({
+    // Set skip state immediately
+    currentProps.setDidSkipPartner(true);
+    
+    // Emit skip event
+    currentProps.emitSkipPartner({
       chatType: 'text',
       interests: currentProps.interests,
       authId: currentProps.authId,
       reason: 'skip'
     });
 
-    // Update local state immediately
-    currentProps.addSystemMessage('You skipped the partner. Searching for a new one...');
+    // Update local state immediately (server will handle auto-search)
     currentProps.setIsPartnerConnected(false);
     currentProps.setPartnerInfo(null);
     currentProps.setIsPartnerTyping(false);
     currentProps.setPartnerInterests([]);
     
-    // ✅ CRITICAL: Mark as self-disconnected and immediately start searching
-    currentProps.setIsSelfDisconnectedRecently(true);
+    // Clear other states but set skip state
+    currentProps.setIsSelfDisconnectedRecently(false);
     currentProps.setIsPartnerLeftRecently(false);
-    currentProps.setIsFindingPartner(true);
+    
+    // The server should handle the auto-search and send skipConfirmed
+    // Don't manually set isFindingPartner here - wait for server response
 
     setTimeout(() => {
       isProcessingFindOrDisconnect.current = false;
     }, 200);
-  }, [toast]);
+  }, [toast]); // Added missing closing bracket and dependency array here
 
-  // ✅ NEW: Separate disconnect function for manual disconnects (no auto-search)
+  // Disconnect function for manual disconnects (no auto-search)
   const handleDisconnectPartner = useCallback(() => {
     const currentProps = propsRef.current;
     
@@ -114,14 +116,15 @@ export const useChatActions = (props: ChatActionsProps) => {
     currentProps.setPartnerInterests([]);
     currentProps.setIsSelfDisconnectedRecently(true);
     currentProps.setIsPartnerLeftRecently(false);
-    currentProps.setIsFindingPartner(false); // ✅ Do NOT auto-search
+    currentProps.setDidSkipPartner(false);
+    currentProps.setIsFindingPartner(false); // Do NOT auto-search
 
     setTimeout(() => {
       isProcessingFindOrDisconnect.current = false;
     }, 200);
   }, []);
 
-  // ✅ ENHANCED: Updated find/disconnect handler with skip logic
+  // Main find/disconnect handler with skip logic
   const handleFindOrDisconnect = useCallback(() => {
     const currentProps = propsRef.current;
     
@@ -138,38 +141,43 @@ export const useChatActions = (props: ChatActionsProps) => {
     isProcessingFindOrDisconnect.current = true;
 
     if (currentProps.isPartnerConnected) {
-      // ✅ CRITICAL: Use skip function when connected to a partner
-      // This will auto-search for a new partner
-      console.log('[ChatActions] Skipping current partner');
+      // Use skip function when connected to a partner
+      console.log('[ChatActions] Skipping current partner via find/disconnect button');
       
-      currentProps.emitSkipPartner?.({
+      // Set skip state immediately
+      currentProps.setDidSkipPartner(true);
+      
+      currentProps.emitSkipPartner({
         chatType: 'text',
         interests: currentProps.interests,
         authId: currentProps.authId,
         reason: 'skip'
       });
 
-      currentProps.addSystemMessage('You skipped the partner. Searching for a new one...');
+      // Update local state - server will handle auto-search
       currentProps.setIsPartnerConnected(false);
       currentProps.setPartnerInfo(null);
       currentProps.setIsPartnerTyping(false);
       currentProps.setPartnerInterests([]);
       
-      currentProps.setIsFindingPartner(true);
-      currentProps.setIsSelfDisconnectedRecently(true);
+      currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
+      
+      // Don't manually set isFindingPartner - wait for server response
       
     } else if (currentProps.isFindingPartner) {
       // Stop searching
       currentProps.setIsFindingPartner(false);
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
+      currentProps.setDidSkipPartner(false);
       currentProps.addSystemMessage('Stopped searching for a partner.');
     } else {
       // Start searching
       currentProps.setIsFindingPartner(true);
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
+      currentProps.setDidSkipPartner(false);
       currentProps.addSystemMessage('Searching for a partner...');
       
       currentProps.emitFindPartner({
@@ -184,7 +192,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     }, 200);
   }, [toast]);
 
-  // ✅ FIXED: Stable message handler
+  // Message handler
   const handleSendMessage = useCallback((message: string) => {
     const currentProps = propsRef.current;
     
@@ -205,7 +213,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     currentProps.emitTypingStop();
   }, []);
 
-  // ✅ FIXED: Stable input change handler with typing management
+  // Input change handler with typing management
   const handleInputChange = useCallback((value: string) => {
     const currentProps = propsRef.current;
     
@@ -220,8 +228,8 @@ export const useChatActions = (props: ChatActionsProps) => {
 
   return {
     handleFindOrDisconnect,
-    handleSkipPartner,      // ✅ NEW: Skip with auto-search
-    handleDisconnectPartner, // ✅ NEW: Disconnect without auto-search
+    handleSkipPartner,      // Skip with auto-search
+    handleDisconnectPartner, // Disconnect without auto-search
     handleSendMessage,
     handleInputChange
   };

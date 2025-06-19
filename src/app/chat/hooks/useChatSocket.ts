@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChatSocket.ts - FIXED VERSION
+// src/app/chat/hooks/useChatSocket.ts - COMPLETE FIXED VERSION
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useSocketCore } from './useSocketCore';
@@ -10,6 +10,7 @@ interface UseChatSocketParams {
   onPartnerFound: (partner: any) => void;
   onPartnerLeft: () => void;
   onPartnerSkipped: (data: any) => void;
+  onSkipConfirmed: (data: any) => void;
   onStatusChange: (status: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
@@ -26,7 +27,7 @@ export function useChatSocket(params: UseChatSocketParams) {
   const roomIdRef = useRef<string | null>(params.roomId || null);
   const isInitializedRef = useRef(false);
   
-  // ✅ FIXED: Core socket management with proper server URL
+  // Core socket management with proper server URL
   const socketCore = useSocketCore({
     socketServerUrl: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001',
     onConnect: () => {
@@ -40,12 +41,15 @@ export function useChatSocket(params: UseChatSocketParams) {
       params.onConnectErrorHandler(error);
     },
     debug: process.env.NODE_ENV === 'development'
-  });  // ✅ FIXED: Event management with stable handlers
+  });
+
+  // Event management with stable handlers including onSkipConfirmed
   const socketEvents = useSocketEvents({
     onMessage: params.onMessage,
     onPartnerFound: params.onPartnerFound,
     onPartnerLeft: params.onPartnerLeft,
     onPartnerSkipped: params.onPartnerSkipped,
+    onSkipConfirmed: params.onSkipConfirmed,
     onStatusChange: params.onStatusChange,
     onTypingStart: params.onTypingStart,
     onTypingStop: params.onTypingStop,
@@ -54,12 +58,12 @@ export function useChatSocket(params: UseChatSocketParams) {
     onWebRTCSignal: params.onWebRTCSignal
   });
 
-  // ✅ FIXED: Event management with stable handlers
+  // Event management with stable handlers
   const setupEventsCallback = useCallback((socket: any, roomIdRef: any) => {
     return socketEvents.setupEvents(socket, roomIdRef);
   }, [socketEvents]);
 
-  // ✅ FIXED: Emit functions
+  // Emit functions
   const emitters = useSocketEmitters(socketCore.socket, roomIdRef);
 
   // Update room ID reference
@@ -67,7 +71,7 @@ export function useChatSocket(params: UseChatSocketParams) {
     roomIdRef.current = params.roomId || null;
   }, [params.roomId]);
 
-  // ✅ FIXED: Single initialization effect with proper cleanup
+  // Single initialization effect with proper cleanup
   useEffect(() => {
     if (isInitializedRef.current) return;
     
@@ -83,7 +87,7 @@ export function useChatSocket(params: UseChatSocketParams) {
     };
   }, []); // Empty deps - initialize once
 
-  // ✅ FIXED: Setup events when socket is available
+  // Setup events when socket is available
   useEffect(() => {
     if (socketCore.socket && socketCore.isInitialized) {
       console.log('[ChatSocket] Setting up socket events');
@@ -111,7 +115,7 @@ export function useChatSocket(params: UseChatSocketParams) {
     }
   }, [socketCore.socket, socketCore.isInitialized, setupEventsCallback, params.onWebRTCSignal]);
 
-  // ✅ Enhanced utility functions
+  // Utility functions
   const getOnlineUserCount = useCallback(() => {
     if (socketCore.socket?.connected) {
       socketCore.socket.emit('getOnlineUserCount');

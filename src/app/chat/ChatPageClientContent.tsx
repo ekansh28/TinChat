@@ -1,4 +1,5 @@
-// src/app/chat/ChatPageClientContent.tsx - MODULAR & HOOKS-FIXED VERSION
+// src/app/chat/ChatPageClientContent.tsx - FIXED CONNECTION STATUS
+
 'use client';
 
 import React from 'react';
@@ -60,12 +61,32 @@ const ChatPageClientContent: React.FC = () => {
   // ✅ FIXED: Single hook call with consistent order, no conditional hooks
   const chat = useChat();
 
+  // ✅ CRITICAL FIX: Better loading state detection
+  const isActuallyLoading = !chat.isMounted || 
+                           chat.auth.isLoading || 
+                           (chat.socket.isConnecting && !chat.socket.isConnected);
+
+  // ✅ CRITICAL FIX: Better connection error detection
+  const hasActualConnectionError = !!chat.socket.connectionError && 
+                                  !chat.socket.isConnected && 
+                                  !chat.socket.isConnecting;
+
+  console.log('[ChatPageClientContent] Render state:', {
+    isMounted: chat.isMounted,
+    authLoading: chat.auth.isLoading,
+    socketConnected: chat.socket.isConnected,
+    socketConnecting: chat.socket.isConnecting,
+    socketError: chat.socket.connectionError,
+    isActuallyLoading,
+    hasActualConnectionError
+  });
+
   // ✅ FIXED: Early returns AFTER all hooks are called
-  if (chat.isLoading) {
+  if (isActuallyLoading) {
     return <LoadingScreen auth={chat.auth} />;
   }
 
-  if (chat.hasConnectionError) {
+  if (hasActualConnectionError) {
     return <ConnectionErrorScreen 
       error={chat.socket.connectionError} 
       onRetry={() => window.location.reload()} 
