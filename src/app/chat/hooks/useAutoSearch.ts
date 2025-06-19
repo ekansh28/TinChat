@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useAutoSearch.ts - FIXED TO PREVENT AUTO-SEARCH AFTER SKIP
+// src/app/chat/hooks/useAutoSearch.ts - FIXED TO PREVENT AUTO-SEARCH AFTER MANUAL STOP
 
 import { useEffect } from 'react';
 
@@ -14,7 +14,9 @@ interface UseAutoSearchProps {
   }>;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
-  wasSkippedByPartner?: boolean; // ✅ NEW: Track if user was skipped
+  wasSkippedByPartner?: boolean;
+  didSkipPartner?: boolean;
+  userManuallyStopped?: boolean; // ✅ NEW: Track if user manually stopped
 }
 
 export const useAutoSearch = ({
@@ -25,10 +27,12 @@ export const useAutoSearch = ({
   initRef,
   setIsSelfDisconnectedRecently,
   setIsPartnerLeftRecently,
-  wasSkippedByPartner = false // ✅ NEW: Default to false
+  wasSkippedByPartner = false,
+  didSkipPartner = false,
+  userManuallyStopped = false // ✅ NEW: Default to false
 }: UseAutoSearchProps) => {
   
-  // ✅ CRITICAL FIX: Only auto-search on initial load, NOT after being skipped
+  // ✅ CRITICAL FIX: Only auto-search on initial load, NOT after being skipped or manually stopped
   useEffect(() => {
     console.log('[AutoSearch] Effect triggered:', {
       autoSearchStarted: initRef.current.autoSearchStarted,
@@ -39,12 +43,26 @@ export const useAutoSearch = ({
       authId: auth.authId,
       connectionError: socket.connectionError,
       isConnecting: socket.isConnecting,
-      wasSkippedByPartner // ✅ NEW: Log skip state
+      wasSkippedByPartner,
+      didSkipPartner,
+      userManuallyStopped // ✅ NEW: Log manual stop state
     });
 
     // ✅ CRITICAL: Prevent auto-search if user was skipped
     if (wasSkippedByPartner) {
       console.log('[AutoSearch] User was skipped, preventing auto-search');
+      return;
+    }
+
+    // ✅ CRITICAL: Prevent auto-search if user manually stopped after skipping
+    if (userManuallyStopped) {
+      console.log('[AutoSearch] User manually stopped searching, preventing auto-search');
+      return;
+    }
+
+    // ✅ CRITICAL: Prevent auto-search if user already skipped someone
+    if (didSkipPartner) {
+      console.log('[AutoSearch] User skipped someone, server should handle auto-search');
       return;
     }
 
@@ -72,9 +90,19 @@ export const useAutoSearch = ({
 
     // ✅ CRITICAL FIX: Add delay to prevent race conditions
     const delayedStart = setTimeout(() => {
-      // ✅ DOUBLE-CHECK: Make sure user wasn't skipped during delay
+      // ✅ TRIPLE-CHECK: Make sure conditions haven't changed during delay
       if (wasSkippedByPartner) {
         console.log('[AutoSearch] User was skipped during delay, cancelling auto-search');
+        return;
+      }
+
+      if (userManuallyStopped) {
+        console.log('[AutoSearch] User manually stopped during delay, cancelling auto-search');
+        return;
+      }
+
+      if (didSkipPartner) {
+        console.log('[AutoSearch] User skipped someone during delay, cancelling auto-search');
         return;
       }
 
@@ -119,7 +147,9 @@ export const useAutoSearch = ({
     chatState.isPartnerConnected,
     chatState.isFindingPartner,
     interests,
-    wasSkippedByPartner // ✅ NEW: Include skip state in dependencies
+    wasSkippedByPartner,
+    didSkipPartner,
+    userManuallyStopped // ✅ NEW: Include manual stop state in dependencies
   ]);
 
   // ✅ IMPROVED: Reset auto-search flag when conditions change
@@ -128,7 +158,8 @@ export const useAutoSearch = ({
                        !socket.isConnected || 
                        socket.connectionError ||
                        socket.isConnecting ||
-                       wasSkippedByPartner; // ✅ NEW: Reset if user was skipped
+                       wasSkippedByPartner ||
+                       userManuallyStopped; // ✅ NEW: Reset if user manually stopped
 
     if (shouldReset && initRef.current.autoSearchStarted) {
       console.log('[AutoSearch] Resetting auto-search flag due to state change:', {
@@ -136,7 +167,8 @@ export const useAutoSearch = ({
         isConnected: socket.isConnected,
         connectionError: socket.connectionError,
         isConnecting: socket.isConnecting,
-        wasSkippedByPartner
+        wasSkippedByPartner,
+        userManuallyStopped
       });
       initRef.current.autoSearchStarted = false;
     }
@@ -145,6 +177,7 @@ export const useAutoSearch = ({
     socket.isConnected, 
     socket.connectionError, 
     socket.isConnecting,
-    wasSkippedByPartner // ✅ NEW: Include skip state
+    wasSkippedByPartner,
+    userManuallyStopped // ✅ NEW: Include manual stop state
   ]);
 };

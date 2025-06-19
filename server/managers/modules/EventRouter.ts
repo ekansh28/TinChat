@@ -52,6 +52,37 @@ export class EventRouter {
     socket.on('findPartner', async (payload: unknown) => {
       await this.matchmakingHandler.handleFindPartner(socket, payload);
     });
+
+    // ✅ NEW: Handle stop searching event
+    socket.on('stopSearching', async (payload: unknown) => {
+      await this.handleStopSearching(socket, payload);
+    });
+  } 
+
+    // ✅ NEW: Stop searching handler
+  private async handleStopSearching(socket: Socket, payload: unknown): Promise<void> {
+    try {
+      console.log(`🛑 STOP SEARCHING request from ${socket.id}:`, payload);
+
+      const data = payload as any;
+      
+      // Remove user from all waiting lists on the server
+      this.matchmakingHandler.removeUserFromQueues(socket.id);
+      
+      // Send confirmation to client
+      socket.emit('stopSearchingConfirmed', {
+        stoppedBy: socket.id,
+        authId: data?.authId,
+        reason: data?.reason || 'manual_stop',
+        timestamp: Date.now()
+      });
+
+      console.log(`✅ Stop searching handled successfully for ${socket.id}`);
+
+    } catch (error) {
+      console.error(`❌ Error handling stop searching for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Failed to stop searching' });
+    }
   }
 
   private setupChatEventHandlers(socket: Socket): void {

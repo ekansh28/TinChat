@@ -489,7 +489,30 @@ export class MatchmakingHandler {
       }
     };
   }
-
+    // ✅ NEW: Remove user from queues when they stop searching
+  removeUserFromQueues(socketId: string): void {
+    try {
+      // Remove from matchmaking queues
+      const wasInQueue = this.isUserInQueue(socketId);
+      this.matchmakingEngine.removeFromWaitingLists(socketId);
+      
+      if (wasInQueue) {
+        console.log(`🗑️ Removed ${socketId} from matchmaking queues due to stop searching`);
+      } else {
+        console.log(`ℹ️ User ${socketId} was not in any queues when stop searching was called`);
+      }
+      
+      // Clean up any associated state
+      const authId = this.socketToAuthId.get(socketId);
+      if (authId) {
+        // Could update user status if needed
+        console.log(`📊 User ${authId} stopped searching`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error removing user ${socketId} from queues:`, error);
+    }
+  }
   // Cleanup for disconnected users
   cleanupUser(socketId: string): void {
     // Remove from queues

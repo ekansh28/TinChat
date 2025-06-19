@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChat.ts - COMPLETE FIXED VERSION
+// src/app/chat/hooks/useChat.ts - COMPLETE FIXED VERSION WITH MANUAL STOP TRACKING
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
@@ -59,6 +59,7 @@ export const useChat = (): UseChatReturn => {
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [wasSkippedByPartner, setWasSkippedByPartner] = useState(false);
   const [didSkipPartner, setDidSkipPartner] = useState(false);
+  const [userManuallyStopped, setUserManuallyStopped] = useState(false); // ✅ NEW: Track manual stops
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   const [isScrollEnabled] = useState(true);
   
@@ -140,11 +141,12 @@ export const useChat = (): UseChatReturn => {
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerConnected(true);
       
-      // Reset all skip states when new partner found
+      // Reset all skip states and manual stop when new partner found
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
+      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
       
       chatState.setMessages([]);
     },
@@ -160,6 +162,7 @@ export const useChat = (): UseChatReturn => {
       setIsSelfDisconnectedRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
+      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
     },
 
     // Handle being skipped - NO AUTO-SEARCH
@@ -176,6 +179,7 @@ export const useChat = (): UseChatReturn => {
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
       setDidSkipPartner(false);
+      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
       
       // Stop any current search
       chatState.setIsFindingPartner(false);
@@ -190,6 +194,7 @@ export const useChat = (): UseChatReturn => {
       setWasSkippedByPartner(false);
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
+      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skip is confirmed
       
       // The auto-search should already be handled by the server
       chatState.setIsFindingPartner(true);
@@ -254,7 +259,7 @@ export const useChat = (): UseChatReturn => {
     setMessages: chatState.setMessages
   });
 
-  // Chat actions
+  // Chat actions with manual stop tracking
   const chatActions = useChatActions({
     isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
@@ -267,10 +272,12 @@ export const useChat = (): UseChatReturn => {
     setIsSelfDisconnectedRecently,
     setIsPartnerLeftRecently,
     setDidSkipPartner,
+    setUserManuallyStopped, // ✅ NEW: Pass manual stop setter
     addMessage: chatState.addMessage,
     addSystemMessage: chatState.addSystemMessage,
     emitLeaveChat: socket.emitLeaveChat,
     emitSkipPartner: socket.emitSkipPartner,
+    emitStopSearching: socket.emitStopSearching, // ✅ NEW: Pass stop searching emit
     emitFindPartner: socket.emitFindPartner,
     emitMessage: socket.emitMessage,
     emitTypingStart: socket.emitTypingStart,
@@ -281,7 +288,7 @@ export const useChat = (): UseChatReturn => {
     username: auth.username
   });
 
-  // Auto-search only on initial load, NOT after being skipped
+  // Auto-search only on initial load, NOT after being skipped or manually stopped
   useAutoSearch({
     socket,
     auth,
@@ -290,7 +297,9 @@ export const useChat = (): UseChatReturn => {
     initRef,
     setIsSelfDisconnectedRecently,
     setIsPartnerLeftRecently,
-    wasSkippedByPartner
+    wasSkippedByPartner,
+    didSkipPartner,
+    userManuallyStopped // ✅ NEW: Pass manual stop state
   });
   
   // Navigation cleanup
@@ -302,6 +311,7 @@ export const useChat = (): UseChatReturn => {
       setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
+      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
       setPartnerInterests([]);
       initRef.current.autoSearchStarted = false;
     }

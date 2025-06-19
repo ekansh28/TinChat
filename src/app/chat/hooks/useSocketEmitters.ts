@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEmitters.ts - FIXED SKIP IMPLEMENTATION
+// src/app/chat/hooks/useSocketEmitters.ts - FIXED WITH STOP SEARCH EMIT
 
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -25,6 +25,30 @@ export const useSocketEmitters = (
       return true;
     } catch (error) {
       console.error('[SocketEmitters] Error emitting findPartner:', error);
+      return false;
+    }
+  }, [socket]);
+
+  // ✅ NEW: Stop searching function - removes user from server queue
+  const emitStopSearching = useCallback((payload?: {
+    authId?: string | null;
+    reason?: string;
+  }) => {
+    if (!socket?.connected) {
+      console.warn('[SocketEmitters] Not connected to server - cannot stop search');
+      return false;
+    }
+    
+    console.log('[SocketEmitters] Stopping search and removing from queue');
+    try {
+      socket.emit('stopSearching', {
+        authId: payload?.authId,
+        reason: payload?.reason || 'manual_stop',
+        timestamp: Date.now()
+      });
+      return true;
+    } catch (error) {
+      console.error('[SocketEmitters] Error emitting stopSearching:', error);
       return false;
     }
   }, [socket]);
@@ -210,12 +234,13 @@ export const useSocketEmitters = (
 
   return {
     emitFindPartner,
-    emitSkipPartner,     // ✅ Skip with auto-search for skipper only
+    emitStopSearching,    // ✅ NEW: Stop searching and remove from queue
+    emitSkipPartner,      // ✅ Skip with auto-search for skipper only
     emitMessage,
     emitTypingStart,
     emitTypingStop,
-    emitLeaveChat,       // ✅ Normal leave without auto-search
-    emitDisconnectOnly,  // ✅ Disconnect without auto-search
+    emitLeaveChat,        // ✅ Normal leave without auto-search
+    emitDisconnectOnly,   // ✅ Disconnect without auto-search
     emitWebRTCSignal,
     emitUpdateStatus,
     emitReportUser

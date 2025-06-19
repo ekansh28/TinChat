@@ -1,4 +1,4 @@
-// src/app/chat/ChatPageClientContent.tsx - FIXED CONNECTION STATUS
+// src/app/chat/ChatPageClientContent.tsx - UPDATED WITH TASKBAR
 
 'use client';
 
@@ -8,6 +8,7 @@ import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
 import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 import ChatWindow from './components/ChatWindow';
+import { TaskBar } from './components/TaskBar'; // Import the new TaskBar
 import { useChat } from './hooks/useChat';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ConnectionErrorScreen } from './components/ConnectionErrorScreen';
@@ -107,12 +108,22 @@ const ChatPageClientContent: React.FC = () => {
         <div className={cn(
           "chat-page-container flex flex-col items-center justify-center",
           chat.isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
-        )}>
+        )} style={{
+          // ✅ IMPORTANT: Add padding bottom to account for taskbar
+          paddingBottom: chat.isMobile ? '40px' : '50px' // Adjust based on taskbar height
+        }}>
           <div className={cn(
             'window flex flex-col relative',
             chat.pinkThemeActive && 'biscuit-frame',
             chat.isMobile ? 'h-full w-full overflow-hidden' : ''
-          )} style={chat.chatWindowStyle}>
+          )} style={{
+            ...chat.chatWindowStyle,
+            // ✅ IMPORTANT: Adjust height to account for taskbar
+            ...(chat.isMobile && {
+              height: 'calc(100vh - 40px)', // Subtract taskbar height
+              maxHeight: 'calc(100vh - 40px)'
+            })
+          }}>
             
             <div className={cn(
               "title-bar flex-shrink-0",
@@ -175,6 +186,9 @@ const ChatPageClientContent: React.FC = () => {
         </div>
 
         <ProfilePopup />
+        
+        {/* ✅ NEW: Add TaskBar at the bottom */}
+        <TaskBar />
       </ProfilePopupProvider>
     </>
   );

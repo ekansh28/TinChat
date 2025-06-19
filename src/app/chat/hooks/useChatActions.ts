@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChatActions.ts - COMPLETE FIXED VERSION
+// src/app/chat/hooks/useChatActions.ts - COMPLETE FIXED VERSION WITH MANUAL STOP TRACKING
 
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -15,10 +15,12 @@ interface ChatActionsProps {
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
   setDidSkipPartner: (value: boolean) => void;
+  setUserManuallyStopped: (value: boolean) => void; // ✅ NEW: Track manual stops
   addMessage: (message: any) => void;
   addSystemMessage: (text: string) => void;
   emitLeaveChat: () => void;
   emitSkipPartner: (data: any) => void;
+  emitStopSearching: (data?: any) => void; // ✅ NEW: Stop searching emit
   emitFindPartner: (data: any) => void;
   emitMessage: (data: any) => void;
   emitTypingStart: () => void;
@@ -64,8 +66,9 @@ export const useChatActions = (props: ChatActionsProps) => {
 
     console.log('[ChatActions] Skipping partner and auto-searching');
     
-    // Set skip state immediately
+    // Set skip state immediately and reset manual stop
     currentProps.setDidSkipPartner(true);
+    currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skipping
     
     // Emit skip event
     currentProps.emitSkipPartner({
@@ -91,7 +94,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     setTimeout(() => {
       isProcessingFindOrDisconnect.current = false;
     }, 200);
-  }, [toast]); // Added missing closing bracket and dependency array here
+  }, [toast]);
 
   // Disconnect function for manual disconnects (no auto-search)
   const handleDisconnectPartner = useCallback(() => {
@@ -117,6 +120,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     currentProps.setIsSelfDisconnectedRecently(true);
     currentProps.setIsPartnerLeftRecently(false);
     currentProps.setDidSkipPartner(false);
+    currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
     currentProps.setIsFindingPartner(false); // Do NOT auto-search
 
     setTimeout(() => {
@@ -124,7 +128,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     }, 200);
   }, []);
 
-  // Main find/disconnect handler with skip logic
+  // Main find/disconnect handler with skip logic and manual stop tracking
   const handleFindOrDisconnect = useCallback(() => {
     const currentProps = propsRef.current;
     
@@ -144,8 +148,9 @@ export const useChatActions = (props: ChatActionsProps) => {
       // Use skip function when connected to a partner
       console.log('[ChatActions] Skipping current partner via find/disconnect button');
       
-      // Set skip state immediately
+      // Set skip state immediately and reset manual stop
       currentProps.setDidSkipPartner(true);
+      currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skipping
       
       currentProps.emitSkipPartner({
         chatType: 'text',
@@ -166,15 +171,26 @@ export const useChatActions = (props: ChatActionsProps) => {
       // Don't manually set isFindingPartner - wait for server response
       
     } else if (currentProps.isFindingPartner) {
-      // Stop searching
+      // ✅ CRITICAL: User manually stopped searching - mark it and notify server!
+      console.log('[ChatActions] User manually stopped searching');
+      
+      // ✅ CRITICAL: Notify server to remove from queue
+      currentProps.emitStopSearching({
+        authId: currentProps.authId,
+        reason: 'manual_stop'
+      });
+      
       currentProps.setIsFindingPartner(false);
+      currentProps.setUserManuallyStopped(true); // ✅ NEW: Mark as manually stopped
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
       currentProps.setDidSkipPartner(false);
       currentProps.addSystemMessage('Stopped searching for a partner.');
     } else {
-      // Start searching
+      // Start searching - reset manual stop flag
+      console.log('[ChatActions] User manually started searching');
       currentProps.setIsFindingPartner(true);
+      currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when starting search
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
       currentProps.setDidSkipPartner(false);
