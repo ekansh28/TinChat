@@ -11,6 +11,8 @@ import { CustomizerPanel } from './components/CustomizerPanel';
 import { Modal } from './components/Modal';
 import { useProfileCustomizer } from './hooks/useProfileCustomizer';
 import type { UserProfile } from './types';
+import ProfileCardPreview from './components/ProfileCardPreview';
+
 
 // Simple auth hook if useAuth doesn't exist
 const useAuth = () => {
@@ -138,12 +140,12 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
               <h3 className="text-lg font-medium mb-4 text-center">Live Preview</h3>
               <div className="space-y-4">
                 {/* Discord-style Profile Card */}
-                <ProfileCard
-                  profile={profile}
-                  badges={badges}
-                  customCSS={customCSS}
-                  isPreview={true}
-                />
+                  <ProfileCardPreview
+                    profile={profile}
+                    badges={badges}
+                    customCSS={customCSS}
+                    isPreview={true}
+                  />
                 
                 {/* Chat Preview */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg p-3">

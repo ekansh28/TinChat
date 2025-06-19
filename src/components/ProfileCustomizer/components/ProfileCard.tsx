@@ -36,6 +36,8 @@ interface ProfileCardProps {
   variant?: 'default' | 'popup';
 }
 
+
+
 const STATUS_CONFIG = {
   online: { icon: '🟢', color: '#43b581', text: 'Online' },
   idle: { icon: '🟡', color: '#faa61a', text: 'Idle' },
