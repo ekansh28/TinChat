@@ -205,37 +205,26 @@ const MessageRow: React.FC<MessageRowProps> = ({
 
   // Username component
   const UsernameComponent = ({ children }: { children: React.ReactNode }) => {
-    if (isClickable) {
-      return (
-        <button
-          onClick={handleUsernameClick}
-          onKeyDown={handleKeyDown}
-          onMouseEnter={handleMouseEnter}
-          className={cn(
-            "font-bold mr-1",
-            displayNameClass,
-            "cursor-pointer transition-all duration-200 hover:underline hover:scale-105",
-            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded",
-            isMobile && "active:underline active:scale-105 touch-manipulation"
-          )}
-          style={getDisplayNameStyle()}
-          aria-label={`View ${displayName}'s profile`}
-          data-user-id={authId}
-          type="button"
-          tabIndex={0}
-        >
-          {children}
-        </button>
-      );
-    }
-    
     return (
-      <span 
+      <span
         className={cn(
-          "font-bold mr-1",
+          "font-bold mr-1 cursor-pointer hover:underline transition-all duration-200",
           displayNameClass
         )}
         style={getDisplayNameStyle()}
+        onClick={isClickable && authId ? (e) => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const clickPosition = {
+            x: rect.left + rect.width / 2,
+            y: rect.bottom + 5
+          };
+          onUsernameClick(authId, clickPosition);
+          showProfile(authId, e);
+        } : undefined}
+        tabIndex={0}
+        role="button"
+        aria-label={`View ${displayName}'s profile`}
+        data-user-id={authId}
       >
         {children}
       </span>
