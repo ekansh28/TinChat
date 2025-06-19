@@ -35,10 +35,6 @@ declare module 'butterchurn-presets' {
 
   export function getPresets(): PresetCollection;
   export function getPresetNames(): string[];
-  export default {
-    getPresets(): PresetCollection;
-    getPresetNames(): string[];
-  };
 }
 
 declare module 'butterchurn/lib/isSupported.min' {
@@ -99,5 +95,5 @@ declare module 'webamp' {
     onWillClose(callback: () => void): () => void;
   }
 
-  export default Webamp;
+  export = Webamp;
 }
