@@ -31,6 +31,9 @@ interface ProfileCardProps {
   userId: string;
   isOpen: boolean;
   onClose: () => void;
+  onScrollToggle?: (enabled: boolean) => void; // ✅ Add this line
+  clickPosition?: { x: number; y: number } | null;
+  variant?: 'default' | 'popup';
 }
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClose }) => {
