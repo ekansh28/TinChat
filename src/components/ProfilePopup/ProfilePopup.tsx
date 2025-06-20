@@ -1,97 +1,125 @@
-// src/components/ProfilePopup/ProfilePopup.tsx
+// src/components/ProfileCustomizer/components/ProfilePopup.tsx
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { useProfilePopup } from './ProfilePopupProvider';
-import { ProfileCard } from '@/components/ProfileCustomizer/components/ProfileCard';
+import { Badge, UserProfile } from '../ProfileCustomizer/types';
 
-export const ProfilePopup: React.FC = () => {
-  const { popupState, hideProfile } = useProfilePopup();
+export interface ProfilePopupProps {
+  profile: UserProfile;
+  badges: Badge[];
+  customCSS: string;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const STATUS_CONFIG = {
+  online: { icon: '🟢', text: 'Online', color: '#43b581' },
+  idle: { icon: '🟡', text: 'Idle', color: '#faa61a' },
+  dnd: { icon: '🔴', text: 'Do Not Disturb', color: '#f04747' },
+  offline: { icon: '⚫', text: 'Offline', color: '#747f8d' }
+} as const;
+
+export function ProfilePopup({ profile, badges, customCSS, isOpen, onClose }: ProfilePopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
-  
-  // Click outside detection and keyboard handling
+
   useEffect(() => {
-    if (!popupState.isVisible) return;
-    
     const handleClickOutside = (event: MouseEvent) => {
       if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
-        hideProfile();
+        onClose();
       }
     };
-    
-    const handleEscKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        hideProfile();
-      }
-    };
-    
-    // Use capture phase for better performance
-    document.addEventListener('mousedown', handleClickOutside, true);
-    document.addEventListener('keydown', handleEscKey);
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside, true);
-      document.removeEventListener('keydown', handleEscKey);
-    };
-  }, [popupState.isVisible, hideProfile]);
 
-  // Focus management for accessibility
-  useEffect(() => {
-    if (popupState.isVisible && popupRef.current) {
-      // Focus the popup for screen readers
-      popupRef.current.focus();
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
     }
-  }, [popupState.isVisible]);
-  
-  if (!popupState.isVisible || !popupState.userId || !popupState.position) {
-    return null;
-  }
 
-  // Check if we're in a browser environment
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  
-  return createPortal(
-    <div className="profile-popup-overlay">
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div 
         ref={popupRef}
-        className={cn(
-          "profile-popup",
-          "fixed bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden",
-          "max-w-[320px] max-h-[400px] z-[1050]",
-          "animate-in fade-in-0 zoom-in-95 duration-200",
-          // Mobile responsive - bottom sheet on small screens
-          "md:max-w-[320px] md:max-h-[400px]",
-          "max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-auto",
-          "max-md:max-w-none max-md:max-h-[70vh] max-md:rounded-t-2xl max-md:rounded-b-none"
-        )}
-        style={{
-          left: window.innerWidth < 768 ? undefined : popupState.position.x,
-          top: window.innerWidth < 768 ? undefined : popupState.position.y,
-        }}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label="User profile popup"
+        className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden"
       >
-        {/* Close button for mobile */}
-        <div className="md:hidden flex justify-center pt-2 pb-1">
-          <div className="w-8 h-1 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
+        <div className="p-4">
+          <div className="flex items-center space-x-4">
+            <img
+              src={profile.avatar_url || getDefaultAvatar()}
+              alt="Profile"
+              className="w-16 h-16 rounded-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = getDefaultAvatar();
+              }}
+            />
+            <div>
+              <div 
+                className="text-lg font-semibold"
+                style={{ 
+                  color: profile.display_name_color || '#ffffff',
+                  animation: profile.display_name_animation === 'rainbow' ? 
+                    `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
+                }}
+              >
+                {profile.display_name || profile.username || 'Unknown User'}
+              </div>
+              {profile.status && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {STATUS_CONFIG[profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {badges?.length > 0 && (
+            <div 
+              className="mt-4 overflow-x-auto no-scrollbar"
+              style={{ maxWidth: '100%' }}
+              onWheel={(e) => {
+                const container = e.currentTarget as HTMLElement;
+                if (e.deltaY !== 0) {
+                  e.preventDefault();
+                  container.scrollLeft += e.deltaY;
+                }
+              }}
+            >
+              <div className="flex gap-2 w-max">
+                {badges.map(badge => (
+                  <img
+                    key={badge.id}
+                    src={badge.url}
+                    alt={badge.name || 'Badge'}
+                    className="w-6 h-6"
+                    title={badge.name}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {customCSS && (
+            <style dangerouslySetInnerHTML={{ __html: customCSS }} />
+          )}
         </div>
-        
-        <ProfileCard 
-          userId={popupState.userId}
-          isOpen={true}
-          onClose={hideProfile}
-          onScrollToggle={() => {}} // Not needed for popup
-          clickPosition={popupState.position}
-          variant="popup"
-        />
+        <style jsx>{`
+          .no-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+          .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}</style>
       </div>
-    </div>,
-    document.body
+    </div>
   );
-};
+}
+
+function getDefaultAvatar() {
+  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
+}
