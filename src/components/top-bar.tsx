@@ -73,7 +73,7 @@ export function TopBar() {
     if (isWinXPMode) {
       return '/icons/themeXP.png';
     } else if (isWin7Mode) {
-      return '/icons/theme7.ico';
+      return '/icons/Theme7.ico';
     } else {
       return '/icons/theme98.png';
     }
