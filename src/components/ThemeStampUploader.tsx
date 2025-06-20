@@ -1036,7 +1036,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                     style={{
                       width: '99px',
                       height: '55px',
-                      objectFit: 'stretch'
+                      objectFit: 'fill', // instead of 'stretch'
                     }}
                   />
                 ) : (
@@ -1068,7 +1068,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                   style={{ 
                     width: '64px',
                     height: '35px',
-                    objectFit: 'stretch',
+                    objectFit: 'fill', // instead of 'stretch'
                     imageRendering: 'pixelated' 
                   }}
                 />
@@ -1102,13 +1102,13 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
             </button>
             <button
               onClick={handleCreateStamp}
-              disabled={
-                isCreating || 
-                !!error || 
-                !cssFileName.trim() || 
-                cssValidationStatus === 'validating' ||
-                (uploadedCssContent && cssValidationStatus === 'invalid')
-              }
+                disabled={Boolean(
+                  isCreating || 
+                  error || 
+                  !cssFileName?.trim() || 
+                  cssValidationStatus === 'validating' ||
+                  (uploadedCssContent && cssValidationStatus === 'invalid')
+                )}
               className={cn(
                 "px-4 py-2", 
                 themeStyles.button,
