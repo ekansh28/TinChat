@@ -1,151 +1,99 @@
-// src/components/ProfileCard.tsx
+// src/components/ProfileCustomizer/components/ProfileCard.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import React from 'react';
 import { cn } from '@/lib/utils';
+import { Badge, UserProfile } from '../types';
 
-interface Badge {
-  id: string;
-  url: string;
-  name?: string;
+export interface ProfileCardProps {
+  profile: UserProfile;
+  badges: Badge[];
+  customCSS: string;
+  isPreview: boolean;
 }
 
-interface UserProfile {
-  id: string;
-  username?: string;
-  display_name?: string;
-  avatar_url?: string;
-  banner_url?: string;
-  pronouns?: string;
-  bio?: string;
-  status?: 'online' | 'idle' | 'dnd' | 'offline';
-  display_name_color?: string;
-  display_name_animation?: string;
-  rainbow_speed?: number;
-  badges?: Badge[];
-  created_at?: string;
-}
+const STATUS_CONFIG = {
+  online: { icon: '🟢', text: 'Online', color: '#43b581' },
+  idle: { icon: '🟡', text: 'Idle', color: '#faa61a' },
+  dnd: { icon: '🔴', text: 'Do Not Disturb', color: '#f04747' },
+  offline: { icon: '⚫', text: 'Offline', color: '#747f8d' }
+} as const;
 
-interface ProfileCardProps {
-  userId: string;
-  isOpen: boolean;
-  onClose: () => void;
-  onScrollToggle?: (enabled: boolean) => void; // ✅ Add this line
-  clickPosition?: { x: number; y: number } | null;
-  variant?: 'default' | 'popup';
-}
-
-export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClose }) => {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    const fetchWithTimeout = (promise: Promise<any>, timeoutMs = 5000) => {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Profile timeout')), timeoutMs)
-        ),
-      ]);
-    };
-
-    try {
-      const result: any = await fetchWithTimeout(
-        (async () =>
-          await supabase
-            .from('user_profiles')
-            .select(`
-              id,
-              username,
-              display_name,
-              avatar_url,
-              banner_url,
-              pronouns,
-              bio,
-              status,
-              display_name_color,
-              display_name_animation,
-              rainbow_speed,
-              badges,
-              created_at
-            `)
-            .eq('id', userId)
-            .single()
-        )(),
-        5000
-      );
-
-
-      const { data, error } = result;
-      if (error) throw error;
-
-      let parsedBadges: Badge[] = [];
-      if (data.badges) {
-        try {
-          parsedBadges = typeof data.badges === 'string' ? JSON.parse(data.badges) : data.badges;
-        } catch {
-          parsedBadges = [];
-        }
-      }
-
-      setProfile({ ...data, badges: parsedBadges });
-    } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError(err.message || 'Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    if (isOpen && userId) fetchProfile();
-  }, [isOpen, userId, fetchProfile]);
-
-  if (!isOpen) return null;
-
+export function ProfileCard({ profile, badges, customCSS, isPreview }: ProfileCardProps) {
   return (
-    <div className="window profile-card">
-      <div className="title-bar">
-        <div className="title-bar-text">User Profile</div>
-        <div className="title-bar-controls">
-          <button aria-label="Close" onClick={onClose}></button>
+    <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center space-x-4">
+          <img
+            src={profile.avatar_url || getDefaultAvatar()}
+            alt="Profile"
+            className="w-16 h-16 rounded-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = getDefaultAvatar();
+            }}
+          />
+          <div>
+            <div 
+              className="text-lg font-semibold"
+              style={{ 
+                color: profile.display_name_color || '#ffffff',
+                animation: profile.display_name_animation === 'rainbow' ? 
+                  `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
+              }}
+            >
+              {profile.display_name || profile.username || 'Unknown User'}
+            </div>
+            {profile.status && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {STATUS_CONFIG[profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="window-body">
-        {loading && (
-          <div className="text-center">
-            <progress style={{ width: '100%' }}></progress>
-            <p className="mt-2">Fetching profile...</p>
-            <button className="button" disabled>
-              Loading...
-            </button>
-          </div>
-        )}
 
-        {error && !loading && (
-          <div className="text-center">
-            <p className="text-error">{error}</p>
-            <button className="button" onClick={fetchProfile}>
-              Retry
-            </button>
-            <button className="button ml-2" onClick={onClose}>
-              Close
-            </button>
+        {badges?.length > 0 && (
+          <div 
+            className="mt-4 overflow-x-auto no-scrollbar"
+            style={{ maxWidth: '100%' }}
+            onWheel={(e) => {
+              const container = e.currentTarget as HTMLElement;
+              if (e.deltaY !== 0) {
+                e.preventDefault();
+                container.scrollLeft += e.deltaY;
+              }
+            }}
+          >
+            <div className="flex gap-2 w-max">
+              {badges.map(badge => (
+                <img
+                  key={badge.id}
+                  src={badge.url}
+                  alt={badge.name || 'Badge'}
+                  className="w-6 h-6"
+                  title={badge.name}
+                />
+              ))}
+            </div>
           </div>
         )}
-
-        {profile && !loading && !error && (
-          <div className="profile-content">
-            <h2>{profile.display_name || profile.username}</h2>
-            {profile.bio && <p className="mt-1">{profile.bio}</p>}
-          </div>
+        
+        {customCSS && isPreview && (
+          <style dangerouslySetInnerHTML={{ __html: customCSS }} />
         )}
       </div>
+      <style jsx>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
-};
+}
+
+function getDefaultAvatar() {
+  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
+}

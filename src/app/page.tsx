@@ -1,4 +1,4 @@
-// src/app/page.tsx - Updated with Webamp Component
+// src/app/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -6,23 +6,33 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import pkg from '../../package.json';
 import styles from '@/styles/page.module.css';
+import dynamic from 'next/dynamic';
 
-// Import modular components
+// Components
 import Header from '@/components/home/Header';
 import MainCard from '@/components/home/MainCard';
 import SideLinks from '@/components/home/SideLinks';
 import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
-import OnlineUsersWindow from '@/components/home/OnlineUsersWindow';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
-import Webamp from '@/components/home/Webamp';
+
+// Hooks
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
 import { useOnlineUsersData } from '@/hooks/useOnlineUsersData';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useTheme } from '@/components/theme-provider';
 
-// Declare global types for TypeScript
-declare global {  interface Window {
+// Dynamically import Webamp with no SSR
+const Webamp = dynamic(
+  () => import('@/components/home/Webamp'),
+  { 
+    ssr: false,
+    loading: () => null
+  }
+);
+
+declare global {
+  interface Window {
     stopOriginalOneko?: () => void;
     startOriginalOneko?: () => void;
     stopAnimatedGifCursor?: () => boolean;
@@ -52,14 +62,13 @@ export default function SelectionLobby() {
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
 
-  // Reset navigation state when pathname changes
   useEffect(() => {
     setIsNavigating(false);
   }, [pathname]);
 
   const handleStartChat = (type: 'text' | 'video') => {
     if (!router) {
-      console.error("SelectionLobby: Router is not available in handleStartChat.");
+      console.error("Router not available in handleStartChat.");
       toast({ 
         variant: "destructive",
         title: "Navigation Error", 
@@ -123,71 +132,62 @@ export default function SelectionLobby() {
   };
 
   return (
-    <>
-      <div className={styles.homePageContainer}>
-        {/* Header with AuthButtons that now handles Profile Customizer button */}
-        <div className={styles.homeHeader}>
-          <Header 
-            version={version} 
-            isMobile={isMobile}
-            onOpenProfileCustomizer={handleOpenProfileCustomizer}
-          />
-        </div>
-        <div className="webamp-container">
-        {/* Webamp Component - Always visible */}
-        {!isMobile && <Webamp />}
-        </div>
+    <div className={styles.homePageContainer}>
+      <div className={styles.homeHeader}>
+        <Header 
+          version={version} 
+          isMobile={isMobile}
+          onOpenProfileCustomizer={handleOpenProfileCustomizer}
+        />
+      </div>
 
+      {/* Webamp Container - Absolute positioned */}
+      <div className={styles.webampContainer}>
+        {!isMobile && <Webamp key="webamp-instance" />}
+      </div>
 
-        {/* Main content area - centered like old design */}
-        <div className={styles.homeMainContent}>
-          <div className={styles.homeCardWrapper}>
-            <div className={styles.sideLinksContainer}>
-
-              {/* Main Card using old design components but modular structure */}
-              <div ref={cardWrapperRef} className={styles.cardZIndex}>
-                <MainCard
-                  currentInterest={currentInterest}
-                  setCurrentInterest={setCurrentInterest}
-                  selectedInterests={selectedInterests}
-                  setSelectedInterests={setSelectedInterests}
-                  usersOnline={usersOnline}
-                  inputRef={inputRef}
-                  onStartChat={handleStartChat}
-                  onToggleSettings={handleToggleSettings}
-                  isNavigating={isNavigating}
-                  isMobile={isMobile}
-                  toast={toast}
-                />
-              </div>
-              <div className="mt-4">
-                <SideLinks isMobile={isMobile} />
-              </div>
+      <div className={styles.homeMainContent}>
+        <div className={styles.homeCardWrapper}>
+          <div className={styles.sideLinksContainer}>
+            <div ref={cardWrapperRef} className={styles.cardZIndex}>
+              <MainCard
+                currentInterest={currentInterest}
+                setCurrentInterest={setCurrentInterest}
+                selectedInterests={selectedInterests}
+                setSelectedInterests={setSelectedInterests}
+                usersOnline={usersOnline}
+                inputRef={inputRef}
+                onStartChat={handleStartChat}
+                onToggleSettings={handleToggleSettings}
+                isNavigating={isNavigating}
+                isMobile={isMobile}
+                toast={toast}
+              />
+            </div>
+            <div className="mt-4">
+              <SideLinks isMobile={isMobile} />
             </div>
           </div>
         </div>
-
-        {/* Settings Panel - using current theme */}
-        <SettingsPanel
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          position={panelPosition}
-          setPanelPosition={setPanelPosition}
-          cardWrapperRef={cardWrapperRef}
-          currentTheme={currentTheme}
-          isNavigating={isNavigating}
-          isMobile={isMobile}
-        />
-
-        {/* Footer */}
-        <Footer isMobile={isMobile} />
-
-        {/* Profile Customizer Modal - Only opens when user is authenticated */}
-        <ProfileCustomizer
-          isOpen={isProfileCustomizerOpen}
-          onClose={handleCloseProfileCustomizer}
-        />
       </div>
-    </>
+
+      <SettingsPanel
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        position={panelPosition}
+        setPanelPosition={setPanelPosition}
+        cardWrapperRef={cardWrapperRef}
+        currentTheme={currentTheme}
+        isNavigating={isNavigating}
+        isMobile={isMobile}
+      />
+
+      <Footer isMobile={isMobile} />
+
+      <ProfileCustomizer
+        isOpen={isProfileCustomizerOpen}
+        onClose={handleCloseProfileCustomizer}
+      />
+    </div>
   );
 }
