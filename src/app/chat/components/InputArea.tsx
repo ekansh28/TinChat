@@ -1,4 +1,4 @@
-// src/app/chat/components/InputArea.tsx - WITH SMALL CDN EMOJI PICKER
+// src/app/chat/components/InputArea.tsx - WITH NEW EMOJI ICON FOR WIN7
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button-themed';
@@ -426,24 +426,71 @@ const InputArea: React.FC<InputAreaProps> = ({
               })}
             />
             
-            {/* Emoji Picker - Only on desktop theme-98 */}
+            {/* Emoji Picker - Only on desktop theme-98 OR for all themes including Win7 */}
             {theme === 'theme-98' && !isMobile && (
               <div className="relative flex-shrink-0">
-                <img 
-                  id="emoji-icon-trigger" 
-                  src={currentEmojiIconUrl} 
-                  alt="Emoji" 
-                  className="w-4 h-4 cursor-pointer hover:scale-110 transition-transform" 
-                  onMouseEnter={handleEmojiIconHover} 
-                  onMouseLeave={stopEmojiCycle} 
-                  onClick={toggleEmojiPicker} 
-                  data-ai-hint="emoji icon" 
-                  tabIndex={0} 
-                  onKeyDown={(e) => e.key === 'Enter' && toggleEmojiPicker()} 
-                  role="button" 
-                  aria-haspopup="true" 
-                  aria-expanded={isEmojiPickerOpen} 
-                />
+                {/* ✅ UPDATED: Use static emoji icon for Win98, new emoji.png for Win7+ */}
+                {isWindows7Theme ? (
+                  // ✅ WIN7: Wrapped emoji in container that fits exactly to emoji size
+                  <div
+                    id="emoji-icon-trigger"
+                    onClick={toggleEmojiPicker}
+                    onKeyDown={(e) => e.key === 'Enter' && toggleEmojiPicker()}
+                    tabIndex={0}
+                    role="button"
+                    aria-haspopup="true"
+                    aria-expanded={isEmojiPickerOpen}
+                    aria-label="Open emoji picker"
+                    className="cursor-pointer hover:scale-110 transition-transform inline-flex items-center justify-center"
+                    style={{
+                      // ✅ CRITICAL: Container fits exactly to emoji size
+                      background: 'none',
+                      border: 'none',
+                      padding: '2px', // Small padding so pulse animation shows around emoji
+                      margin: '0',
+                      boxShadow: 'none',
+                      outline: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '2px', // Slight rounding for better pulse effect
+                      minWidth: 'fit-content',
+                      minHeight: 'fit-content'
+                    }}
+                  >
+                    <img 
+                      src="/icons/emoji.png"
+                      alt="Emoji" 
+                      data-ai-hint="emoji icon"
+                      style={{
+                        // ✅ FIXED: Maintain original aspect ratio
+                        width: 'auto',
+                        height: '16px', // Fixed height, auto width to maintain ratio
+                        maxWidth: '20px', // Reasonable max width
+                        objectFit: 'contain', // Ensure image isn't stretched
+                        display: 'block',
+                        pointerEvents: 'none' // Let parent handle clicks
+                      }}
+                    />
+                  </div>
+                ) : (
+                  // ✅ WIN98: Keep existing animated emoji icon
+                  <img 
+                    id="emoji-icon-trigger" 
+                    src={currentEmojiIconUrl} 
+                    alt="Emoji" 
+                    className="w-4 h-4 cursor-pointer hover:scale-110 transition-transform" 
+                    onMouseEnter={handleEmojiIconHover} 
+                    onMouseLeave={stopEmojiCycle} 
+                    onClick={toggleEmojiPicker} 
+                    data-ai-hint="emoji icon" 
+                    tabIndex={0} 
+                    onKeyDown={(e) => e.key === 'Enter' && toggleEmojiPicker()} 
+                    role="button" 
+                    aria-haspopup="true" 
+                    aria-expanded={isEmojiPickerOpen} 
+                  />
+                )}
                 
                 {/* Small CDN Emoji Picker */}
                 {isEmojiPickerOpen && (

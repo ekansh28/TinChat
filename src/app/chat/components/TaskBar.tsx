@@ -1,4 +1,4 @@
-// src/app/chat/components/TaskBar.tsx
+// src/app/chat/components/TaskBar.tsx - WITH SHOW DESKTOP BUTTON REMOVED
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -539,20 +539,7 @@ export const TaskBar: React.FC = () => {
             )}
           </div>
 
-          {/* Show Desktop Button */}
-          <button 
-            id="show-desktop"
-            aria-label="Desktop"
-            style={{
-              width: '12px',
-              height: '32px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '2px',
-              cursor: 'pointer',
-              marginLeft: '4px'
-            }}
-          />
+          {/* ✅ REMOVED: Show Desktop Button - No longer rendered */}
 
           {/* Time */}
           <div 

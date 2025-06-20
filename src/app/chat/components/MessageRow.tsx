@@ -1,4 +1,4 @@
-// src/app/chat/components/MessageRow.tsx - WITH CDN EMOJI SUPPORT
+// src/app/chat/components/MessageRow.tsx - WITH FIXED USERNAME STYLING FOR WIN7
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
@@ -54,6 +54,54 @@ const MessageRow: React.FC<MessageRowProps> = ({
   // Load emote filenames from CDN
   const [emojiFilenames, setEmojiFilenames] = useState<string[]>([]);
   const [emotesLoading, setEmotesLoading] = useState(true);
+
+  // ✅ NEW: Check if Windows 7 theme is active
+  const [isWindows7Theme, setIsWindows7Theme] = useState(false);
+  
+  const checkWindows7Theme = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
+    const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
+    const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
+    
+    const win7SubThemeLink = document.querySelector('link[href*="/win7themes/"]') as HTMLLinkElement;
+    const hasWin7SubTheme = win7SubThemeLink !== null;
+    
+    return hasWin7CSS || hasWin7SubTheme;
+  }, []);
+  
+  useEffect(() => {
+    const updateThemeState = () => {
+      const newWin7State = checkWindows7Theme();
+      setIsWindows7Theme(newWin7State);
+    };
+    
+    updateThemeState();
+    
+    const headObserver = new MutationObserver((mutations) => {
+      const linkMutation = mutations.some(mutation => 
+        Array.from(mutation.addedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        ) ||
+        Array.from(mutation.removedNodes).some(node => 
+          node.nodeName === 'LINK' || (node as Element)?.id === 'win7-css-link'
+        )
+      );
+      
+      if (linkMutation) {
+        updateThemeState();
+      }
+    });
+    
+    headObserver.observe(document.head, {
+      childList: true,
+      subtree: true
+    });
+    
+    return () => {
+      headObserver.disconnect();
+    };
+  }, [checkWindows7Theme]);
 
   // Load emojis from CDN
   useEffect(() => {
@@ -203,32 +251,60 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return baseStyle;
   };
 
-  // Username component
+  // ✅ FIXED: Username component with NO button styling for Win7
   const UsernameComponent = ({ children }: { children: React.ReactNode }) => {
-    return (
-      <span
-        className={cn(
-          "font-bold mr-1 cursor-pointer hover:underline transition-all duration-200",
-          displayNameClass
-        )}
-        style={getDisplayNameStyle()}
-        onClick={isClickable && authId ? (e) => {
-          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const clickPosition = {
-            x: rect.left + rect.width / 2,
-            y: rect.bottom + 5
-          };
-          onUsernameClick(authId, clickPosition);
-          showProfile(authId, e);
-        } : undefined}
-        tabIndex={0}
-        role="button"
-        aria-label={`View ${displayName}'s profile`}
-        data-user-id={authId}
-      >
-        {children}
-      </span>
-    );
+    if (isWindows7Theme) {
+      // ✅ WIN7: Plain clickable text with hover underline (NO button styling)
+      return (
+        <span
+          className={cn(
+            "font-bold mr-1 transition-all duration-200",
+            displayNameClass,
+            // ✅ FIXED: Remove all button classes and add hover underline
+            isClickable && authId ? "cursor-pointer hover:underline" : ""
+          )}
+          style={{
+            ...getDisplayNameStyle(),
+            // ✅ CRITICAL: Remove all button styling for Win7
+            background: 'none',
+            border: 'none',
+            padding: '0',
+            margin: '0 4px 0 0',
+            display: 'inline',
+            textDecoration: 'none', // Default no underline
+            boxShadow: 'none',
+            outline: 'none'
+          }}
+          onClick={isClickable && authId ? handleUsernameClick : undefined}
+          onKeyDown={isClickable && authId ? handleKeyDown : undefined}
+          tabIndex={isClickable && authId ? 0 : undefined}
+          role={isClickable && authId ? "button" : undefined}
+          aria-label={isClickable && authId ? `View ${displayName}'s profile` : undefined}
+          data-user-id={authId}
+        >
+          {children}
+        </span>
+      );
+    } else {
+      // ✅ WIN98/XP: Keep existing button-like styling
+      return (
+        <span
+          className={cn(
+            "font-bold mr-1 cursor-pointer hover:underline transition-all duration-200",
+            displayNameClass
+          )}
+          style={getDisplayNameStyle()}
+          onClick={isClickable && authId ? handleUsernameClick : undefined}
+          onKeyDown={isClickable && authId ? handleKeyDown : undefined}
+          tabIndex={isClickable && authId ? 0 : undefined}
+          role={isClickable && authId ? "button" : undefined}
+          aria-label={isClickable && authId ? `View ${displayName}'s profile` : undefined}
+          data-user-id={authId}
+        >
+          {children}
+        </span>
+      );
+    }
   };
 
   // ✅ UNIFIED LAYOUT: Always use desktop-style layout (no mobile bubbles)

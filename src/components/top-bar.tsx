@@ -1,4 +1,4 @@
-// src/components/top-bar.tsx
+// src/components/top-bar.tsx - Updated with dynamic theme icons
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -67,6 +67,17 @@ export function TopBar() {
 
   // Get current mode
   const currentMode = isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98');
+
+  // ✅ NEW: Get appropriate theme icon based on current mode
+  const getThemeIcon = useCallback(() => {
+    if (isWinXPMode) {
+      return '/icons/themeXP.png';
+    } else if (isWin7Mode) {
+      return '/icons/theme7.ico';
+    } else {
+      return '/icons/theme98.png';
+    }
+  }, [isWinXPMode, isWin7Mode]);
 
   // Load custom stamps from localStorage with loading state
   const loadAllCustomStamps = useCallback(async () => {
@@ -648,7 +659,7 @@ export function TopBar() {
         {pathname !== '/' && (
           <img
             ref={themeIconRef}
-            src="/icons/theme.png"
+            src={getThemeIcon()} // ✅ UPDATED: Use dynamic theme icon
             alt="Customize Theme"
             className={cn(
               "w-5 h-5 cursor-pointer transition-opacity",
@@ -659,6 +670,7 @@ export function TopBar() {
           />
         )}
 
+        {/* Rest of the component remains the same... */}
         {isCustomizerOpen && pathname !== '/' && (
           <div
             ref={customizerWindowRef}
@@ -697,6 +709,9 @@ export function TopBar() {
               })
             }}
           >
+            {/* Rest of the customizer window content remains the same... */}
+            {/* Title Bar, Window Body, etc. - keeping all existing functionality */}
+            
             {/* Compact Title Bar */}
             <div 
               className="title-bar"
