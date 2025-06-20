@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITHOUT CLOSE BUTTON
+// src/components/ProfilePopup/ProfilePopup.tsx - REMOVED CLOSE BUTTON
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -308,7 +308,7 @@ export function ProfilePopup({
             </div>
           </div>
 
-          {/* ✅ REMOVED: Close button as requested */}
+          {/* ✅ REMOVED: Close button completely removed as requested */}
         </div>
       </div>
 

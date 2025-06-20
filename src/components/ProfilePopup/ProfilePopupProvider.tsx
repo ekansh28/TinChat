@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopupProvider.tsx - FIXED STATE UPDATES
+// src/components/ProfilePopup/ProfilePopupProvider.tsx - FIXED SELF USERNAME CLICKS
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
@@ -37,13 +37,15 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const hideTimeoutRef = useRef<NodeJS.Timeout>();
   const popupRef = useRef<HTMLDivElement>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const isMountedRef = useRef(false);
+  const lastClickTimeRef = useRef<number>(0);
+  const preventHideRef = useRef<boolean>(false);
 
-  // ✅ FIXED: Ensure mounted state is tracked
+  // ✅ FIXED: Proper mount tracking
   useEffect(() => {
-    setIsMounted(true);
+    isMountedRef.current = true;
     return () => {
-      setIsMounted(false);
+      isMountedRef.current = false;
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
@@ -56,10 +58,14 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
     customCSS: string = '',
     clickEvent: React.MouseEvent
   ) => {
-    if (!isMounted) {
+    if (!isMountedRef.current) {
       console.warn('[ProfilePopupProvider] Component not mounted, skipping showProfile');
       return;
     }
+
+    // ✅ NEW: Record click time and prevent auto-hide
+    lastClickTimeRef.current = Date.now();
+    preventHideRef.current = true;
 
     // Clear any existing hide timeout
     if (hideTimeoutRef.current) {
@@ -74,81 +80,149 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
       position: { x: clickEvent.clientX, y: clickEvent.clientY }
     });
 
-    setPopupState({
-      isVisible: true,
-      profile,
-      badges,
-      customCSS,
-      position: {
-        x: clickEvent.clientX,
-        y: clickEvent.clientY
-      }
-    });
-  }, [isMounted]);
+    if (isMountedRef.current) {
+      setPopupState({
+        isVisible: true,
+        profile,
+        badges,
+        customCSS,
+        position: {
+          x: clickEvent.clientX,
+          y: clickEvent.clientY
+        }
+      });
+    }
+
+    // ✅ NEW: Allow hiding after a delay
+    setTimeout(() => {
+      preventHideRef.current = false;
+    }, 500); // 500ms protection window
+
+  }, []);
 
   const hideProfile = useCallback(() => {
-    if (!isMounted) return;
+    if (!isMountedRef.current) return;
+    
+    // ✅ NEW: Don't hide if in protection window
+    if (preventHideRef.current) {
+      console.log('[ProfilePopupProvider] In protection window, not hiding popup');
+      return;
+    }
     
     console.log('[ProfilePopupProvider] Hiding profile popup');
-    setPopupState(prev => ({ ...prev, isVisible: false }));
     
-    // Clear any existing hide timeout
+    if (isMountedRef.current) {
+      setPopupState(prev => ({ ...prev, isVisible: false }));
+    }
+    
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = undefined;
     }
-  }, [isMounted]);
+  }, []);
 
-  // ✅ FIXED: Handle clicks outside the popup but prevent closing on username clicks
+  // ✅ FIXED: Enhanced click outside detection with better username detection
   useEffect(() => {
-    if (!isMounted || !popupState.isVisible) return;
+    if (!isMountedRef.current || !popupState.isVisible) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
+      if (!isMountedRef.current) return;
+
+      const target = event.target as Element;
       
       // Check if click is inside popup
       if (popupRef.current && popupRef.current.contains(target)) {
         return;
       }
 
-      // ✅ FIXED: More specific check for username clicks
-      const clickedElement = event.target as Element;
-      
-      // Don't close if clicking on usernames or clickable message elements
-      const isUsernameClick = 
-        clickedElement.closest('[role="button"]') || 
-        clickedElement.closest('.cursor-pointer') ||
-        clickedElement.matches('span[style*="color"]') || // Username spans with color
-        clickedElement.closest('.font-bold') || // Username elements are usually bold
-        clickedElement.closest('.message-row'); // Don't close when clicking in message area
-
-      if (isUsernameClick) {
-        // Don't hide immediately, let the new profile show
-        console.log('[ProfilePopupProvider] Username click detected, not hiding popup');
+      // ✅ NEW: Check if this click is too recent (within protection window)
+      const timeSinceLastClick = Date.now() - lastClickTimeRef.current;
+      if (timeSinceLastClick < 500) {
+        console.log('[ProfilePopupProvider] Recent click detected, not hiding popup');
         return;
       }
 
-      // Hide popup for other clicks
+      // ✅ ENHANCED: Better detection for username/profile related clicks
+      const isUsernameOrProfileClick = 
+        // Direct username elements
+        target.closest('.username-click') ||
+        target.closest('[data-username]') ||
+        target.closest('[role="button"]') ||
+        target.closest('.cursor-pointer') ||
+        
+        // Message-related elements
+        target.closest('.message-row') ||
+        target.closest('.font-bold') ||
+        
+        // Style-based detection for usernames
+        target.closest('span[style*="color"]') ||
+        target.closest('[onclick]') ||
+        target.closest('[title*="profile"]') ||
+        
+        // Check if the element itself looks like a username
+        (target.tagName === 'SPAN' && (
+          target.getAttribute('style')?.includes('color') ||
+          target.classList.contains('font-bold') ||
+          target.classList.contains('cursor-pointer')
+        )) ||
+        
+        // ✅ NEW: Check parent elements for username characteristics
+        (target.parentElement && (
+          target.parentElement.classList.contains('font-bold') ||
+          target.parentElement.classList.contains('cursor-pointer') ||
+          target.parentElement.getAttribute('style')?.includes('color')
+        ));
+
+      if (isUsernameOrProfileClick) {
+        console.log('[ProfilePopupProvider] Username/profile click detected, not hiding popup');
+        return;
+      }
+
+      // ✅ NEW: Check for username-like text content more precisely
+      const textContent = target.textContent?.trim() || '';
+      const parentTextContent = target.parentElement?.textContent?.trim() || '';
+      
+      // Check if this looks like a username message format
+      const looksLikeUsername = 
+        (textContent.length > 0 && textContent.length < 50 && textContent.includes(':')) ||
+        (parentTextContent.length > 0 && parentTextContent.length < 50 && parentTextContent.includes(':'));
+
+      if (looksLikeUsername) {
+        console.log('[ProfilePopupProvider] Username-like text detected, not hiding popup');
+        return;
+      }
+
+      // ✅ NEW: Additional check for elements that might be part of a message
+      const isPartOfMessage = 
+        target.closest('div')?.textContent?.includes(':') ||
+        target.closest('[class*="message"]') ||
+        target.closest('[class*="chat"]');
+
+      if (isPartOfMessage) {
+        console.log('[ProfilePopupProvider] Part of message detected, not hiding popup');
+        return;
+      }
+
       console.log('[ProfilePopupProvider] Outside click detected, hiding popup');
       hideProfile();
     };
 
-    // Add small delay to prevent immediate closing
+    // ✅ NEW: Longer delay to ensure username clicks are properly processed
     const timeoutId = setTimeout(() => {
-      if (isMounted) {
-        document.addEventListener('mousedown', handleClickOutside);
+      if (isMountedRef.current) {
+        document.addEventListener('mousedown', handleClickOutside, { passive: true });
       }
-    }, 100);
+    }, 300); // Increased delay
 
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMounted, popupState.isVisible, hideProfile]);
+  }, [popupState.isVisible, hideProfile]);
 
   // Handle keyboard events
   useEffect(() => {
-    if (!isMounted || !popupState.isVisible) return;
+    if (!isMountedRef.current || !popupState.isVisible) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -158,17 +232,15 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isMounted, popupState.isVisible, hideProfile]);
+  }, [popupState.isVisible, hideProfile]);
 
-  // ✅ REMOVED: Custom close event handler since there's no close button
-
-  // ✅ FIXED: Auto-hide after inactivity with proper mounting check
+  // ✅ FIXED: Auto-hide with proper mounting checks and protection window
   useEffect(() => {
-    if (!isMounted || !popupState.isVisible) return;
+    if (!isMountedRef.current || !popupState.isVisible) return;
 
-    // Auto-hide after 10 seconds of no interaction
+    // Auto-hide after 10 seconds of no interaction (but respect protection window)
     hideTimeoutRef.current = setTimeout(() => {
-      if (isMounted) {
+      if (isMountedRef.current && !preventHideRef.current) {
         console.log('[ProfilePopupProvider] Auto-hiding popup after inactivity');
         hideProfile();
       }
@@ -180,34 +252,34 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
         hideTimeoutRef.current = undefined;
       }
     };
-  }, [isMounted, popupState.isVisible, hideProfile]);
+  }, [popupState.isVisible, hideProfile]);
 
-  // ✅ FIXED: Handle mouse enter/leave with mounting checks
+  // ✅ FIXED: Mouse enter/leave with mounting checks
   const handlePopupMouseEnter = useCallback(() => {
-    if (!isMounted) return;
+    if (!isMountedRef.current) return;
     
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = undefined;
     }
-  }, [isMounted]);
+  }, []);
 
   const handlePopupMouseLeave = useCallback(() => {
-    if (!isMounted) return;
+    if (!isMountedRef.current) return;
     
-    // Restart auto-hide timer when mouse leaves popup
-    if (popupState.isVisible) {
+    // Restart auto-hide timer when mouse leaves popup (but respect protection window)
+    if (popupState.isVisible && !preventHideRef.current) {
       hideTimeoutRef.current = setTimeout(() => {
-        if (isMounted) {
+        if (isMountedRef.current && !preventHideRef.current) {
           hideProfile();
         }
       }, 3000); // Shorter timeout when mouse leaves
     }
-  }, [isMounted, popupState.isVisible, hideProfile]);
+  }, [popupState.isVisible, hideProfile]);
 
   // Enhanced ProfilePopup with mouse events and mounting check
   const EnhancedProfilePopup = () => {
-    if (!isMounted) return null;
+    if (!isMountedRef.current) return null;
     
     return (
       <div
@@ -227,7 +299,7 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
       isVisible: popupState.isVisible 
     }}>
       {children}
-      {isMounted && popupState.isVisible && <EnhancedProfilePopup />}
+      {popupState.isVisible && <EnhancedProfilePopup />}
     </ProfilePopupContext.Provider>
   );
 };

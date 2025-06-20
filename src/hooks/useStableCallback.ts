@@ -1,24 +1,33 @@
-// src/hooks/useStableCallback.ts - NEW HOOK
-
-import { useCallback, useRef } from 'react';
+// src/hooks/useStableCallback.ts - FIXED TO PREVENT UNMOUNTED COMPONENT UPDATES
+import { useCallback, useRef, useEffect } from 'react';
 
 /**
- * Creates a stable callback that doesn't change identity on re-renders
- * but always calls the latest version of the function
+ * Creates a stable callback that won't cause re-renders and prevents updates on unmounted components
  */
 export function useStableCallback<T extends (...args: any[]) => any>(callback: T): T {
   const callbackRef = useRef<T>(callback);
-  
-  // Update the ref to point to the latest callback
+  const isMountedRef = useRef(true);
+
+  // Update the callback ref when the callback changes
   callbackRef.current = callback;
-  
-  // Create a stable callback that calls the latest version
-  const stableCallback = useCallback(
-    ((...args: Parameters<T>) => {
+
+  // Track component mount state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Return a stable callback that checks mount state
+  const stableCallback = useCallback((...args: any[]) => {
+    if (isMountedRef.current) {
       return callbackRef.current(...args);
-    }) as T,
-    []
-  );
-  
+    } else {
+      console.warn('[useStableCallback] Attempted to call callback on unmounted component');
+      return undefined;
+    }
+  }, []) as T;
+
   return stableCallback;
 }
