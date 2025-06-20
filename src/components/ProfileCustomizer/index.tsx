@@ -1,11 +1,7 @@
-// ===============================================================================
-// src/components/ProfileCustomizer/index.tsx - UPDATED WITH REQUESTED CHANGES
-// ===============================================================================
-
+// src/components/ProfileCustomizer/index.tsx - ENHANCED WITH CHANGE DETECTION
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +10,39 @@ import { CustomizerPanel } from './components/CustomizerPanel';
 import type { UserProfile, Badge } from './types';
 import ProfileCardPreview from './components/ProfileCardPreview';
 import { fastProfileFetcher, profileCache } from '@/lib/fastProfileFetcher';
+
+// Helper function to deep compare objects for change detection
+const isEqual = (obj1: any, obj2: any): boolean => {
+  if (obj1 === obj2) return true;
+  
+  if (obj1 == null || obj2 == null) return obj1 === obj2;
+  
+  if (typeof obj1 !== typeof obj2) return false;
+  
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+  
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+  
+  if (Array.isArray(obj1)) {
+    if (obj1.length !== obj2.length) return false;
+    for (let i = 0; i < obj1.length; i++) {
+      if (!isEqual(obj1[i], obj2[i])) return false;
+    }
+    return true;
+  }
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) return false;
+  
+  for (const key of keys1) {
+    if (!keys2.includes(key)) return false;
+    if (!isEqual(obj1[key], obj2[key])) return false;
+  }
+  
+  return true;
+};
 
 // Default avatar helper function
 function getDefaultAvatar() {
@@ -70,43 +99,6 @@ const LoadingState98: React.FC<{
   </div>
 );
 
-// 98.css styled error state
-const ErrorState98: React.FC<{
-  error: string;
-  onRetry: () => void;
-  onClose: () => void;
-  canRetry: boolean;
-}> = ({ error, onRetry, onClose, canRetry }) => (
-  <div className="window-body">
-    <div className="flex flex-col items-center justify-center p-8 space-y-4">
-      <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center">
-        <span className="text-2xl">⚠️</span>
-      </div>
-      <div className="text-center space-y-2">
-        <h3 className="text-lg font-bold text-red-700">
-          Failed to Load Profile
-        </h3>
-        <p className="text-gray-700 max-w-md">
-          {error}
-        </p>
-      </div>
-      <div className="flex gap-3">
-        {canRetry && (
-          <button 
-            className="btn"
-            onClick={onRetry}
-          >
-            🔄 Try Again
-          </button>
-        )}
-        <button className="btn" onClick={onClose}>
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
 // Enhanced auth hook
 const useAuth = () => {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
@@ -149,7 +141,7 @@ const useAuth = () => {
   return { user, loading, error };
 };
 
-// Enhanced profile hook with fast fetching and fixed cancellation
+// Enhanced profile hook with change detection
 const useProfileCustomizer = () => {
   const DEFAULT_PROFILE: UserProfile = {
     username: '',
@@ -175,6 +167,11 @@ const useProfileCustomizer = () => {
   const [isFromCache, setIsFromCache] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   
+  // ✅ NEW: Track original state for change detection
+  const [originalProfile, setOriginalProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [originalBadges, setOriginalBadges] = useState<Badge[]>([]);
+  const [originalCustomCSS, setOriginalCustomCSS] = useState<string>('');
+  
   // Track mount state to prevent memory leaks
   const mountedRef = useRef(true);
   
@@ -182,12 +179,27 @@ const useProfileCustomizer = () => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // Cancel any pending requests when unmounting
       if (profile.id) {
         fastProfileFetcher.cancelRequest(profile.id);
       }
     };
   }, [profile.id]);
+
+  // ✅ NEW: Check if any changes have been made
+  const hasChanges = useMemo(() => {
+    const profileChanged = !isEqual(profile, originalProfile);
+    const badgesChanged = !isEqual(badges, originalBadges);
+    const cssChanged = customCSS.trim() !== originalCustomCSS.trim();
+    
+    console.log('Change detection:', {
+      profileChanged,
+      badgesChanged,
+      cssChanged,
+      overall: profileChanged || badgesChanged || cssChanged
+    });
+    
+    return profileChanged || badgesChanged || cssChanged;
+  }, [profile, originalProfile, badges, originalBadges, customCSS, originalCustomCSS]);
 
   // Fast profile loading with cache and proper cancellation handling
   const loadProfile = useCallback(async (userId: string, forceRefresh: boolean = false) => {
@@ -204,7 +216,6 @@ const useProfileCustomizer = () => {
     try {
       console.log(`ProfileCustomizer: Fast loading profile for ${userId}${forceRefresh ? ' (force refresh)' : ''}`);
       
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         if (!mountedRef.current) {
           clearInterval(progressInterval);
@@ -220,7 +231,6 @@ const useProfileCustomizer = () => {
 
       clearInterval(progressInterval);
       
-      // Check if request was cancelled or component unmounted
       if (!mountedRef.current) {
         console.log('ProfileCustomizer: Component unmounted during fetch');
         return;
@@ -229,17 +239,15 @@ const useProfileCustomizer = () => {
       setLoadingProgress(100);
 
       const fetchTime = Date.now() - startTime;
-      setIsFromCache(fetchTime < 200); // Likely from cache if very fast
+      setIsFromCache(fetchTime < 200);
 
       if (profileData) {
         console.log(`ProfileCustomizer: Profile loaded in ${fetchTime}ms:`, profileData);
         
-        // Parse badges safely
         let parsedBadges: Badge[] = [];
         if (profileData.badges) {
           try {
             parsedBadges = Array.isArray(profileData.badges) ? profileData.badges : [];
-            // Filter out invalid badges
             parsedBadges = parsedBadges.filter(badge => 
               badge && typeof badge === 'object' && badge.id && badge.url
             );
@@ -249,18 +257,36 @@ const useProfileCustomizer = () => {
           }
         }
 
-        setProfile({
+        const loadedProfile = {
           ...profileData,
-          badges: undefined // Remove badges from profile object
-        });
+          badges: undefined
+        };
+        const loadedCSS = profileData.profile_card_css || '';
+
+        // ✅ NEW: Set both current and original state
+        setProfile(loadedProfile);
         setBadges(parsedBadges);
-        setCustomCSS(profileData.profile_card_css || '');
+        setCustomCSS(loadedCSS);
+        
+        // Set original state for change detection
+        setOriginalProfile(loadedProfile);
+        setOriginalBadges(parsedBadges);
+        setOriginalCustomCSS(loadedCSS);
+        
         setError(null);
       } else {
         console.log('ProfileCustomizer: No profile data returned, using defaults');
-        setProfile({ ...DEFAULT_PROFILE, id: userId });
+        const defaultProfileWithId = { ...DEFAULT_PROFILE, id: userId };
+        
+        setProfile(defaultProfileWithId);
         setBadges([]);
         setCustomCSS('');
+        
+        // Set original state
+        setOriginalProfile(defaultProfileWithId);
+        setOriginalBadges([]);
+        setOriginalCustomCSS('');
+        
         setError(null);
       }
     } catch (error: any) {
@@ -269,11 +295,15 @@ const useProfileCustomizer = () => {
         setError(error.message || 'Failed to load profile');
       }
       
-      // Set defaults even on error so the form is usable
       if (mountedRef.current) {
-        setProfile({ ...DEFAULT_PROFILE, id: userId });
+        const defaultProfileWithId = { ...DEFAULT_PROFILE, id: userId };
+        setProfile(defaultProfileWithId);
         setBadges([]);
         setCustomCSS('');
+        
+        setOriginalProfile(defaultProfileWithId);
+        setOriginalBadges([]);
+        setOriginalCustomCSS('');
       }
     } finally {
       if (mountedRef.current) {
@@ -285,7 +315,6 @@ const useProfileCustomizer = () => {
 
   // Retry with cache invalidation
   const retryLoadProfile = useCallback((userId: string) => {
-    // Invalidate cache for this user
     profileCache.invalidate(userId);
     loadProfile(userId, true);
   }, [loadProfile]);
@@ -331,7 +360,6 @@ const useProfileCustomizer = () => {
         throw new Error('Maximum 10 badges allowed');
       }
 
-      // Prepare the profile data
       const profileData = {
         id: userId,
         username: profile.username.trim(),
@@ -365,6 +393,11 @@ const useProfileCustomizer = () => {
 
       console.log('ProfileCustomizer: Profile saved successfully');
       
+      // ✅ NEW: Update original state after successful save
+      setOriginalProfile(profile);
+      setOriginalBadges([...badges]);
+      setOriginalCustomCSS(customCSS);
+      
       // Update cache with new data
       profileCache.set(userId, { ...profileData, badges });
       
@@ -386,9 +419,19 @@ const useProfileCustomizer = () => {
     setProfile(DEFAULT_PROFILE);
     setBadges([]);
     setCustomCSS('');
+    setOriginalProfile(DEFAULT_PROFILE);
+    setOriginalBadges([]);
+    setOriginalCustomCSS('');
     setError(null);
     setLoadingProgress(0);
   }, []);
+
+  // ✅ NEW: Discard changes function
+  const discardChanges = useCallback(() => {
+    setProfile(originalProfile);
+    setBadges([...originalBadges]);
+    setCustomCSS(originalCustomCSS);
+  }, [originalProfile, originalBadges, originalCustomCSS]);
 
   return {
     profile,
@@ -402,10 +445,12 @@ const useProfileCustomizer = () => {
     error,
     isFromCache,
     loadingProgress,
+    hasChanges, // ✅ NEW: Export change detection
     saveProfile,
     loadProfile,
     retryLoadProfile,
-    resetToDefaults
+    resetToDefaults,
+    discardChanges // ✅ NEW: Export discard function
   };
 };
 
@@ -430,10 +475,12 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     error,
     isFromCache,
     loadingProgress,
+    hasChanges, // ✅ NEW: Use change detection
     saveProfile,
     loadProfile,
     retryLoadProfile,
-    resetToDefaults
+    resetToDefaults,
+    discardChanges // ✅ NEW: Use discard function
   } = useProfileCustomizer();
 
   // Handle avatar upload
@@ -528,7 +575,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         return;
       }
 
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      if (file.size > 10 * 1024 * 1024) {
         resolve({ valid: false, error: 'File size must be under 10MB' });
         return;
       }
@@ -578,6 +625,17 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     }
   }, [isOpen, user?.id, authLoading, loadProfile]);
 
+  // ✅ NEW: Warn user about unsaved changes when closing
+  const handleClose = useCallback(() => {
+    if (hasChanges) {
+      if (window.confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }, [hasChanges, onClose]);
+
   // Handle save with better error reporting
   const handleSave = useCallback(async () => {
     if (!user?.id) {
@@ -615,6 +673,18 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     });
   }, [resetToDefaults, toast]);
 
+  // ✅ NEW: Handle discard changes
+  const handleDiscardChanges = useCallback(() => {
+    if (window.confirm('Are you sure you want to discard all your changes?')) {
+      discardChanges();
+      toast({
+        title: "Changes Discarded",
+        description: "All changes have been reverted to the last saved state",
+        variant: "default"
+      });
+    }
+  }, [discardChanges, toast]);
+
   const handleRetry = useCallback(() => {
     if (user?.id) {
       retryLoadProfile(user.id);
@@ -630,9 +700,10 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         <div className="title-bar">
           <div className="title-bar-text">
             Customize Your Profile ⚡ {isFromCache && <span className="text-xs">- Fast Cache</span>}
+            {hasChanges && <span className="text-xs text-red-600"> - Unsaved Changes</span>}
           </div>
           <div className="title-bar-controls">
-            <button aria-label="Close" onClick={onClose}></button>
+            <button aria-label="Close" onClick={handleClose}></button>
           </div>
         </div>
 
@@ -648,12 +719,21 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
           {/* Show auth error state */}
           {authError && !authLoading && (
-            <ErrorState98
-              error={authError}
-              onRetry={() => window.location.reload()}
-              onClose={onClose}
-              canRetry={true}
-            />
+            <div className="window-body">
+              <div className="flex items-center justify-center p-8">
+                <div className="text-center">
+                  <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-red-700 mb-2">Authentication Error</h3>
+                  <p className="text-gray-700 mb-4">{authError}</p>
+                  <div className="flex gap-2 justify-center">
+                    <button className="btn" onClick={() => window.location.reload()}>Retry</button>
+                    <button className="btn" onClick={handleClose}>Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Show auth required state */}
@@ -666,7 +746,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                   </div>
                   <h3 className="text-lg font-bold mb-2">Authentication Required</h3>
                   <p className="text-gray-700 mb-4">Please sign in to customize your profile</p>
-                  <button className="btn" onClick={onClose}>Close</button>
+                  <button className="btn" onClick={handleClose}>Close</button>
                 </div>
               </div>
             </div>
@@ -683,21 +763,30 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
           {/* Show error state */}
           {user && !authLoading && !loading && error && (
-            <ErrorState98
-              error={error}
-              onRetry={handleRetry}
-              onClose={onClose}
-              canRetry={true}
-            />
+            <div className="window-body">
+              <div className="flex items-center justify-center p-8">
+                <div className="text-center">
+                  <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-red-700 mb-2">Failed to Load Profile</h3>
+                  <p className="text-gray-700 mb-4">{error}</p>
+                  <div className="flex gap-2 justify-center">
+                    <button className="btn" onClick={handleRetry}>🔄 Try Again</button>
+                    <button className="btn" onClick={handleClose}>Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Main Content */}
           {user && !authLoading && !loading && !error && (
             <div className="flex h-full">
-              {/* Left Panel - Customization Controls (40% narrower) */}
+              {/* Left Panel - Customization Controls */}
               <div className="flex-1 p-4 overflow-y-auto border-r border-gray-400" style={{ 
                 borderStyle: 'inset',
-                width: '60%', // Reduced width by 40%
+                width: '60%',
                 maxWidth: '60%'
               }}>
                 {/* Performance indicator */}
@@ -707,6 +796,18 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                       <span className="text-green-700">⚡</span>
                       <span className="text-green-800 text-sm font-bold">
                         Profile loaded instantly from cache
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* ✅ NEW: Changes indicator */}
+                {hasChanges && (
+                  <div className="mb-4 p-3 field-row sunken border border-gray-400 bg-yellow-50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-700">⚠️</span>
+                      <span className="text-yellow-800 text-sm font-bold">
+                        You have unsaved changes
                       </span>
                     </div>
                   </div>
@@ -734,7 +835,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                 />
               </div>
 
-              {/* Right Panel - Live Preview (40% wider) */}
+              {/* Right Panel - Live Preview */}
               <div className="w-80 p-4 overflow-y-auto bg-gray-100" style={{ width: '40%' }}>
                 <div className="window">
                   <div className="title-bar">
@@ -772,19 +873,41 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                             />
                             <div>
                               <div 
-                                className="text-sm font-bold"
+                                className="text-sm font-bold cursor-pointer hover:underline"
                                 style={{ 
                                   color: profile.display_name_color || '#000000',
                                   animation: profile.display_name_animation === 'rainbow' ? 
                                     `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
                                 }}
+                                onClick={(e) => {
+                                  // ✅ NEW: Show profile popup on username click (simulated)
+                                  e.preventDefault();
+                                  alert(`In the actual chat, clicking "${profile.display_name || profile.username || 'Unknown User'}" would show your profile popup with all your customizations, badges, and CSS styling - just like Discord!`);
+                                }}
+                                title="Click to preview profile popup"
                               >
                                 {profile.display_name || profile.username || 'Unknown User'}
                               </div>
                               <div className="text-sm text-gray-700">
-                                Hello! This is how your name appears in chat.
+                                Hello! This is how your name appears in chat. Click it to see the profile popup!
                               </div>
                             </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ✅ NEW: Profile popup preview note */}
+                      <div className="field-row">
+                        <div className="sunken border border-gray-400 p-2 bg-blue-50">
+                          <div className="text-xs text-blue-800">
+                            <div className="font-bold mb-1">💡 Profile Popup Feature:</div>
+                            <div>When others click your username in chat, they'll see a popup with:</div>
+                            <ul className="mt-1 ml-3 list-disc">
+                              <li>Your profile card with custom styling</li>
+                              <li>All your badges</li>
+                              <li>Bio and status</li>
+                              <li>Custom CSS effects</li>
+                            </ul>
                           </div>
                         </div>
                       </div>
@@ -795,7 +918,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             </div>
           )}
 
-          {/* Footer Controls (only show when main content is visible) */}
+          {/* ✅ ENHANCED: Footer Controls with change detection */}
           {user && !authLoading && !loading && !error && (
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gray-200 border-t border-gray-400" style={{ borderStyle: 'inset' }}>
               <div className="flex justify-between items-center">
@@ -807,6 +930,19 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                   >
                     Reset to Defaults
                   </button>
+                  
+                  {/* ✅ NEW: Discard changes button (only show when there are changes) */}
+                  {hasChanges && (
+                    <button
+                      className="btn"
+                      onClick={handleDiscardChanges}
+                      disabled={saving || loading}
+                      style={{ color: '#d97706' }}
+                    >
+                      Discard Changes
+                    </button>
+                  )}
+                  
                   {error && (
                     <button
                       className="btn"
@@ -825,21 +961,34 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                       Saving...
                     </div>
                   )}
+                  
+                  {/* ✅ NEW: Changes indicator in footer */}
+                  {hasChanges && !saving && (
+                    <div className="flex items-center gap-1 text-sm text-yellow-700 bg-yellow-100 px-2 py-1 border border-yellow-400">
+                      <span>⚠️</span>
+                      <span>Unsaved changes</span>
+                    </div>
+                  )}
+                  
                   <button
                     className="btn"
-                    onClick={onClose}
+                    onClick={handleClose}
                     disabled={saving}
                   >
-                    Cancel
+                    {hasChanges ? 'Cancel' : 'Close'}
                   </button>
-                  <button
-                    className="btn"
-                    onClick={handleSave}
-                    disabled={saving || loading || !profile.username?.trim()}
-                    style={{ fontWeight: 'bold' }}
-                  >
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  
+                  {/* ✅ ENHANCED: Save button only visible when there are changes */}
+                  {hasChanges && (
+                    <button
+                      className="btn"
+                      onClick={handleSave}
+                      disabled={saving || loading || !profile.username?.trim()}
+                      style={{ fontWeight: 'bold', backgroundColor: hasChanges ? '#4ade80' : undefined }}
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -847,7 +996,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         </div>
       </div>
 
-      {/* CSS for rainbow animation */}
+      {/* CSS for rainbow animation and new styles */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -876,6 +1025,17 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         
         .window-body {
           position: relative;
+        }
+
+        /* Highlight unsaved changes */
+        .unsaved-changes {
+          box-shadow: 0 0 0 2px #fbbf24;
+          animation: pulse-warning 2s infinite;
+        }
+
+        @keyframes pulse-warning {
+          0%, 100% { box-shadow: 0 0 0 2px #fbbf24; }
+          50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.5); }
         }
       `}</style>
     </div>
