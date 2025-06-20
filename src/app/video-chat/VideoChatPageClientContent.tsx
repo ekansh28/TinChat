@@ -372,7 +372,6 @@ const VideoChatPageContent: React.FC = () => {
           )}
         </div>
 
-        <ProfilePopup />
       </ProfilePopupProvider>
     </>
   );
