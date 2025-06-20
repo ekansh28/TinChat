@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChat.ts - COMPLETE FIXED VERSION WITH MANUAL STOP TRACKING
+// src/app/chat/hooks/useChat.ts - WITH MESSAGE RECEIVE SOUNDS
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
@@ -11,7 +11,8 @@ import { useSystemMessages } from './useSystemMessages';
 import { useChatSocket } from './useChatSocket';
 import { useChatActions } from './useChatActions';
 import { useAutoSearch } from './useAutoSearch';
-import { playSound } from '@/lib/utils';
+import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
+import { playMatchSound } from '../utils/ChatHelpers'; // ✅ NEW: Import enhanced audio functions
 
 interface UseChatReturn {
   // State
@@ -59,7 +60,7 @@ export const useChat = (): UseChatReturn => {
   const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [wasSkippedByPartner, setWasSkippedByPartner] = useState(false);
   const [didSkipPartner, setDidSkipPartner] = useState(false);
-  const [userManuallyStopped, setUserManuallyStopped] = useState(false); // ✅ NEW: Track manual stops
+  const [userManuallyStopped, setUserManuallyStopped] = useState(false);
   const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
   const [isScrollEnabled] = useState(true);
   
@@ -85,6 +86,7 @@ export const useChat = (): UseChatReturn => {
 
   // Socket event handlers
   const socketHandlers = useMemo(() => ({
+    // ✅ UPDATED: onMessage with receive sound
     onMessage: (data: any) => {
       console.log('[Chat] Handling message:', data);
       
@@ -111,15 +113,24 @@ export const useChat = (): UseChatReturn => {
       });
       
       chatState.setIsPartnerTyping(false);
+
+      // ✅ NEW: Play receive sound
+      try {
+        const audioManager = getAudioManager();
+        audioManager.playMessageReceived();
+      } catch (error) {
+        console.warn('[Chat] Failed to play receive sound:', error);
+      }
     },
 
     onPartnerFound: (data: any) => {
       console.log('[Chat] Partner found:', data);
       
+      // ✅ FIXED: Play Match.wav using enhanced audio function
       try {
-        playSound('Match.wav');
+        playMatchSound(); // This will use the global audio volume settings
       } catch (error) {
-        console.warn('[Chat] Failed to play sound:', error);
+        console.warn('[Chat] Failed to play match sound:', error);
       }
       
       chatState.setPartnerInfo({
@@ -146,7 +157,7 @@ export const useChat = (): UseChatReturn => {
       setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
-      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
+      setUserManuallyStopped(false);
       
       chatState.setMessages([]);
     },
@@ -162,7 +173,7 @@ export const useChat = (): UseChatReturn => {
       setIsSelfDisconnectedRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
-      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
+      setUserManuallyStopped(false);
     },
 
     // Handle being skipped - NO AUTO-SEARCH
@@ -179,7 +190,7 @@ export const useChat = (): UseChatReturn => {
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
       setDidSkipPartner(false);
-      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
+      setUserManuallyStopped(false);
       
       // Stop any current search
       chatState.setIsFindingPartner(false);
@@ -194,7 +205,7 @@ export const useChat = (): UseChatReturn => {
       setWasSkippedByPartner(false);
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
-      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skip is confirmed
+      setUserManuallyStopped(false);
       
       // The auto-search should already be handled by the server
       chatState.setIsFindingPartner(true);
@@ -272,12 +283,12 @@ export const useChat = (): UseChatReturn => {
     setIsSelfDisconnectedRecently,
     setIsPartnerLeftRecently,
     setDidSkipPartner,
-    setUserManuallyStopped, // ✅ NEW: Pass manual stop setter
+    setUserManuallyStopped,
     addMessage: chatState.addMessage,
     addSystemMessage: chatState.addSystemMessage,
     emitLeaveChat: socket.emitLeaveChat,
     emitSkipPartner: socket.emitSkipPartner,
-    emitStopSearching: socket.emitStopSearching, // ✅ NEW: Pass stop searching emit
+    emitStopSearching: socket.emitStopSearching,
     emitFindPartner: socket.emitFindPartner,
     emitMessage: socket.emitMessage,
     emitTypingStart: socket.emitTypingStart,
@@ -299,7 +310,7 @@ export const useChat = (): UseChatReturn => {
     setIsPartnerLeftRecently,
     wasSkippedByPartner,
     didSkipPartner,
-    userManuallyStopped // ✅ NEW: Pass manual stop state
+    userManuallyStopped
   });
   
   // Navigation cleanup
@@ -311,7 +322,7 @@ export const useChat = (): UseChatReturn => {
       setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
-      setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
+      setUserManuallyStopped(false);
       setPartnerInterests([]);
       initRef.current.autoSearchStarted = false;
     }

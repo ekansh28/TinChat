@@ -958,3 +958,33 @@ html.theme-transitioning * {
     max-height: 16px;
   }
 }
+
+
+
+
+/* Add this simpler CSS to your globals.css to fix the scrollbar issue */
+
+/* ===== MOBILE SCROLLBAR REMOVAL ONLY ===== */
+@media (max-width: 768px) {
+  /* Hide all scrollbars on mobile while keeping scroll functionality */
+  * {
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE and Edge */
+  }
+  
+  *::-webkit-scrollbar {
+    display: none !important; /* Chrome, Safari, Opera */
+    width: 0 !important;
+    height: 0 !important;
+  }
+  
+  /* Ensure body doesn't scroll on mobile chat page */
+  body {
+    overflow: hidden !important;
+  }
+  
+  /* Enable touch scrolling for content areas */
+  .window-body-content > div:first-child {
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

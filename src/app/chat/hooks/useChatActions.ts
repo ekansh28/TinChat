@@ -1,7 +1,8 @@
-// src/app/chat/hooks/useChatActions.ts - COMPLETE FIXED VERSION WITH MANUAL STOP TRACKING
+// src/app/chat/hooks/useChatActions.ts - WITH MESSAGE SOUNDS
 
 import { useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
 
 interface ChatActionsProps {
   isConnected: boolean;
@@ -15,12 +16,12 @@ interface ChatActionsProps {
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
   setDidSkipPartner: (value: boolean) => void;
-  setUserManuallyStopped: (value: boolean) => void; // ✅ NEW: Track manual stops
+  setUserManuallyStopped: (value: boolean) => void;
   addMessage: (message: any) => void;
   addSystemMessage: (text: string) => void;
   emitLeaveChat: () => void;
   emitSkipPartner: (data: any) => void;
-  emitStopSearching: (data?: any) => void; // ✅ NEW: Stop searching emit
+  emitStopSearching: (data?: any) => void;
   emitFindPartner: (data: any) => void;
   emitMessage: (data: any) => void;
   emitTypingStart: () => void;
@@ -68,7 +69,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     
     // Set skip state immediately and reset manual stop
     currentProps.setDidSkipPartner(true);
-    currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skipping
+    currentProps.setUserManuallyStopped(false);
     
     // Emit skip event
     currentProps.emitSkipPartner({
@@ -120,7 +121,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     currentProps.setIsSelfDisconnectedRecently(true);
     currentProps.setIsPartnerLeftRecently(false);
     currentProps.setDidSkipPartner(false);
-    currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop
+    currentProps.setUserManuallyStopped(false);
     currentProps.setIsFindingPartner(false); // Do NOT auto-search
 
     setTimeout(() => {
@@ -150,7 +151,7 @@ export const useChatActions = (props: ChatActionsProps) => {
       
       // Set skip state immediately and reset manual stop
       currentProps.setDidSkipPartner(true);
-      currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when skipping
+      currentProps.setUserManuallyStopped(false);
       
       currentProps.emitSkipPartner({
         chatType: 'text',
@@ -181,7 +182,7 @@ export const useChatActions = (props: ChatActionsProps) => {
       });
       
       currentProps.setIsFindingPartner(false);
-      currentProps.setUserManuallyStopped(true); // ✅ NEW: Mark as manually stopped
+      currentProps.setUserManuallyStopped(true);
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
       currentProps.setDidSkipPartner(false);
@@ -190,7 +191,7 @@ export const useChatActions = (props: ChatActionsProps) => {
       // Start searching - reset manual stop flag
       console.log('[ChatActions] User manually started searching');
       currentProps.setIsFindingPartner(true);
-      currentProps.setUserManuallyStopped(false); // ✅ NEW: Reset manual stop when starting search
+      currentProps.setUserManuallyStopped(false);
       currentProps.setIsSelfDisconnectedRecently(false);
       currentProps.setIsPartnerLeftRecently(false);
       currentProps.setDidSkipPartner(false);
@@ -208,7 +209,7 @@ export const useChatActions = (props: ChatActionsProps) => {
     }, 200);
   }, [toast]);
 
-  // Message handler
+  // ✅ UPDATED: Message handler with send sound
   const handleSendMessage = useCallback((message: string) => {
     const currentProps = propsRef.current;
     
@@ -227,6 +228,14 @@ export const useChatActions = (props: ChatActionsProps) => {
     });
 
     currentProps.emitTypingStop();
+
+    // ✅ NEW: Play send sound
+    try {
+      const audioManager = getAudioManager();
+      audioManager.playMessageSent();
+    } catch (error) {
+      console.warn('[ChatActions] Failed to play send sound:', error);
+    }
   }, []);
 
   // Input change handler with typing management

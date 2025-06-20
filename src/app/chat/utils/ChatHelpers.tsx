@@ -1,4 +1,4 @@
-// src/app/chat/utils/ChatHelpers.tsx - Updated with CDN support
+// src/app/chat/utils/ChatHelpers.tsx - Updated with Enhanced Audio Support
 import React from 'react';
 import { toast } from '@/hooks/use-toast';
 
@@ -41,6 +41,185 @@ const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
 // Cache for loaded emote data
 let emoteCache: string[] | null = null;
 let emoteLoadPromise: Promise<string[]> | null = null;
+
+// ✅ NEW: Enhanced Audio Management with User Interaction Detection
+interface AudioConfig {
+  volume: number; // 0-1 range
+  enabled: boolean;
+}
+
+// ✅ NEW: User interaction tracking
+let userHasInteracted = false;
+let pendingSounds: (() => void)[] = [];
+
+// ✅ NEW: Detect user interaction
+const detectUserInteraction = () => {
+  if (!userHasInteracted) {
+    userHasInteracted = true;
+    console.log('[ChatHelpers] User interaction detected, enabling audio');
+    
+    // Play any pending sounds
+    pendingSounds.forEach(playFn => {
+      try {
+        playFn();
+      } catch (error) {
+        console.warn('[ChatHelpers] Failed to play pending sound:', error);
+      }
+    });
+    pendingSounds = [];
+    
+    // Remove listeners after first interaction
+    document.removeEventListener('click', detectUserInteraction);
+    document.removeEventListener('keydown', detectUserInteraction);
+    document.removeEventListener('touchstart', detectUserInteraction);
+  }
+};
+
+// ✅ NEW: Setup interaction listeners
+const setupInteractionListeners = () => {
+  if (typeof window !== 'undefined' && !userHasInteracted) {
+    document.addEventListener('click', detectUserInteraction, { once: true });
+    document.addEventListener('keydown', detectUserInteraction, { once: true });
+    document.addEventListener('touchstart', detectUserInteraction, { once: true });
+    console.log('[ChatHelpers] Waiting for user interaction to enable audio');
+  }
+};
+
+// ✅ NEW: Audio cache for better performance
+const audioCache = new Map<string, HTMLAudioElement>();
+let globalAudioConfig: AudioConfig = {
+  volume: 0.5, // Default 50%
+  enabled: true
+};
+
+// ✅ NEW: Audio preloading for message sounds
+export const preloadMessageSounds = (): void => {
+  const soundFiles = [
+    '/sounds/message/imrcv.wav',
+    '/sounds/message/imsend.mp3',
+    '/sounds/Match.wav'
+  ];
+
+  soundFiles.forEach(src => {
+    try {
+      const audio = new Audio(src);
+      audio.preload = 'auto';
+      audio.volume = 0; // Silent preload
+      audioCache.set(src, audio);
+      console.log('[ChatHelpers] Preloaded audio:', src);
+    } catch (error) {
+      console.warn('[ChatHelpers] Failed to preload audio:', src, error);
+    }
+  });
+};
+
+// ✅ NEW: Get cached audio element
+const getCachedAudio = (src: string): HTMLAudioElement => {
+  if (!audioCache.has(src)) {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    audioCache.set(src, audio);
+  }
+  return audioCache.get(src)!;
+};
+
+// ✅ ENHANCED: Play sound with user interaction check
+export const playSound = (filename: string, volume?: number): void => {
+  if (!globalAudioConfig.enabled) {
+    console.log('[ChatHelpers] Audio disabled, skipping sound:', filename);
+    return;
+  }
+
+  const playSoundFn = () => {
+    try {
+      const src = filename.startsWith('/') ? filename : `/sounds/${filename}`;
+      const audio = getCachedAudio(src);
+      
+      // Use provided volume or global config
+      audio.volume = volume !== undefined ? volume : globalAudioConfig.volume;
+      audio.currentTime = 0; // Reset to start
+      
+      const playPromise = audio.play();
+      if (playPromise) {
+        playPromise.catch(err => {
+          console.warn('[ChatHelpers] Could not play sound:', err);
+        });
+      }
+    } catch (err) {
+      console.warn('[ChatHelpers] Error playing sound:', err);
+    }
+  };
+
+  // ✅ NEW: Check for user interaction
+  if (!userHasInteracted) {
+    console.log('[ChatHelpers] Queueing sound until user interaction:', filename);
+    pendingSounds.push(playSoundFn);
+    setupInteractionListeners();
+    
+    // Show helpful message for first sound
+    if (pendingSounds.length === 1) {
+      setTimeout(() => {
+        if (!userHasInteracted && typeof window !== 'undefined') {
+          showChatToast.audioWaitingForInteraction();
+        }
+      }, 1000);
+    }
+    return;
+  }
+
+  playSoundFn();
+};
+
+// ✅ NEW: Message-specific sound functions
+export const playMessageReceivedSound = (volume?: number): void => {
+  playSound('/sounds/message/imrcv.wav', volume);
+};
+
+export const playMessageSentSound = (volume?: number): void => {
+  playSound('/sounds/message/imsend.mp3', volume);
+};
+
+export const playMatchSound = (volume?: number): void => {
+  playSound('/sounds/Match.wav', volume);
+};
+
+// ✅ NEW: Audio configuration functions
+export const setGlobalAudioVolume = (volume: number): void => {
+  globalAudioConfig.volume = Math.max(0, Math.min(1, volume));
+  console.log('[ChatHelpers] Set global audio volume to:', globalAudioConfig.volume);
+};
+
+export const setGlobalAudioEnabled = (enabled: boolean): void => {
+  globalAudioConfig.enabled = enabled;
+  console.log('[ChatHelpers] Audio enabled:', enabled);
+};
+
+export const getGlobalAudioConfig = (): AudioConfig => {
+  return { ...globalAudioConfig };
+};
+
+// ✅ NEW: Convert taskbar volume (0-3) to audio volume (0-1)
+export const taskbarVolumeToAudioVolume = (taskbarLevel: number): number => {
+  if (taskbarLevel === 0) return 0; // Muted
+  return taskbarLevel / 3; // Convert 1-3 to 0.33-1.0
+};
+
+// ✅ NEW: Manual interaction trigger (for testing or manual enabling)
+export const enableAudioAfterInteraction = (): void => {
+  if (!userHasInteracted) {
+    detectUserInteraction();
+  }
+};
+
+// ✅ NEW: Check if user has interacted
+export const hasUserInteracted = (): boolean => {
+  return userHasInteracted;
+};
+
+// ✅ NEW: Get pending sounds count (for debugging)
+export const getPendingSoundsCount = (): number => {
+  return pendingSounds.length;
+};
 
 // Load emote list from CDN
 const loadEmoteList = async (): Promise<string[]> => {
@@ -214,7 +393,7 @@ export const getConnectionStatusText = (
   return 'Ready';
 };
 
-// Toast helpers for common chat notifications
+// ✅ ENHANCED: Toast helpers with audio integration
 export const showChatToast = {
   connectionError: (error: string) => {
     toast({
@@ -229,6 +408,8 @@ export const showChatToast = {
       title: "Partner Found!",
       description: "You can now start chatting",
     });
+    // ✅ FIXED: Use enhanced audio function
+    playMatchSound();
   },
   
   partnerLeft: () => {
@@ -251,10 +432,40 @@ export const showChatToast = {
       title: "Please Wait",
       description: "You're searching too fast. Please wait a moment.",
     });
+  },
+
+  // ✅ NEW: Audio-related toasts with interaction messages
+  volumeChanged: (level: number) => {
+    toast({
+      title: "Volume Changed",
+      description: level === 0 ? "Message sounds muted" : `Message volume: ${Math.round((level / 3) * 100)}%`,
+    });
+  },
+
+  audioError: (error: string) => {
+    toast({
+      title: "Audio Error",
+      description: error,
+      variant: "destructive"
+    });
+  },
+
+  audioWaitingForInteraction: () => {
+    toast({
+      title: "Audio Ready",
+      description: "Click anywhere to enable message sounds",
+    });
+  },
+
+  audioPendingSounds: (count: number) => {
+    toast({
+      title: "Sounds Queued",
+      description: `${count} sound${count !== 1 ? 's' : ''} will play after you interact with the page`,
+    });
   }
 };
 
-// Local storage helpers for chat preferences
+// Local storage helpers for chat preferences (including audio)
 export const ChatPreferences = {
   save: (preferences: any): void => {
     try {
@@ -280,6 +491,29 @@ export const ChatPreferences = {
     } catch (err) {
       console.warn('Could not clear preferences:', err);
     }
+  },
+
+  // ✅ NEW: Audio-specific preference helpers
+  getAudioVolume: (): number => {
+    const prefs = ChatPreferences.load();
+    return prefs.audioVolume !== undefined ? prefs.audioVolume : 2; // Default to level 2
+  },
+
+  setAudioVolume: (volume: number): void => {
+    const prefs = ChatPreferences.load();
+    prefs.audioVolume = volume;
+    ChatPreferences.save(prefs);
+  },
+
+  getAudioEnabled: (): boolean => {
+    const prefs = ChatPreferences.load();
+    return prefs.audioEnabled !== undefined ? prefs.audioEnabled : true; // Default enabled
+  },
+
+  setAudioEnabled: (enabled: boolean): void => {
+    const prefs = ChatPreferences.load();
+    prefs.audioEnabled = enabled;
+    ChatPreferences.save(prefs);
   }
 };
 
@@ -340,19 +574,6 @@ export const addSystemMessageIfNotPresentIn = (msgs: Message[], text: string, id
     }];
   }
   return msgs;
-};
-
-// Sound utility with error handling
-export const playSound = (filename: string, volume: number = 0.5): void => {
-  try {
-    const audio = new Audio(`/sounds/${filename}`);
-    audio.volume = volume;
-    audio.play().catch(err => {
-      console.warn('Could not play sound:', err);
-    });
-  } catch (err) {
-    console.warn('Error creating audio:', err);
-  }
 };
 
 // Typing indicator utilities
@@ -461,6 +682,25 @@ export const getEmojiSuggestions = async (text: string): Promise<string[]> => {
     console.warn('Failed to get emoji suggestions:', error);
     return [];
   }
+};
+
+// ✅ NEW: Initialize audio system with interaction detection
+export const initializeAudioSystem = (): void => {
+  // Load preferences
+  const volume = ChatPreferences.getAudioVolume();
+  const enabled = ChatPreferences.getAudioEnabled();
+  
+  // Apply settings
+  setGlobalAudioVolume(taskbarVolumeToAudioVolume(volume));
+  setGlobalAudioEnabled(enabled);
+  
+  // Setup user interaction detection
+  setupInteractionListeners();
+  
+  // Preload sounds
+  preloadMessageSounds();
+  
+  console.log('[ChatHelpers] Audio system initialized - Volume:', volume, 'Enabled:', enabled);
 };
 
 // Export the emote loading function for use in components

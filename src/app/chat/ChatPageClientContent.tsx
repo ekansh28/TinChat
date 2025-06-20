@@ -1,18 +1,19 @@
-// src/app/chat/ChatPageClientContent.tsx - UPDATED WITH TASKBAR
+// src/app/chat/ChatPageClientContent.tsx - WITH AUDIO INITIALIZATION
 
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import HomeButton from '@/components/HomeButton';
 import { TopBar } from '@/components/top-bar';
 import { ProfilePopupProvider, ProfilePopup } from '@/components/ProfilePopup';
 import ChatWindow from './components/ChatWindow';
-import { TaskBar } from './components/TaskBar'; // Import the new TaskBar
+import { TaskBar } from './components/TaskBar';
 import { useChat } from './hooks/useChat';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ConnectionErrorScreen } from './components/ConnectionErrorScreen';
 import { ConnectionStatus } from './components/ConnectionStatus';
+import { initializeAudioSystem } from './utils/ChatHelpers'; // ✅ NEW: Import audio initializer
 
 // ✅ FIXED: Styles moved to separate component/file to avoid re-creating
 const displayNameAnimationCSS = `
@@ -62,6 +63,18 @@ const ChatPageClientContent: React.FC = () => {
   // ✅ FIXED: Single hook call with consistent order, no conditional hooks
   const chat = useChat();
 
+  // ✅ NEW: Initialize audio system on mount
+  useEffect(() => {
+    if (chat.isMounted) {
+      try {
+        initializeAudioSystem();
+        console.log('[ChatPageClientContent] Audio system initialized');
+      } catch (error) {
+        console.warn('[ChatPageClientContent] Failed to initialize audio system:', error);
+      }
+    }
+  }, [chat.isMounted]);
+
   // ✅ CRITICAL FIX: Better loading state detection
   const isActuallyLoading = !chat.isMounted || 
                            chat.auth.isLoading || 
@@ -109,8 +122,8 @@ const ChatPageClientContent: React.FC = () => {
           "chat-page-container flex flex-col items-center justify-center",
           chat.isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
         )} style={{
-          // ✅ IMPORTANT: Add padding bottom to account for taskbar
-          paddingBottom: chat.isMobile ? '40px' : '50px' // Adjust based on taskbar height
+          // ✅ UPDATED: Only add taskbar padding on desktop (mobile has no taskbar)
+          paddingBottom: chat.isMobile ? '0px' : '50px' // No taskbar on mobile
         }}>
           <div className={cn(
             'window flex flex-col relative',
@@ -118,10 +131,10 @@ const ChatPageClientContent: React.FC = () => {
             chat.isMobile ? 'h-full w-full overflow-hidden' : ''
           )} style={{
             ...chat.chatWindowStyle,
-            // ✅ IMPORTANT: Adjust height to account for taskbar
+            // ✅ UPDATED: No height adjustment needed on mobile (no taskbar)
             ...(chat.isMobile && {
-              height: 'calc(100vh - 40px)', // Subtract taskbar height
-              maxHeight: 'calc(100vh - 40px)'
+              height: '100vh', // Full height on mobile
+              maxHeight: '100vh'
             })
           }}>
             
@@ -187,7 +200,7 @@ const ChatPageClientContent: React.FC = () => {
 
         <ProfilePopup />
         
-        {/* ✅ NEW: Add TaskBar at the bottom */}
+        {/* ✅ TaskBar with audio controls */}
         <TaskBar />
       </ProfilePopupProvider>
     </>

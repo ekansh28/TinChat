@@ -7,13 +7,97 @@ import { cn } from '@/lib/utils';
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
 
+// ✅ NEW: Audio context for message sounds
+interface AudioManager {
+  playMessageReceived: () => void;
+  playMessageSent: () => void;
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
+}
+
+// ✅ NEW: Create audio manager
+const createAudioManager = (): AudioManager => {
+  const audioCache = new Map<string, HTMLAudioElement>();
+  let currentVolume = 0.5; // Default 50% volume (taskbar level 2)
+
+  const getAudio = (src: string): HTMLAudioElement => {
+    if (!audioCache.has(src)) {
+      const audio = new Audio(src);
+      audio.preload = 'auto';
+      audioCache.set(src, audio);
+    }
+    return audioCache.get(src)!;
+  };
+
+  const playSound = (src: string) => {
+    try {
+      const audio = getAudio(src);
+      audio.volume = currentVolume;
+      audio.currentTime = 0; // Reset to start
+      audio.play().catch(err => {
+        console.warn('[AudioManager] Failed to play sound:', err);
+      });
+    } catch (err) {
+      console.warn('[AudioManager] Error playing sound:', err);
+    }
+  };
+
+  return {
+    playMessageReceived: () => playSound('/sounds/message/imrcv.wav'),
+    playMessageSent: () => playSound('/sounds/message/imsend.mp3'),
+    setVolume: (volume: number) => {
+      // Convert taskbar level (0-3) to audio volume (0-1)
+      currentVolume = volume === 0 ? 0 : volume / 3;
+    },
+    getVolume: () => {
+      // Convert audio volume (0-1) to taskbar level (0-3)
+      return currentVolume === 0 ? 0 : Math.round(currentVolume * 3);
+    }
+  };
+};
+
+// ✅ NEW: Global audio manager instance
+let globalAudioManager: AudioManager | null = null;
+
+// ✅ NEW: Export function to get audio manager
+export const getAudioManager = (): AudioManager => {
+  if (!globalAudioManager) {
+    globalAudioManager = createAudioManager();
+  }
+  return globalAudioManager;
+};
+
 export const TaskBar: React.FC = () => {
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [isWin7Mode, setIsWin7Mode] = useState(false);
   const [isWinXPMode, setIsWinXPMode] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
-  const [audioVolume, setAudioVolume] = useState(2); // Range: 0-4 for Win7, 0-3 for others
+  const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+
+  // ✅ NEW: Mobile detection
+  const checkIfMobile = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    }
+  }, []);
+
+  // ✅ NEW: Mobile detection effect
+  useEffect(() => {
+    checkIfMobile();
+    window.addEventListener('resize', checkIfMobile);
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, [checkIfMobile]);
+
+  // ✅ NEW: Initialize audio manager and sync volume
+  useEffect(() => {
+    if (mounted) {
+      const audioManager = getAudioManager();
+      audioManager.setVolume(audioVolume);
+    }
+  }, [mounted, audioVolume]);
 
   // Check theme mode
   const checkThemeMode = useCallback(() => {
@@ -59,11 +143,25 @@ export const TaskBar: React.FC = () => {
     }
   }, [isWin7Mode, isWinXPMode, audioVolume]);
 
-  // Handle volume change
+  // ✅ UPDATED: Handle volume change with audio manager sync and user interaction
   const handleVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseInt(event.target.value);
     setAudioVolume(newVolume);
-  }, []);
+    
+    // ✅ NEW: Sync with audio manager
+    if (mounted) {
+      const audioManager = getAudioManager();
+      audioManager.setVolume(newVolume);
+      
+      // ✅ NEW: This interaction enables audio, then play test sound
+      if (newVolume > 0) {
+        // Small delay to ensure interaction is registered
+        setTimeout(() => {
+          audioManager.playMessageReceived();
+        }, 100);
+      }
+    }
+  }, [mounted]);
 
   // Handle audio icon click
   const handleAudioIconClick = useCallback(() => {
@@ -84,11 +182,6 @@ export const TaskBar: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showVolumeSlider]);
-
-  // Get max volume based on theme (all themes now use 1-3 range)
-  const getMaxVolume = useCallback(() => {
-    return 3;
-  }, []);
 
   // Theme detection effect
   useEffect(() => {
@@ -147,6 +240,11 @@ export const TaskBar: React.FC = () => {
   }, []);
 
   if (!mounted) {
+    return null;
+  }
+
+  // ✅ NEW: Hide TaskBar on mobile devices
+  if (isMobile) {
     return null;
   }
 
@@ -255,7 +353,7 @@ export const TaskBar: React.FC = () => {
                 marginRight: '4px'
               }}
               onClick={handleAudioIconClick}
-              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+              title={`Message Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
             />
             
             {/* Volume Slider Popup */}
@@ -272,7 +370,7 @@ export const TaskBar: React.FC = () => {
                 zIndex: 6000
               }}>
                 <div className="field-row">
-                  <label htmlFor="range25">Volume</label>
+                  <label htmlFor="range25">Message Volume</label>
                   <div className="is-vertical">
                     <input 
                       id="range25"
@@ -404,7 +502,7 @@ export const TaskBar: React.FC = () => {
                 filter: 'brightness(0) invert(1)'
               }}
               onClick={handleAudioIconClick}
-              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+              title={`Message Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
             />
             
             {/* Volume Slider Popup */}
@@ -424,7 +522,7 @@ export const TaskBar: React.FC = () => {
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
               }}>
                 <div className="field-row">
-                  <label>Volume</label>
+                  <label>Message Volume</label>
                   <div className="is-vertical">
                     <input 
                       className="has-box-indicator" 
@@ -591,7 +689,7 @@ export const TaskBar: React.FC = () => {
                 marginRight: '4px'
               }}
               onClick={handleAudioIconClick}
-              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+              title={`Message Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
             />
             
             {/* Volume Slider Popup */}
@@ -610,7 +708,7 @@ export const TaskBar: React.FC = () => {
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
               }}>
                 <div className="field-row">
-                  <label htmlFor="range28">Volume</label>
+                  <label htmlFor="range28">Message Volume</label>
                   <div className="is-vertical">
                     <input 
                       id="range28"
