@@ -2,7 +2,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Badge, UserProfile } from '../ProfileCustomizer/types';
+import { UserProfile, Badge } from '../ProfileCustomizer/types';
+import { ProfilePopup } from './ProfilePopup';
 
 interface PopupPosition {
   x: number;
@@ -18,75 +19,54 @@ interface PopupState {
 }
 
 interface ProfilePopupContextType {
-  popupState: PopupState;
-  showProfile: (profile: UserProfile, badges: Badge[], customCSS: string, clickEvent: React.MouseEvent | MouseEvent) => void;
+  showProfile: (profile: UserProfile, badges: Badge[], customCSS: string, clickEvent: React.MouseEvent) => void;
   hideProfile: () => void;
 }
 
 const ProfilePopupContext = createContext<ProfilePopupContextType | undefined>(undefined);
 
-interface ProfilePopupProviderProps {
-  children: ReactNode;
-  defaultCustomCSS?: string;
-}
-
-const calculatePopupPosition = (clickEvent: React.MouseEvent | MouseEvent) => {
-  return {
-    x: (clickEvent as MouseEvent).clientX,
-    y: (clickEvent as MouseEvent).clientY
-  };
-};
-
-export const ProfilePopupProvider: React.FC<ProfilePopupProviderProps> = ({ 
-  children,
-  defaultCustomCSS = ''
-}) => {
+export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [popupState, setPopupState] = useState<PopupState>({
     isVisible: false,
     profile: null,
     badges: [],
-    customCSS: defaultCustomCSS,
+    customCSS: '',
     position: null
   });
 
   const showProfile = useCallback((
     profile: UserProfile,
     badges: Badge[] = [],
-    customCSS: string = defaultCustomCSS,
-    clickEvent: React.MouseEvent | MouseEvent
+    customCSS: string = '',
+    clickEvent: React.MouseEvent
   ) => {
-    const position = calculatePopupPosition(clickEvent);
-    
     setPopupState({
       isVisible: true,
       profile,
       badges,
       customCSS,
-      position
+      position: {
+        x: clickEvent.clientX,
+        y: clickEvent.clientY
+      }
     });
-  }, [defaultCustomCSS]);
+  }, []);
 
   const hideProfile = useCallback(() => {
-    setPopupState(prev => ({
-      ...prev,
-      isVisible: false
-    }));
+    setPopupState(prev => ({ ...prev, isVisible: false }));
   }, []);
 
   return (
-    <ProfilePopupContext.Provider value={{ 
-      popupState, 
-      showProfile, 
-      hideProfile 
-    }}>
+    <ProfilePopupContext.Provider value={{ showProfile, hideProfile }}>
       {children}
+      <ProfilePopup {...popupState} />
     </ProfilePopupContext.Provider>
   );
 };
 
 export const useProfilePopup = (): ProfilePopupContextType => {
   const context = useContext(ProfilePopupContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useProfilePopup must be used within a ProfilePopupProvider');
   }
   return context;

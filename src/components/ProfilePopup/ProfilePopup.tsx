@@ -1,31 +1,42 @@
-// src/components/ProfilePopup.tsx
+// src/components/ProfilePopup/ProfilePopup.tsx
 'use client';
 
-import { BaseProfileCard } from '../ProfileCustomizer/components/ProfileCard';
-import { Badge, UserProfile } from '../ProfileCustomizer/types';
+import { ProfileCard } from '../ProfileCustomizer/components/ProfileCard';
+import { UserProfile, Badge } from '../ProfileCustomizer/types';
 
 interface ProfilePopupProps {
-  profile: UserProfile;
-  badges?: Badge[];
-  onClose: () => void;
+  isVisible: boolean;
+  profile: UserProfile | null;
+  badges: Badge[];
+  customCSS: string;
+  position: { x: number; y: number } | null;
 }
 
-export function ProfilePopup({ profile, badges = [], onClose }: ProfilePopupProps) {
+export function ProfilePopup({
+  isVisible,
+  profile,
+  badges,
+  customCSS,
+  position
+}: ProfilePopupProps) {
+  if (!isVisible || !profile || !position) return null;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-        <div className="flex justify-end">
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            ✕
-          </button>
-        </div>
-        <BaseProfileCard 
-          profile={profile} 
-          badges={badges} 
-          size="lg"
-        />
-        {/* Additional profile info can go here */}
-      </div>
+    <div 
+      className="fixed z-[1050]"
+      style={{
+        top: `${position.y}px`,
+        left: `${position.x}px`,
+        transform: 'translateY(10px)' // Small offset from click position
+      }}
+    >
+      <ProfileCard 
+        profile={profile}
+        badges={badges}
+        customCSS={customCSS}
+        size="md"
+        className="shadow-lg border border-gray-200 dark:border-gray-600"
+      />
     </div>
   );
 }
