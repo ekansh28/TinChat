@@ -1,299 +1,99 @@
-// ===============================================================================
-// src/components/ProfileCard.tsx - WITH FAST PROFILE FETCHING
-// ===============================================================================
-
+// src/components/ProfileCustomizer/components/ProfileCard.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
-import { fastProfileFetcher, type ProfileData } from '@/lib/fastProfileFetcher';
+import { Badge, UserProfile } from '../types';
 
-interface ProfileCardProps {
-  userId: string;
-  isOpen: boolean;
-  onClose: () => void;
-  onScrollToggle?: (enabled: boolean) => void;
-  clickPosition?: { x: number; y: number } | null;
-  variant?: 'default' | 'popup';
+export interface ProfileCardProps {
+  profile: UserProfile;
+  badges: Badge[];
+  customCSS: string;
+  isPreview: boolean;
 }
 
-export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClose }) => {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isFromCache, setIsFromCache] = useState(false);
-  
-  const mountedRef = useRef(true);
-  const fetchTimeRef = useRef<number>(0);
+const STATUS_CONFIG = {
+  online: { icon: '🟢', text: 'Online', color: '#43b581' },
+  idle: { icon: '🟡', text: 'Idle', color: '#faa61a' },
+  dnd: { icon: '🔴', text: 'Do Not Disturb', color: '#f04747' },
+  offline: { icon: '⚫', text: 'Offline', color: '#747f8d' }
+} as const;
 
-  // Fast profile fetch with cache-first strategy
-  const fetchProfile = useCallback(async (forceRefresh: boolean = false) => {
-    if (!userId || !mountedRef.current) return;
-
-    const startTime = Date.now();
-    fetchTimeRef.current = startTime;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log(`ProfileCard: Fast fetching profile for ${userId}${forceRefresh ? ' (force refresh)' : ''}`);
-
-      const profile = await fastProfileFetcher.fetchProfile(userId, {
-        useCache: !forceRefresh,
-        forceRefresh,
-        timeout: 5000,
-        retries: 2
-      });
-
-      // Only update if this is the most recent fetch
-      if (fetchTimeRef.current === startTime && mountedRef.current) {
-        const fetchTime = Date.now() - startTime;
-        console.log(`ProfileCard: Profile fetched in ${fetchTime}ms for ${userId}`);
-        
-        setProfile(profile);
-        setError(null);
-        setIsFromCache(fetchTime < 100); // Likely from cache if very fast
-      }
-
-    } catch (err: any) {
-      // Only update if this is the most recent fetch
-      if (fetchTimeRef.current === startTime && mountedRef.current) {
-        console.error('ProfileCard: Fast fetch error:', err);
-        const errorMessage = err.message || 'Failed to load profile';
-        
-        if (errorMessage.includes('not found')) {
-          setError('Profile not found');
-        } else {
-          setError(errorMessage);
-        }
-        setProfile(null);
-        setIsFromCache(false);
-      }
-    } finally {
-      if (fetchTimeRef.current === startTime && mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [userId]);
-
-  // Refresh profile data
-  const handleRefresh = useCallback(() => {
-    fetchProfile(true);
-  }, [fetchProfile]);
-
-  // Load profile when component opens
-  useEffect(() => {
-    mountedRef.current = true;
-    
-    if (isOpen && userId) {
-      fetchProfile(false);
-    }
-
-    return () => {
-      mountedRef.current = false;
-      // Cancel any pending requests
-      if (userId) {
-        fastProfileFetcher.cancelRequest(userId);
-      }
-    };
-  }, [isOpen, userId, fetchProfile]);
-
-  if (!isOpen) return null;
-
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="text-center p-4">
-          <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-sm">Loading profile...</p>
-          <div className="text-xs text-gray-500 mt-1">
-            {isFromCache ? '⚡ From cache' : '🌐 From server'}
-          </div>
-        </div>
-      );
-    }
-
-    if (error && !loading) {
-      return (
-        <div className="text-center p-4">
-          <div className="text-red-600 mb-3">⚠️</div>
-          <p className="text-sm text-red-600 mb-3">{error}</p>
-          <div className="flex gap-2 justify-center">
-            {error !== 'Profile not found' && (
-              <button 
-                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                onClick={handleRefresh}
-              >
-                🔄 Retry
-              </button>
-            )}
-            <button 
-              className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (profile) {
-      return (
-        <div className="profile-content p-4">
-          {/* Header with cache indicator */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-bold text-lg">Profile</h2>
-              {isFromCache && (
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded" title="Loaded from cache">
-                  ⚡ Fast
-                </span>
-              )}
-            </div>
-            <button 
-              className="text-xs text-blue-600 hover:underline" 
-              onClick={handleRefresh}
-              title="Refresh profile"
-            >
-              🔄
-            </button>
-          </div>
-
-          {/* Profile content */}
-          <div className="flex items-center gap-3 mb-3">
-            <img
-              src={profile.avatar_url || getDefaultAvatar()}
-              alt="Profile"
-              className="w-12 h-12 rounded-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = getDefaultAvatar();
-              }}
-            />
-            <div>
-              <h3 
-                className="font-bold text-lg"
-                style={{ 
-                  color: profile.display_name_color || undefined,
-                  animation: profile.display_name_animation === 'rainbow' ? 
-                    `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
-                }}
-              >
-                {profile.display_name || profile.username || 'Anonymous User'}
-              </h3>
-              {profile.pronouns && (
-                <p className="text-xs text-gray-600">{profile.pronouns}</p>
-              )}
-              {profile.status && (
-                <div className="flex items-center gap-1 text-xs">
-                  <span className={getStatusColor(profile.status)}>●</span>
-                  <span className="capitalize">{profile.status}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {profile.bio && (
-            <div className="mb-3">
-              <p className="text-sm p-2 bg-gray-50 rounded border-l-4 border-blue-500">
-                {profile.bio}
-              </p>
-            </div>
-          )}
-
-          {profile.badges && profile.badges.length > 0 && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold mb-2">Badges ({profile.badges.length}):</p>
-              <div className="flex flex-wrap gap-1">
-                {profile.badges.map((badge, index) => (
-                  <img
-                    key={badge.id || index}
-                    src={badge.url}
-                    alt={badge.name || 'Badge'}
-                    className="w-6 h-6 rounded"
-                    title={badge.name}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="text-xs text-gray-500 border-t pt-2">
-            <div>Member since: {profile.created_at ? new Date(profile.created_at).toLocaleDateString() : 'Unknown'}</div>
-            {profile.updated_at && (
-              <div>Last updated: {new Date(profile.updated_at).toLocaleDateString()}</div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="text-center p-4">
-        <p className="text-sm text-gray-600">No profile data available</p>
-        <button 
-          className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 mt-2"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
-    );
-  };
-
+export function ProfileCard({ profile, badges, customCSS, isPreview }: ProfileCardProps) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-2">
-            <h2 className="font-bold text-lg">
-              User Profile {isFromCache && <span className="text-xs">⚡</span>}
-            </h2>
+    <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center space-x-4">
+          <img
+            src={profile.avatar_url || getDefaultAvatar()}
+            alt="Profile"
+            className="w-16 h-16 rounded-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = getDefaultAvatar();
+            }}
+          />
+          <div>
+            <div 
+              className="text-lg font-semibold"
+              style={{ 
+                color: profile.display_name_color || '#ffffff',
+                animation: profile.display_name_animation === 'rainbow' ? 
+                  `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
+              }}
+            >
+              {profile.display_name || profile.username || 'Unknown User'}
+            </div>
+            {profile.status && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {STATUS_CONFIG[profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
+              </div>
+            )}
           </div>
-          <button 
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-xl"
-            aria-label="Close"
+        </div>
+
+        {badges?.length > 0 && (
+          <div 
+            className="mt-4 overflow-x-auto no-scrollbar"
+            style={{ maxWidth: '100%' }}
+            onWheel={(e) => {
+              const container = e.currentTarget as HTMLElement;
+              if (e.deltaY !== 0) {
+                e.preventDefault();
+                container.scrollLeft += e.deltaY;
+              }
+            }}
           >
-            ×
-          </button>
-        </div>
-        <div className="p-0">
-          {renderContent()}
-        </div>
+            <div className="flex gap-2 w-max">
+              {badges.map(badge => (
+                <img
+                  key={badge.id}
+                  src={badge.url}
+                  alt={badge.name || 'Badge'}
+                  className="w-6 h-6"
+                  title={badge.name}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {customCSS && isPreview && (
+          <style dangerouslySetInnerHTML={{ __html: customCSS }} />
+        )}
       </div>
-      
-      {/* CSS for rainbow animation */}
       <style jsx>{`
-        @keyframes rainbow {
-          0% { color: #ff0000; }
-          16.66% { color: #ff8000; }
-          33.33% { color: #ffff00; }
-          50% { color: #00ff00; }
-          66.66% { color: #0080ff; }
-          83.33% { color: #8000ff; }
-          100% { color: #ff0000; }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
     </div>
   );
-};
-
-// Helper functions
-function getDefaultAvatar() {
-  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'online': return 'text-green-500';
-    case 'idle': return 'text-yellow-500';
-    case 'dnd': return 'text-red-500';
-    case 'offline': return 'text-gray-500';
-    default: return 'text-gray-500';
-  }
+function getDefaultAvatar() {
+  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }

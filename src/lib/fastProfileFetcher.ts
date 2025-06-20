@@ -1,6 +1,4 @@
-// ===============================================================================
-// src/lib/fastProfileFetcher.ts - OPTIMIZED PROFILE FETCHER
-// ===============================================================================
+// src/lib/fastProfileFetcher.ts - OPTIMIZED FAST PROFILE FETCHER
 
 import { supabase } from '@/lib/supabase';
 import { profileCache } from '@/lib/profileCache';
@@ -33,51 +31,30 @@ export interface ProfileData {
 }
 
 const DEFAULT_FIELDS = [
-  'id',
-  'username',
-  'display_name',
-  'avatar_url',
-  'pronouns',
-  'bio',
-  'status',
-  'display_name_color',
-  'display_name_animation',
-  'rainbow_speed',
-  'badges',
-  'profile_complete',
-  'created_at'
+  'id','username','display_name','avatar_url','pronouns','bio','status',
+  'display_name_color','display_name_animation','rainbow_speed',
+  'badges','profile_complete','created_at'
 ];
 
 const MINIMAL_FIELDS = [
-  'id',
-  'username',
-  'display_name',
-  'avatar_url',
-  'profile_complete'
+  'id','username','display_name','avatar_url','profile_complete'
 ];
 
 class FastProfileFetcher {
   private abortControllers = new Map<string, AbortController>();
 
-  // Fast fetch with aggressive caching and optimizations
-  async fetchProfile(
-    userId: string, 
-    options: FastProfileOptions = {}
-  ): Promise<ProfileData | null> {
+  async fetchProfile(userId: string, options: FastProfileOptions = {}): Promise<ProfileData | null> {
     const {
       useCache = true,
-      timeout = 4000,
+      timeout = 12000,
       retries = 2,
       fields = DEFAULT_FIELDS,
       forceRefresh = false
     } = options;
 
-    if (!userId?.trim()) {
-      throw new Error('User ID is required');
-    }
+    if (!userId?.trim()) throw new Error('User ID is required');
 
-    // Cancel any existing request for this user
-    this.cancelRequest(userId);
+    if (!useCache || forceRefresh) this.cancelRequest(userId);
 
     if (useCache) {
       try {
@@ -86,35 +63,29 @@ class FastProfileFetcher {
           () => this.performFetch(userId, { timeout, retries, fields }),
           { forceRefresh }
         );
-      } catch (error) {
+      } catch (error: any) {
+        if (error.message?.includes('cancelled')) {
+          console.warn(`FastProfileFetcher: Fetch cancelled for ${userId}`);
+          return null;
+        }
         console.error('FastProfileFetcher: Cache fetch failed:', error);
-        // Fallback to direct fetch
       }
     }
 
     return this.performFetch(userId, { timeout, retries, fields });
   }
 
-  // Minimal fetch for auth components (just username/display_name)
   async fetchMinimalProfile(userId: string): Promise<ProfileData | null> {
-    const result = await this.fetchProfile(userId, {
+    return this.fetchProfile(userId, {
       fields: MINIMAL_FIELDS,
-      timeout: 3000,
+      timeout: 5000,
       retries: 1
     });
-    
-    // Ensure we return a valid ProfileData or null
-    if (result && result.id) {
-      return result;
-    }
-    
-    return null;
   }
 
-  // Full fetch for profile customizer
   async fetchFullProfile(userId: string, forceRefresh = false): Promise<ProfileData | null> {
     return this.fetchProfile(userId, {
-      fields: ['*'], // All fields
+      fields: ['*'],
       timeout: 8000,
       retries: 3,
       forceRefresh
@@ -122,7 +93,7 @@ class FastProfileFetcher {
   }
 
   private async performFetch(
-    userId: string, 
+    userId: string,
     options: { timeout: number; retries: number; fields: string[] }
   ): Promise<ProfileData | null> {
     const { timeout, retries, fields } = options;
@@ -133,7 +104,6 @@ class FastProfileFetcher {
         const controller = new AbortController();
         this.abortControllers.set(userId, controller);
 
-        // Create timeout promise
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => {
             controller.abort();
@@ -141,91 +111,46 @@ class FastProfileFetcher {
           }, timeout);
         });
 
-        // Create fetch promise with proper typing
-        const baseQuery = supabase
+        const fetchPromise = supabase
           .from('user_profiles')
-          .select(fields.join(', '))
+          .select(fields.join(', '), { head: false })
           .eq('id', userId)
-          .abortSignal(controller.signal);
+          .limit(1)
+          .abortSignal(controller.signal)
+          .single();
 
-        // Handle single() call separately to avoid type issues
-        const fetchPromise = baseQuery.single();
-
-        // Race between fetch and timeout
         const result = await Promise.race([fetchPromise, timeoutPromise]);
-
         this.abortControllers.delete(userId);
 
-        if (controller.signal.aborted) {
-          throw new Error('Request was cancelled');
-        }
+        if (controller.signal.aborted) throw new Error('Request was cancelled');
 
-        // Handle the result properly with explicit typing
-        // TypeScript has trouble with Promise.race return types, so we need to be explicit
-        const response = result as any;
-        const { data, error } = response;
-
+        const { data, error } = result as any;
         if (error) {
-          if (error.code === 'PGRST116') {
-            // No profile found - this is valid
-            return null;
-          }
+          if (error.code === 'PGRST116') return null;
           throw new Error(error.message || 'Database error');
         }
 
         if (data) {
-          // Create a safe copy of the data
-          let profileData: any;
-          
+          let profileData: any = JSON.parse(JSON.stringify(data));
           try {
-            // Most reliable way: JSON deep clone
-            profileData = JSON.parse(JSON.stringify(data));
-          } catch (error) {
-            // Fallback: try Object.assign
-            try {
-              profileData = Object.assign({}, data);
-            } catch (error2) {
-              // Final fallback: direct assignment
-              profileData = data;
-            }
+            profileData.badges = typeof profileData.badges === 'string'
+              ? JSON.parse(profileData.badges)
+              : profileData.badges;
+            if (!Array.isArray(profileData.badges)) profileData.badges = [];
+          } catch {
+            profileData.badges = [];
           }
-          
-          // Parse badges if present
-          if (profileData.badges) {
-            try {
-              profileData.badges = typeof profileData.badges === 'string' 
-                ? JSON.parse(profileData.badges) 
-                : profileData.badges;
-              if (!Array.isArray(profileData.badges)) {
-                profileData.badges = [];
-              }
-            } catch {
-              profileData.badges = [];
-            }
-          }
-
-          // Ensure we have required fields
-          if (!profileData.id) {
-            profileData.id = userId;
-          }
-
-          console.log(`FastProfileFetcher: Successfully fetched profile for ${userId} (attempt ${attempt + 1})`);
+          if (!profileData.id) profileData.id = userId;
+          console.log(`FastProfileFetcher: Successfully fetched ${userId} (attempt ${attempt + 1})`);
           return profileData as ProfileData;
         }
 
         return null;
-
       } catch (error: any) {
         lastError = error;
         console.warn(`FastProfileFetcher: Attempt ${attempt + 1} failed for ${userId}:`, error.message);
-
-        // Don't retry if cancelled or if it's the last attempt
-        if (error.message?.includes('cancelled') || attempt === retries) {
-          break;
-        }
-
-        // Progressive delay: 300ms, 600ms, 1200ms
-        const delay = 300 * Math.pow(2, attempt);
+        if (error.message.includes('cancelled') || attempt === retries) break;
+        const delay = 250 * Math.pow(2, attempt);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -236,31 +161,22 @@ class FastProfileFetcher {
 
   cancelRequest(userId: string): void {
     const controller = this.abortControllers.get(userId);
-    if (controller) {
-      controller.abort();
-      this.abortControllers.delete(userId);
-    }
+    if (controller) controller.abort();
+    this.abortControllers.delete(userId);
   }
 
   cancelAllRequests(): void {
-    for (const controller of this.abortControllers.values()) {
-      controller.abort();
-    }
+    for (const controller of this.abortControllers.values()) controller.abort();
     this.abortControllers.clear();
   }
 
-  // Batch fetch multiple profiles efficiently
   async batchFetch(userIds: string[]): Promise<Map<string, ProfileData | null>> {
     const results = new Map<string, ProfileData | null>();
-    
-    // Fetch in parallel but limit concurrency
     const BATCH_SIZE = 5;
     const batches = [];
-    
     for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
       batches.push(userIds.slice(i, i + BATCH_SIZE));
     }
-
     for (const batch of batches) {
       const promises = batch.map(async (userId) => {
         try {
@@ -271,17 +187,14 @@ class FastProfileFetcher {
           results.set(userId, null);
         }
       });
-
       await Promise.allSettled(promises);
     }
-
     return results;
   }
 
-  // Preload profiles for likely-to-be-accessed users
   async preloadProfiles(userIds: string[]): Promise<void> {
     try {
-      await profileCache.preload(userIds, (userId) => 
+      await profileCache.preload(userIds, (userId) =>
         this.performFetch(userId, { timeout: 3000, retries: 1, fields: MINIMAL_FIELDS })
       );
     } catch (error) {
@@ -290,8 +203,5 @@ class FastProfileFetcher {
   }
 }
 
-// Singleton instance
 export const fastProfileFetcher = new FastProfileFetcher();
-
-// Re-export profileCache for convenience
 export { profileCache } from '@/lib/profileCache';

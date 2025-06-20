@@ -1,10 +1,11 @@
 // ===============================================================================
-// src/components/ProfileCustomizer/index.tsx - WITH 98.CSS STYLING
+// src/components/ProfileCustomizer/index.tsx - UPDATED WITH REQUESTED CHANGES
 // ===============================================================================
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
 import { Button } from '@/components/ui/button-themed';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -148,7 +149,7 @@ const useAuth = () => {
   return { user, loading, error };
 };
 
-// Enhanced profile hook with fast fetching
+// Enhanced profile hook with fast fetching and fixed cancellation
 const useProfileCustomizer = () => {
   const DEFAULT_PROFILE: UserProfile = {
     username: '',
@@ -173,12 +174,25 @@ const useProfileCustomizer = () => {
   const [error, setError] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  
+  // Track mount state to prevent memory leaks
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Cancel any pending requests when unmounting
+      if (profile.id) {
+        fastProfileFetcher.cancelRequest(profile.id);
+      }
+    };
+  }, [profile.id]);
 
-  // Fast profile loading with cache
+  // Fast profile loading with cache and proper cancellation handling
   const loadProfile = useCallback(async (userId: string, forceRefresh: boolean = false) => {
-    if (!userId) {
-      console.warn('No user ID provided to loadProfile');
-      setError('No user ID provided');
+    if (!userId || !mountedRef.current) {
+      console.warn('No user ID provided to loadProfile or component unmounted');
       return;
     }
 
@@ -192,6 +206,10 @@ const useProfileCustomizer = () => {
       
       // Simulate progress for better UX
       const progressInterval = setInterval(() => {
+        if (!mountedRef.current) {
+          clearInterval(progressInterval);
+          return;
+        }
         setLoadingProgress(prev => {
           const next = prev + 15;
           return next >= 90 ? 90 : next;
@@ -201,6 +219,13 @@ const useProfileCustomizer = () => {
       const profileData = await fastProfileFetcher.fetchFullProfile(userId, forceRefresh);
 
       clearInterval(progressInterval);
+      
+      // Check if request was cancelled or component unmounted
+      if (!mountedRef.current) {
+        console.log('ProfileCustomizer: Component unmounted during fetch');
+        return;
+      }
+
       setLoadingProgress(100);
 
       const fetchTime = Date.now() - startTime;
@@ -240,15 +265,21 @@ const useProfileCustomizer = () => {
       }
     } catch (error: any) {
       console.error('ProfileCustomizer: Load error:', error);
-      setError(error.message || 'Failed to load profile');
+      if (error.message !== 'Request was cancelled' && mountedRef.current) {
+        setError(error.message || 'Failed to load profile');
+      }
       
       // Set defaults even on error so the form is usable
-      setProfile({ ...DEFAULT_PROFILE, id: userId });
-      setBadges([]);
-      setCustomCSS('');
+      if (mountedRef.current) {
+        setProfile({ ...DEFAULT_PROFILE, id: userId });
+        setBadges([]);
+        setCustomCSS('');
+      }
     } finally {
-      setLoading(false);
-      setLoadingProgress(0);
+      if (mountedRef.current) {
+        setLoading(false);
+        setLoadingProgress(0);
+      }
     }
   }, []);
 
@@ -261,7 +292,7 @@ const useProfileCustomizer = () => {
 
   // Enhanced save with optimistic updates
   const saveProfile = useCallback(async (userId: string) => {
-    if (!userId) {
+    if (!userId || !mountedRef.current) {
       throw new Error('User ID is required');
     }
 
@@ -340,10 +371,14 @@ const useProfileCustomizer = () => {
       setError(null);
     } catch (error: any) {
       console.error('ProfileCustomizer: Save exception:', error);
-      setError(error.message || 'Failed to save profile');
+      if (mountedRef.current) {
+        setError(error.message || 'Failed to save profile');
+      }
       throw error;
     } finally {
-      setSaving(false);
+      if (mountedRef.current) {
+        setSaving(false);
+      }
     }
   }, [profile, badges, customCSS]);
 
@@ -400,6 +435,140 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     retryLoadProfile,
     resetToDefaults
   } = useProfileCustomizer();
+
+  // Handle avatar upload
+  const handleAvatarUpload = useCallback(async (file: File) => {
+    try {
+      const validation = await validateImageFile(file);
+      
+      if (!validation.valid) {
+        toast({
+          title: "Invalid File",
+          description: validation.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setProfile(prev => ({ ...prev, avatar_url: dataUrl }));
+        toast({
+          title: "Avatar Uploaded",
+          description: "Profile picture updated successfully",
+          variant: "default"
+        });
+      };
+      reader.onerror = () => {
+        toast({
+          title: "Upload Error",
+          description: "Failed to read the image file",
+          variant: "destructive"
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to process the uploaded file",
+        variant: "destructive"
+      });
+    }
+  }, [setProfile, toast]);
+
+  // Handle banner upload
+  const handleBannerUpload = useCallback(async (file: File) => {
+    try {
+      const validation = await validateImageFile(file);
+      
+      if (!validation.valid) {
+        toast({
+          title: "Invalid File",
+          description: validation.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setProfile(prev => ({ ...prev, banner_url: dataUrl }));
+        toast({
+          title: "Banner Uploaded",
+          description: "Banner image updated successfully",
+          variant: "default"
+        });
+      };
+      reader.onerror = () => {
+        toast({
+          title: "Upload Error",
+          description: "Failed to read the image file",
+          variant: "destructive"
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Banner upload error:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to process the uploaded file",
+        variant: "destructive"
+      });
+    }
+  }, [setProfile, toast]);
+
+  // Enhanced image validation
+  const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve({ valid: false, error: 'File must be an image' });
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        resolve({ valid: false, error: 'File size must be under 10MB' });
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      
+      const cleanup = () => URL.revokeObjectURL(url);
+      
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve({ valid: false, error: 'Image validation timeout' });
+      }, 5000);
+      
+      img.onload = () => {
+        clearTimeout(timeout);
+        cleanup();
+        
+        if (img.width < 32 || img.height < 32) {
+          resolve({ valid: false, error: 'Image must be at least 32x32 pixels' });
+          return;
+        }
+        
+        if (img.width > 4096 || img.height > 4096) {
+          resolve({ valid: false, error: 'Image must be smaller than 4096x4096 pixels' });
+          return;
+        }
+        
+        resolve({ valid: true });
+      };
+      
+      img.onerror = () => {
+        clearTimeout(timeout);
+        cleanup();
+        resolve({ valid: false, error: 'Invalid or corrupted image file' });
+      };
+      
+      img.src = url;
+    });
+  };
 
   // Load profile when component opens
   useEffect(() => {
@@ -525,8 +694,12 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           {/* Main Content */}
           {user && !authLoading && !loading && !error && (
             <div className="flex h-full">
-              {/* Left Panel - Customization Controls */}
-              <div className="flex-1 p-4 overflow-y-auto border-r border-gray-400" style={{ borderStyle: 'inset' }}>
+              {/* Left Panel - Customization Controls (40% narrower) */}
+              <div className="flex-1 p-4 overflow-y-auto border-r border-gray-400" style={{ 
+                borderStyle: 'inset',
+                width: '60%', // Reduced width by 40%
+                maxWidth: '60%'
+              }}>
                 {/* Performance indicator */}
                 {isFromCache && (
                   <div className="mb-4 p-3 field-row sunken border border-gray-400 bg-green-50">
@@ -561,8 +734,8 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                 />
               </div>
 
-              {/* Right Panel - Live Preview */}
-              <div className="w-80 p-4 overflow-y-auto bg-gray-100">
+              {/* Right Panel - Live Preview (40% wider) */}
+              <div className="w-80 p-4 overflow-y-auto bg-gray-100" style={{ width: '40%' }}>
                 <div className="window">
                   <div className="title-bar">
                     <div className="title-bar-text">
@@ -571,13 +744,15 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                   </div>
                   <div className="window-body">
                     <div className="space-y-4">
-                      {/* Profile Card Preview */}
+                      {/* Profile Card Preview with upload hover */}
                       <div className="field-row">
                         <ProfileCardPreview
                           profile={profile}
                           badges={badges}
                           customCSS={customCSS}
                           isPreview={true}
+                          onAvatarUpload={handleAvatarUpload}
+                          onBannerUpload={handleBannerUpload}
                         />
                       </div>
                       
