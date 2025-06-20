@@ -1,4 +1,6 @@
 // src/app/chat/components/MessageRow.tsx
+'use client';
+
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
@@ -38,7 +40,7 @@ interface MessageRowProps {
     profile_card_css?: string;
     badges?: Badge[];
   };
-  onUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
+  onUsernameClick?: (authId: string, clickPosition: { x: number; y: number }) => void;
   isMobile: boolean;
 }
 
@@ -110,22 +112,26 @@ const MessageRow: React.FC<MessageRowProps> = ({
     badges: isSelfUser ? undefined : partnerInfo?.badges,
   }), [ownInfo, message, partnerInfo]);
 
-  // Click handler
+  // Click handler - UPDATED TO WORK WITH POPUP
   const handleUsernameClick = useCallback((e: React.MouseEvent) => {
     if (!message.senderAuthId) return;
     
     e.preventDefault();
     e.stopPropagation();
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickPosition = { x: rect.left + rect.width / 2, y: rect.bottom + 5 };
-
     const userProfile = getUserProfile(message.sender === 'self');
     const badges = partnerInfo?.badges || [];
     const customCSS = partnerInfo?.profile_card_css || '';
 
+    // Show profile popup at click position
     showProfile(userProfile, badges, customCSS, e);
-    onUsernameClick(message.senderAuthId, clickPosition);
+    
+    // Optional: Call the original handler if provided
+    if (onUsernameClick) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickPosition = { x: rect.left + rect.width / 2, y: rect.bottom + 5 };
+      onUsernameClick(message.senderAuthId, clickPosition);
+    }
   }, [message, partnerInfo, showProfile, onUsernameClick, getUserProfile]);
 
   // Keyboard handler
