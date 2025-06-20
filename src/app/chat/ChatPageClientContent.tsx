@@ -198,7 +198,7 @@ const ChatPageClientContent: React.FC = () => {
           </div>
         </div>
 
-        <ProfilePopup />
+    
         
         {/* ✅ TaskBar with audio controls */}
         <TaskBar />

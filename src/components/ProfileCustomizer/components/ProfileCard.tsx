@@ -1,16 +1,9 @@
-// src/components/ProfileCustomizer/components/ProfileCard.tsx
+// src/components/ProfileCard/ProfileCard.tsx
 'use client';
 
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Badge, UserProfile } from '../types';
-
-export interface ProfileCardProps {
-  profile: UserProfile;
-  badges: Badge[];
-  customCSS: string;
-  isPreview: boolean;
-}
 
 const STATUS_CONFIG = {
   online: { icon: '🟢', text: 'Online', color: '#43b581' },
@@ -19,22 +12,46 @@ const STATUS_CONFIG = {
   offline: { icon: '⚫', text: 'Offline', color: '#747f8d' }
 } as const;
 
-export function ProfileCard({ profile, badges, customCSS, isPreview }: ProfileCardProps) {
+interface BaseProfileCardProps {
+  profile: UserProfile;
+  badges?: Badge[];
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export function BaseProfileCard({ 
+  profile, 
+  badges = [], 
+  className = '',
+  size = 'md'
+}: BaseProfileCardProps) {
+  const sizeConfig = {
+    sm: { avatar: 'w-10 h-10', name: 'text-md', status: 'text-xs', badgeSize: 'w-5 h-5' },
+    md: { avatar: 'w-16 h-16', name: 'text-lg', status: 'text-sm', badgeSize: 'w-6 h-6' },
+    lg: { avatar: 'w-24 h-24', name: 'text-xl', status: 'text-md', badgeSize: 'w-8 h-8' }
+  }[size];
+  
   return (
-    <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden">
+    <div className={cn(
+      "bg-white dark:bg-gray-700 rounded-lg overflow-hidden shadow",
+      className
+    )}>
       <div className="p-4">
         <div className="flex items-center space-x-4">
           <img
             src={profile.avatar_url || getDefaultAvatar()}
             alt="Profile"
-            className="w-16 h-16 rounded-full object-cover"
+            className={cn(
+              "rounded-full object-cover",
+              sizeConfig.avatar
+            )}
             onError={(e) => {
               (e.target as HTMLImageElement).src = getDefaultAvatar();
             }}
           />
           <div>
             <div 
-              className="text-lg font-semibold"
+              className={cn("font-semibold", sizeConfig.name)}
               style={{ 
                 color: profile.display_name_color || '#ffffff',
                 animation: profile.display_name_animation === 'rainbow' ? 
@@ -44,52 +61,32 @@ export function ProfileCard({ profile, badges, customCSS, isPreview }: ProfileCa
               {profile.display_name || profile.username || 'Unknown User'}
             </div>
             {profile.status && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className={cn(
+                "text-gray-500 dark:text-gray-400",
+                sizeConfig.status
+              )}>
                 {STATUS_CONFIG[profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
               </div>
             )}
           </div>
         </div>
 
-        {badges?.length > 0 && (
-          <div 
-            className="mt-4 overflow-x-auto no-scrollbar"
-            style={{ maxWidth: '100%' }}
-            onWheel={(e) => {
-              const container = e.currentTarget as HTMLElement;
-              if (e.deltaY !== 0) {
-                e.preventDefault();
-                container.scrollLeft += e.deltaY;
-              }
-            }}
-          >
+        {badges.length > 0 && (
+          <div className="mt-4 overflow-x-auto no-scrollbar" style={{ maxWidth: '100%' }}>
             <div className="flex gap-2 w-max">
               {badges.map(badge => (
                 <img
                   key={badge.id}
                   src={badge.url}
                   alt={badge.name || 'Badge'}
-                  className="w-6 h-6"
+                  className={sizeConfig.badgeSize}
                   title={badge.name}
                 />
               ))}
             </div>
           </div>
         )}
-        
-        {customCSS && isPreview && (
-          <style dangerouslySetInnerHTML={{ __html: customCSS }} />
-        )}
       </div>
-      <style jsx>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 }
