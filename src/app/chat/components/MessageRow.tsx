@@ -1,4 +1,4 @@
-// src/app/chat/components/MessageRow.tsx - ENHANCED WITH PROFILE POPUP
+// src/app/chat/components/MessageRow.tsx - UPDATED WITH ALL FIXES
 'use client';
 
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
@@ -67,6 +67,14 @@ const MessageRow: React.FC<MessageRowProps> = ({
   const [emotesLoading, setEmotesLoading] = useState(true);
   const [isWindows7Theme, setIsWindows7Theme] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
+  // ✅ NEW: Add mounting state tracking to prevent React state update errors
+  const [isMounted, setIsMounted] = useState(false);
+
+  // ✅ NEW: Track mounting state
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
   // Theme detection
   const checkWindows7Theme = useCallback(() => {
@@ -78,34 +86,66 @@ const MessageRow: React.FC<MessageRowProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!isMounted) return; // ✅ NEW: Mounting check
     const updateThemeState = () => setIsWindows7Theme(checkWindows7Theme());
     updateThemeState();
 
     const headObserver = new MutationObserver(() => updateThemeState());
     headObserver.observe(document.head, { childList: true, subtree: true });
     return () => headObserver.disconnect();
-  }, [checkWindows7Theme]);
+  }, [isMounted, checkWindows7Theme]); // ✅ NEW: Added isMounted dependency
 
   // Emoji loading
   useEffect(() => {
+    if (!isMounted) return; // ✅ NEW: Mounting check
+    
     const loadEmojis = async () => {
       if (theme === 'theme-98') {
         setEmotesLoading(true);
         try {
           const filenames = await loadEmoteList();
-          setEmojiFilenames(filenames);
+          if (isMounted) { // ✅ NEW: Check before state update
+            setEmojiFilenames(filenames);
+          }
         } catch (error) {
           console.error('Error loading emojis:', error);
-          setEmojiFilenames([]);
+          if (isMounted) { // ✅ NEW: Check before state update
+            setEmojiFilenames([]);
+          }
         } finally {
-          setEmotesLoading(false);
+          if (isMounted) { // ✅ NEW: Check before state update
+            setEmotesLoading(false);
+          }
         }
       }
     };
     loadEmojis();
-  }, [theme]);
+  }, [isMounted, theme]); // ✅ NEW: Added isMounted dependency
 
-  // ✅ NEW: Enhanced profile data construction with fallbacks
+  // ✅ ENHANCED: Better username resolution - handles 'Stranger' properly
+  const getDisplayedUsername = useCallback((isSelfUser: boolean): string => {
+    if (isSelfUser) {
+      return ownInfo.displayName || ownInfo.username;
+    } else {
+      // ✅ ENHANCED: Handle 'Stranger' case better
+      const messageUsername = message.senderUsername;
+      const partnerUsername = partnerInfo?.displayName || partnerInfo?.username;
+      
+      // If message has 'Stranger' but we have partner info with real username, use partner info
+      if (messageUsername === 'Stranger' && partnerUsername && partnerUsername !== 'Stranger') {
+        return partnerUsername;
+      }
+      
+      // Otherwise use message username if it's not 'Stranger', else fallback to partner info
+      if (messageUsername && messageUsername !== 'Stranger') {
+        return messageUsername;
+      }
+      
+      return partnerUsername || 'Unknown User';
+    }
+  }, [ownInfo, message.senderUsername, partnerInfo]);
+
+  // ✅ ENHANCED: Profile data construction with better data handling
   const getUserProfile = useCallback((isSelfUser: boolean): UserProfile => {
     if (isSelfUser) {
       return {
@@ -122,10 +162,13 @@ const MessageRow: React.FC<MessageRowProps> = ({
         badges: ownInfo.badges || []
       };
     } else {
+      // ✅ ENHANCED: Use resolved username instead of potentially 'Stranger' data
+      const resolvedUsername = getDisplayedUsername(false);
+      
       return {
         id: message.senderAuthId || partnerInfo?.authId,
-        username: message.senderUsername || partnerInfo?.username || 'Unknown User',
-        display_name: message.senderUsername || partnerInfo?.displayName || partnerInfo?.username || 'Unknown User',
+        username: resolvedUsername,
+        display_name: resolvedUsername,
         avatar_url: partnerInfo?.avatar,
         display_name_color: message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#000000',
         display_name_animation: message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none',
@@ -136,36 +179,67 @@ const MessageRow: React.FC<MessageRowProps> = ({
         badges: partnerInfo?.badges || []
       };
     }
-  }, [ownInfo, message, partnerInfo]);
+  }, [ownInfo, message, partnerInfo, getDisplayedUsername]);
 
-  // ✅ NEW: Enhanced click handler with profile fetching
+  // ✅ ENHANCED: Click handler with mounting checks and self profile support
   const handleUsernameClick = useCallback(async (e: React.MouseEvent) => {
+    if (!isMounted) {
+      console.warn('[MessageRow] Component not mounted, skipping click');
+      return;
+    }
+
     const isSelfUser = message.sender === 'self';
     const authId = isSelfUser ? ownInfo.authId : message.senderAuthId;
     
-    if (!authId) {
-      console.warn('No auth ID available for profile popup');
+    // ✅ ENHANCED: Allow self profile clicks even without authId in some cases
+    if (!authId && !isSelfUser) {
+      console.warn('[MessageRow] No auth ID available for partner profile popup');
       return;
     }
     
     e.preventDefault();
     e.stopPropagation();
 
+    console.log('[MessageRow] Username clicked:', {
+      isSelfUser,
+      authId,
+      username: getDisplayedUsername(isSelfUser),
+      hasPartnerInfo: !!partnerInfo
+    });
+
     try {
-      setProfileLoading(true);
+      if (isMounted) { // ✅ NEW: Check before state update
+        setProfileLoading(true);
+      }
       
       // Get basic profile data immediately
       let userProfile = getUserProfile(isSelfUser);
       let badges: Badge[] = [];
       let customCSS = '';
 
-      // For non-self users, try to fetch complete profile data
-      if (!isSelfUser && authId) {
+      if (isSelfUser) {
+        // ✅ ENHANCED: For self user, use available data from ownInfo
+        badges = ownInfo.badges || [];
+        customCSS = ownInfo.customCSS || '';
+        
+        console.log(`[MessageRow] Using self profile data:`, {
+          username: userProfile.username,
+          badgeCount: badges.length,
+          hasCSS: !!customCSS,
+          authId: ownInfo.authId
+        });
+        
+        // Show profile popup immediately for self
+        if (isMounted) {
+          showProfile(userProfile, badges, customCSS, e);
+        }
+      } else if (authId) {
+        // For non-self users, try to fetch complete profile data
         try {
           console.log(`[MessageRow] Fetching complete profile for user: ${authId}`);
           const fullProfile = await fastProfileFetcher.fetchFullProfile(authId);
           
-          if (fullProfile) {
+          if (fullProfile && isMounted) { // ✅ NEW: Check before state update
             console.log(`[MessageRow] Got complete profile:`, fullProfile);
             
             // Parse badges if available
@@ -173,6 +247,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
               try {
                 badges = Array.isArray(fullProfile.badges) ? fullProfile.badges : [];
                 badges = badges.filter(badge => badge && badge.id && badge.url);
+                console.log(`[MessageRow] Parsed ${badges.length} badges`);
               } catch (e) {
                 console.warn('Failed to parse badges:', e);
                 badges = [];
@@ -187,33 +262,39 @@ const MessageRow: React.FC<MessageRowProps> = ({
               ...fullProfile,
               badges: undefined // Remove badges from profile object
             };
+
+            console.log(`[MessageRow] Final profile data:`, {
+              username: userProfile.username,
+              display_name: userProfile.display_name,
+              badgeCount: badges.length,
+              hasCSS: !!customCSS
+            });
           }
         } catch (error) {
           console.warn(`[MessageRow] Failed to fetch complete profile for ${authId}:`, error);
           // Continue with basic profile data
         }
-      } else if (isSelfUser) {
-        // For self user, use available data
-        badges = ownInfo.badges || [];
-        customCSS = ownInfo.customCSS || '';
+        
+        // Show profile popup for partner
+        if (isMounted) {
+          showProfile(userProfile, badges, customCSS, e);
+        }
       }
 
-      // Show profile popup at click position
-      showProfile(userProfile, badges, customCSS, e);
-      
       // Optional: Call the original handler if provided
-      if (onUsernameClick) {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const clickPosition = { x: rect.left + rect.width / 2, y: rect.bottom + 5 };
+      if (onUsernameClick && authId) {
+        const clickPosition = { x: e.clientX, y: e.clientY };
         onUsernameClick(authId, clickPosition);
       }
       
     } catch (error) {
       console.error('[MessageRow] Error showing profile popup:', error);
     } finally {
-      setProfileLoading(false);
+      if (isMounted) { // ✅ NEW: Check before state update
+        setProfileLoading(false);
+      }
     }
-  }, [message, partnerInfo, ownInfo, showProfile, onUsernameClick, getUserProfile]);
+  }, [isMounted, message, partnerInfo, ownInfo, showProfile, onUsernameClick, getUserProfile, getDisplayedUsername]);
 
   // Keyboard handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -245,36 +326,40 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return [message.content];
   }, [message.content, theme, emojiFilenames, emotesLoading]);
 
-  // ✅ ENHANCED: Username component with loading state
+  // ✅ ENHANCED: Username component with loading state and proper username display
   const UsernameComponent = ({ children }: { children: React.ReactNode }) => {
-    const hasAuthId = message.sender === 'self' ? ownInfo.authId : message.senderAuthId;
+    const isSelfUser = message.sender === 'self';
+    const hasAuthId = isSelfUser ? ownInfo.authId : message.senderAuthId;
+    
+    // ✅ ENHANCED: Always allow self profile clicks, even without authId
+    const isClickable = isSelfUser || hasAuthId;
     
     return (
       <span
         className={cn(
           "font-bold mr-1 relative",
-          hasAuthId && !isWindows7Theme && "cursor-pointer hover:underline",
+          isClickable && !isWindows7Theme && "cursor-pointer hover:underline",
           getDisplayNameClass(
-            message.sender === 'self' 
+            isSelfUser 
               ? ownInfo.displayNameAnimation 
               : message.senderDisplayNameAnimation
           ),
           profileLoading && "opacity-70"
         )}
         style={{
-          color: message.sender === 'self' 
+          color: isSelfUser 
             ? ownInfo.displayNameColor 
             : message.senderDisplayNameColor,
           animationDuration: `${message.senderRainbowSpeed || 3}s`
         }}
-        onClick={hasAuthId ? handleUsernameClick : undefined}
-        onKeyDown={hasAuthId ? handleKeyDown : undefined}
-        tabIndex={hasAuthId ? 0 : undefined}
-        role={hasAuthId ? "button" : undefined}
-        title={hasAuthId ? "Click to view profile" : undefined}
+        onClick={isClickable ? handleUsernameClick : undefined}
+        onKeyDown={isClickable ? handleKeyDown : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        role={isClickable ? "button" : undefined}
+        title={isClickable ? "Click to view profile" : undefined}
       >
         {children}
-        {/* ✅ NEW: Loading indicator for profile fetch */}
+        {/* Loading indicator for profile fetch */}
         {profileLoading && (
           <span className="absolute -top-1 -right-1 w-3 h-3">
             <div className="w-full h-full border border-gray-400 border-t-blue-500 rounded-full animate-spin" 
@@ -284,6 +369,21 @@ const MessageRow: React.FC<MessageRowProps> = ({
       </span>
     );
   };
+
+  // ✅ ENHANCED: Use the proper username resolution function
+  const displayedUsername = getDisplayedUsername(message.sender === 'self');
+
+  // ✅ ENHANCED: Only log this when there are actual issues, not on every render
+  if (displayedUsername === 'Stranger' || displayedUsername === 'Unknown User') {
+    console.log('[MessageRow] Username resolution issue:', {
+      sender: message.sender,
+      displayedUsername,
+      senderUsername: message.senderUsername,
+      partnerUsername: partnerInfo?.username,
+      partnerDisplayName: partnerInfo?.displayName,
+      ownUsername: ownInfo.username
+    });
+  }
 
   return (
     <>
@@ -297,16 +397,14 @@ const MessageRow: React.FC<MessageRowProps> = ({
         <div className="flex items-start gap-2">
           <div className="flex-1">
             <UsernameComponent>
-              {message.sender === 'self' 
-                ? ownInfo.username 
-                : message.senderUsername || partnerInfo?.username || 'Unknown User'}:
+              {displayedUsername}:
             </UsernameComponent>
             <span className={cn(
               theme === 'theme-7' && 'theme-7-text-shadow',
               "break-words hyphens-auto"
             )}>
               {emotesLoading && theme === 'theme-98' ? (
-                <span>Loading emojis...</span>
+                <span className="opacity-75">Loading emojis...</span>
               ) : (
                 messageContent
               )}

@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - ENHANCED DISCORD-STYLE
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITHOUT CLOSE BUTTON
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -47,49 +47,87 @@ export function ProfilePopup({
   const popupRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Calculate optimal position to keep popup in viewport
+  // ✅ FIXED: Ensure component is mounted before state updates
   useEffect(() => {
-    if (!isVisible || !position || !popupRef.current) return;
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
-    const popup = popupRef.current;
-    const rect = popup.getBoundingClientRect();
+  // ✅ FIXED: Calculate position only after mounting
+  useEffect(() => {
+    if (!isMounted || !isVisible || !position) {
+      if (isMounted) {
+        setAdjustedPosition(null);
+      }
+      return;
+    }
+
+    // Calculate position using viewport dimensions
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    
+    // Popup dimensions (approximate)
+    const popupWidth = 300;
+    const popupHeight = 400;
     
     let { x, y } = position;
     
     // Adjust horizontal position
-    if (x + 320 > viewportWidth) { // 320px is popup width
-      x = viewportWidth - 320 - 20; // 20px margin
+    if (x + popupWidth > viewportWidth) {
+      x = Math.max(20, viewportWidth - popupWidth - 20);
     }
     if (x < 20) {
       x = 20;
     }
     
     // Adjust vertical position
-    if (y + 400 > viewportHeight) { // Approximate popup height
-      y = position.y - 400 - 10; // Show above click point
+    if (y + popupHeight > viewportHeight) {
+      y = Math.max(20, position.y - popupHeight - 10);
     }
     if (y < 20) {
       y = 20;
     }
     
-    setAdjustedPosition({ x, y });
-  }, [isVisible, position]);
+    console.log('[ProfilePopup] Position calculated:', { 
+      original: position, 
+      adjusted: { x, y },
+      viewport: { width: viewportWidth, height: viewportHeight }
+    });
+    
+    if (isMounted) {
+      setAdjustedPosition({ x, y });
+    }
+  }, [isMounted, isVisible, position]);
 
-  // Handle animation
+  // ✅ FIXED: Handle animation only after mounting
   useEffect(() => {
+    if (!isMounted) return;
+    
     if (isVisible) {
       setIsAnimating(true);
-      const timer = setTimeout(() => setIsAnimating(false), 200);
+      const timer = setTimeout(() => {
+        if (isMounted) {
+          setIsAnimating(false);
+        }
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isVisible]);
+  }, [isMounted, isVisible]);
 
-  if (!isVisible || !profile || !adjustedPosition) return null;
+  if (!isMounted || !isVisible || !profile || !adjustedPosition) {
+    return null;
+  }
 
   const statusInfo = getStatusIndicator(profile.status || 'offline');
+
+  console.log('[ProfilePopup] Rendering popup for:', {
+    username: profile.username,
+    displayName: profile.display_name,
+    badgeCount: badges.length,
+    position: adjustedPosition
+  });
 
   return (
     <>
@@ -222,7 +260,7 @@ export function ProfilePopup({
                   Badges ({badges.length})
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {badges.slice(0, 8).map((badge) => ( // Limit to 8 badges for popup
+                  {badges.slice(0, 8).map((badge) => (
                     <div
                       key={badge.id}
                       className="relative group"
@@ -270,18 +308,7 @@ export function ProfilePopup({
             </div>
           </div>
 
-          {/* Close button (top right) */}
-          <button
-            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black bg-opacity-50 hover:bg-opacity-70 text-white text-xs flex items-center justify-center transition-all duration-200 z-20"
-            onClick={() => {
-              // The parent component should handle closing
-              const event = new CustomEvent('closeProfilePopup');
-              window.dispatchEvent(event);
-            }}
-            title="Close profile"
-          >
-            ×
-          </button>
+          {/* ✅ REMOVED: Close button as requested */}
         </div>
       </div>
 
@@ -348,42 +375,11 @@ export function ProfilePopup({
           animation: popup-enter 200ms ease-out;
         }
 
-        /* Custom scrollbar for content areas */
-        .profile-card-custom ::-webkit-scrollbar {
-          width: 4px;
-        }
-
-        .profile-card-custom ::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.1);
-          border-radius: 2px;
-        }
-
-        .profile-card-custom ::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 2px;
-        }
-
-        .profile-card-custom ::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.5);
-        }
-
-        /* Ensure custom CSS is applied */
-        .profile-card-custom {
-          /* Default styles that can be overridden by custom CSS */
-        }
-
         /* Mobile responsive adjustments */
         @media (max-width: 768px) {
           .profile-popup-custom {
             width: calc(100vw - 40px) !important;
             max-width: 280px !important;
-          }
-        }
-
-        /* High contrast mode support */
-        @media (prefers-contrast: high) {
-          .profile-card-custom {
-            border-width: 2px;
           }
         }
 

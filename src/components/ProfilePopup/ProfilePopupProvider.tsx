@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopupProvider.tsx - ENHANCED WITH AUTO-HIDE
+// src/components/ProfilePopup/ProfilePopupProvider.tsx - FIXED STATE UPDATES
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
@@ -37,6 +37,18 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const hideTimeoutRef = useRef<NodeJS.Timeout>();
   const popupRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // ✅ FIXED: Ensure mounted state is tracked
+  useEffect(() => {
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const showProfile = useCallback((
     profile: UserProfile,
@@ -44,6 +56,11 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
     customCSS: string = '',
     clickEvent: React.MouseEvent
   ) => {
+    if (!isMounted) {
+      console.warn('[ProfilePopupProvider] Component not mounted, skipping showProfile');
+      return;
+    }
+
     // Clear any existing hide timeout
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
@@ -67,9 +84,11 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
         y: clickEvent.clientY
       }
     });
-  }, []);
+  }, [isMounted]);
 
   const hideProfile = useCallback(() => {
+    if (!isMounted) return;
+    
     console.log('[ProfilePopupProvider] Hiding profile popup');
     setPopupState(prev => ({ ...prev, isVisible: false }));
     
@@ -78,11 +97,11 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = undefined;
     }
-  }, []);
+  }, [isMounted]);
 
-  // Handle clicks outside the popup
+  // ✅ FIXED: Handle clicks outside the popup but prevent closing on username clicks
   useEffect(() => {
-    if (!popupState.isVisible) return;
+    if (!isMounted || !popupState.isVisible) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -92,35 +111,44 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
         return;
       }
 
-      // Check if click is on a username (to allow switching between profiles)
+      // ✅ FIXED: More specific check for username clicks
       const clickedElement = event.target as Element;
-      const isUsernameClick = clickedElement.closest('[role="button"]') || 
-                            clickedElement.closest('.cursor-pointer') ||
-                            clickedElement.matches('span[style*="color"]'); // Username spans often have color styling
+      
+      // Don't close if clicking on usernames or clickable message elements
+      const isUsernameClick = 
+        clickedElement.closest('[role="button"]') || 
+        clickedElement.closest('.cursor-pointer') ||
+        clickedElement.matches('span[style*="color"]') || // Username spans with color
+        clickedElement.closest('.font-bold') || // Username elements are usually bold
+        clickedElement.closest('.message-row'); // Don't close when clicking in message area
 
       if (isUsernameClick) {
         // Don't hide immediately, let the new profile show
+        console.log('[ProfilePopupProvider] Username click detected, not hiding popup');
         return;
       }
 
       // Hide popup for other clicks
+      console.log('[ProfilePopupProvider] Outside click detected, hiding popup');
       hideProfile();
     };
 
     // Add small delay to prevent immediate closing
     const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
+      if (isMounted) {
+        document.addEventListener('mousedown', handleClickOutside);
+      }
     }, 100);
 
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [popupState.isVisible, hideProfile]);
+  }, [isMounted, popupState.isVisible, hideProfile]);
 
   // Handle keyboard events
   useEffect(() => {
-    if (!popupState.isVisible) return;
+    if (!isMounted || !popupState.isVisible) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -130,26 +158,20 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [popupState.isVisible, hideProfile]);
+  }, [isMounted, popupState.isVisible, hideProfile]);
 
-  // Handle custom close event (from close button)
+  // ✅ REMOVED: Custom close event handler since there's no close button
+
+  // ✅ FIXED: Auto-hide after inactivity with proper mounting check
   useEffect(() => {
-    const handleCustomClose = () => {
-      hideProfile();
-    };
-
-    window.addEventListener('closeProfilePopup', handleCustomClose);
-    return () => window.removeEventListener('closeProfilePopup', handleCustomClose);
-  }, [hideProfile]);
-
-  // Auto-hide after inactivity (optional)
-  useEffect(() => {
-    if (!popupState.isVisible) return;
+    if (!isMounted || !popupState.isVisible) return;
 
     // Auto-hide after 10 seconds of no interaction
     hideTimeoutRef.current = setTimeout(() => {
-      console.log('[ProfilePopupProvider] Auto-hiding popup after inactivity');
-      hideProfile();
+      if (isMounted) {
+        console.log('[ProfilePopupProvider] Auto-hiding popup after inactivity');
+        hideProfile();
+      }
     }, 10000);
 
     return () => {
@@ -158,35 +180,45 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
         hideTimeoutRef.current = undefined;
       }
     };
-  }, [popupState.isVisible, hideProfile]);
+  }, [isMounted, popupState.isVisible, hideProfile]);
 
-  // Handle mouse enter/leave on popup to prevent auto-hide
+  // ✅ FIXED: Handle mouse enter/leave with mounting checks
   const handlePopupMouseEnter = useCallback(() => {
+    if (!isMounted) return;
+    
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = undefined;
     }
-  }, []);
+  }, [isMounted]);
 
   const handlePopupMouseLeave = useCallback(() => {
+    if (!isMounted) return;
+    
     // Restart auto-hide timer when mouse leaves popup
     if (popupState.isVisible) {
       hideTimeoutRef.current = setTimeout(() => {
-        hideProfile();
+        if (isMounted) {
+          hideProfile();
+        }
       }, 3000); // Shorter timeout when mouse leaves
     }
-  }, [popupState.isVisible, hideProfile]);
+  }, [isMounted, popupState.isVisible, hideProfile]);
 
-  // Enhanced ProfilePopup with mouse events
-  const EnhancedProfilePopup = () => (
-    <div
-      ref={popupRef}
-      onMouseEnter={handlePopupMouseEnter}
-      onMouseLeave={handlePopupMouseLeave}
-    >
-      <ProfilePopup {...popupState} />
-    </div>
-  );
+  // Enhanced ProfilePopup with mouse events and mounting check
+  const EnhancedProfilePopup = () => {
+    if (!isMounted) return null;
+    
+    return (
+      <div
+        ref={popupRef}
+        onMouseEnter={handlePopupMouseEnter}
+        onMouseLeave={handlePopupMouseLeave}
+      >
+        <ProfilePopup {...popupState} />
+      </div>
+    );
+  };
 
   return (
     <ProfilePopupContext.Provider value={{ 
@@ -195,7 +227,7 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
       isVisible: popupState.isVisible 
     }}>
       {children}
-      {popupState.isVisible && <EnhancedProfilePopup />}
+      {isMounted && popupState.isVisible && <EnhancedProfilePopup />}
     </ProfilePopupContext.Provider>
   );
 };
