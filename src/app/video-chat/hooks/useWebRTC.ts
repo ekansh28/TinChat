@@ -461,7 +461,7 @@ export const useWebRTC = () => {
   };
 };
 
-// ✅ Extend window interface for WebRTC signal emission
+// ✅ Extend window interface for WebRTC signal emissions
 declare global {
   interface Window {
     videoChatEmitWebRTCSignal?: (data: { signalData: any }) => void;
