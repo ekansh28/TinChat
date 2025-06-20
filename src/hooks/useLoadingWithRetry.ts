@@ -1,5 +1,6 @@
 // src/hooks/useLoadingWithRetry.ts - Reusable loading and retry hook
-import { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export interface LoadingState {
   loading: boolean;
@@ -227,12 +228,17 @@ export function useProfileLoader() {
         throw new Error('User ID is required');
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', userId)
-        .abortSignal(signal)
-        .single();
+        .eq('id', userId);
+
+      // Only add abortSignal if it exists
+      if (signal) {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query.single();
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -261,10 +267,16 @@ export function useProfileSaver() {
         throw new Error('Profile data is required');
       }
 
-      const { error } = await supabase
+      let query = supabase
         .from('user_profiles')
-        .upsert(profileData, { onConflict: 'id' })
-        .abortSignal(signal);
+        .upsert(profileData, { onConflict: 'id' });
+
+      // Only add abortSignal if it exists
+      if (signal) {
+        query = query.abortSignal(signal);
+      }
+
+      const { error } = await query;
 
       if (error) {
         throw new Error(error.message || 'Failed to save profile');

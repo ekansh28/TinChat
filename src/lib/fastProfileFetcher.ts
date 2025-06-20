@@ -96,12 +96,19 @@ class FastProfileFetcher {
   }
 
   // Minimal fetch for auth components (just username/display_name)
-  async fetchMinimalProfile(userId: string): Promise<{ username?: string; display_name?: string; profile_complete?: boolean } | null> {
-    return this.fetchProfile(userId, {
+  async fetchMinimalProfile(userId: string): Promise<ProfileData | null> {
+    const result = await this.fetchProfile(userId, {
       fields: MINIMAL_FIELDS,
       timeout: 3000,
       retries: 1
     });
+    
+    // Ensure we return a valid ProfileData or null
+    if (result && result.id) {
+      return result;
+    }
+    
+    return null;
   }
 
   // Full fetch for profile customizer
@@ -134,30 +141,29 @@ class FastProfileFetcher {
           }, timeout);
         });
 
-        // Create fetch promise
-        let query = supabase
+        // Create fetch promise with proper typing
+        const baseQuery = supabase
           .from('user_profiles')
           .select(fields.join(', '))
           .eq('id', userId)
           .abortSignal(controller.signal);
 
-        // Add single() only if we're not selecting all fields
-        if (!fields.includes('*')) {
-          query = query.single();
-        } else {
-          query = query.limit(1).single();
-        }
-
-        const fetchPromise = query;
+        // Handle single() call separately to avoid type issues
+        const fetchPromise = baseQuery.single();
 
         // Race between fetch and timeout
-        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+        const result = await Promise.race([fetchPromise, timeoutPromise]);
 
         this.abortControllers.delete(userId);
 
         if (controller.signal.aborted) {
           throw new Error('Request was cancelled');
         }
+
+        // Handle the result properly with explicit typing
+        // TypeScript has trouble with Promise.race return types, so we need to be explicit
+        const response = result as any;
+        const { data, error } = response;
 
         if (error) {
           if (error.code === 'PGRST116') {
@@ -168,18 +174,43 @@ class FastProfileFetcher {
         }
 
         if (data) {
-          // Parse badges if present
-          if (data.badges) {
+          // Create a safe copy of the data
+          let profileData: any;
+          
+          try {
+            // Most reliable way: JSON deep clone
+            profileData = JSON.parse(JSON.stringify(data));
+          } catch (error) {
+            // Fallback: try Object.assign
             try {
-              data.badges = typeof data.badges === 'string' ? JSON.parse(data.badges) : data.badges;
-              if (!Array.isArray(data.badges)) data.badges = [];
+              profileData = Object.assign({}, data);
+            } catch (error2) {
+              // Final fallback: direct assignment
+              profileData = data;
+            }
+          }
+          
+          // Parse badges if present
+          if (profileData.badges) {
+            try {
+              profileData.badges = typeof profileData.badges === 'string' 
+                ? JSON.parse(profileData.badges) 
+                : profileData.badges;
+              if (!Array.isArray(profileData.badges)) {
+                profileData.badges = [];
+              }
             } catch {
-              data.badges = [];
+              profileData.badges = [];
             }
           }
 
+          // Ensure we have required fields
+          if (!profileData.id) {
+            profileData.id = userId;
+          }
+
           console.log(`FastProfileFetcher: Successfully fetched profile for ${userId} (attempt ${attempt + 1})`);
-          return data;
+          return profileData as ProfileData;
         }
 
         return null;
