@@ -4,6 +4,7 @@
 import React, { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '../ProfilePopup/ProfilePopupProvider';
+import { ProfileCard } from '../ProfileCustomizer/components/ProfileCard';  // Adjust path as needed
 
 const STATUS_CONFIG = {
   online: { icon: '🟢', text: 'Online', color: '#43b581' },
@@ -46,65 +47,12 @@ export function ProfilePopup() {
           transform: popupState.position ? 'translate(-50%, 0)' : 'none'
         }}
       >
-        <div className="p-4">
-          <div className="flex items-center space-x-4">
-            <img
-              src={popupState.profile.avatar_url || getDefaultAvatar()}
-              alt="Profile"
-              className="w-16 h-16 rounded-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = getDefaultAvatar();
-              }}
-            />
-            <div>
-              <div 
-                className="text-lg font-semibold"
-                style={{ 
-                  color: popupState.profile.display_name_color || '#ffffff',
-                  animation: popupState.profile.display_name_animation === 'rainbow' ? 
-                    `rainbow ${popupState.profile.rainbow_speed || 3}s infinite` : 'none'
-                }}
-              >
-                {popupState.profile.display_name || popupState.profile.username || 'Unknown User'}
-              </div>
-              {popupState.profile.status && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {STATUS_CONFIG[popupState.profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {popupState.badges?.length > 0 && (
-            <div 
-              className="mt-4 overflow-x-auto no-scrollbar"
-              style={{ maxWidth: '100%' }}
-              onWheel={(e) => {
-                const container = e.currentTarget as HTMLElement;
-                if (e.deltaY !== 0) {
-                  e.preventDefault();
-                  container.scrollLeft += e.deltaY;
-                }
-              }}
-            >
-              <div className="flex gap-2 w-max">
-                {popupState.badges.map(badge => (
-                  <img
-                    key={badge.id}
-                    src={badge.url}
-                    alt={badge.name || 'Badge'}
-                    className="w-6 h-6"
-                    title={badge.name}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {popupState.customCSS && (
-            <style dangerouslySetInnerHTML={{ __html: popupState.customCSS }} />
-          )}
-        </div>
+        <ProfileCard 
+          profile={popupState.profile} 
+          badges={popupState.badges} 
+          customCSS={popupState.customCSS} 
+          isPreview={false}  // Disable preview-specific features
+        />
       </div>
     </div>
   );
