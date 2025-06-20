@@ -1,4 +1,3 @@
-
 // ===============================================================================
 // src/components/ProfileCustomizer/index.tsx - WITH FAST PROFILE FETCHING
 // ===============================================================================
@@ -15,6 +14,11 @@ import { Modal } from './components/Modal';
 import type { UserProfile, Badge } from './types';
 import ProfileCardPreview from './components/ProfileCardPreview';
 import { fastProfileFetcher, profileCache } from '@/lib/fastProfileFetcher';
+
+// Default avatar helper function
+function getDefaultAvatar() {
+  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
+}
 
 // Loading spinner component
 const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {

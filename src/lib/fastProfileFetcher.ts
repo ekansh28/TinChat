@@ -1,10 +1,9 @@
-
-
 // ===============================================================================
 // src/lib/fastProfileFetcher.ts - OPTIMIZED PROFILE FETCHER
 // ===============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { profileCache } from '@/lib/profileCache';
 
 export interface FastProfileOptions {
   useCache?: boolean;
@@ -30,6 +29,7 @@ export interface ProfileData {
   profile_complete?: boolean;
   created_at?: string;
   updated_at?: string;
+  profile_card_css?: string;
 }
 
 const DEFAULT_FIELDS = [
@@ -262,3 +262,5 @@ class FastProfileFetcher {
 // Singleton instance
 export const fastProfileFetcher = new FastProfileFetcher();
 
+// Re-export profileCache for convenience
+export { profileCache } from '@/lib/profileCache';

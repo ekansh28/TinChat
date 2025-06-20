@@ -1,4 +1,3 @@
-
 // ===============================================================================
 // src/components/ProfileCard.tsx - WITH FAST PROFILE FETCHING
 // ===============================================================================
@@ -7,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { fastProfileFetcher, ProfileData } from '@/lib/fastProfileFetcher';
+import { fastProfileFetcher, type ProfileData } from '@/lib/fastProfileFetcher';
 
 interface ProfileCardProps {
   userId: string;
@@ -122,11 +121,17 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClos
           <p className="text-sm text-red-600 mb-3">{error}</p>
           <div className="flex gap-2 justify-center">
             {error !== 'Profile not found' && (
-              <button className="button" onClick={handleRefresh}>
+              <button 
+                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                onClick={handleRefresh}
+              >
                 🔄 Retry
               </button>
             )}
-            <button className="button" onClick={onClose}>
+            <button 
+              className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+              onClick={onClose}
+            >
               Close
             </button>
           </div>
@@ -230,7 +235,10 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClos
     return (
       <div className="text-center p-4">
         <p className="text-sm text-gray-600">No profile data available</p>
-        <button className="button mt-2" onClick={onClose}>
+        <button 
+          className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 mt-2"
+          onClick={onClose}
+        >
           Close
         </button>
       </div>
@@ -238,17 +246,25 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ userId, isOpen, onClos
   };
 
   return (
-    <div className="window profile-card">
-      <div className="title-bar">
-        <div className="title-bar-text">
-          User Profile {isFromCache && <span className="text-xs">⚡</span>}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <h2 className="font-bold text-lg">
+              User Profile {isFromCache && <span className="text-xs">⚡</span>}
+            </h2>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-xl"
+            aria-label="Close"
+          >
+            ×
+          </button>
         </div>
-        <div className="title-bar-controls">
-          <button aria-label="Close" onClick={onClose}></button>
+        <div className="p-0">
+          {renderContent()}
         </div>
-      </div>
-      <div className="window-body">
-        {renderContent()}
       </div>
       
       {/* CSS for rainbow animation */}

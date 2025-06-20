@@ -44,7 +44,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
       if (!mountedRef.current) return null;
 
       if (profile) {
-        const displayName = profile.username || profile.display_name;
+        const displayName = profile.display_name || profile.username || null;
         console.log('AuthButtons: Fast profile loaded:', displayName);
         return displayName;
       }
