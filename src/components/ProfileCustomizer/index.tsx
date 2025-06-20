@@ -1,4 +1,8 @@
-// src/components/ProfileCustomizer/index.tsx - ENHANCED VERSION WITH LOADING & RETRY
+
+// ===============================================================================
+// src/components/ProfileCustomizer/index.tsx - WITH FAST PROFILE FETCHING
+// ===============================================================================
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,8 +14,9 @@ import { CustomizerPanel } from './components/CustomizerPanel';
 import { Modal } from './components/Modal';
 import type { UserProfile, Badge } from './types';
 import ProfileCardPreview from './components/ProfileCardPreview';
+import { fastProfileFetcher, profileCache } from '@/lib/fastProfileFetcher';
 
-// ✅ Loading spinner component
+// Loading spinner component
 const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
   const sizeClasses = {
     sm: 'w-4 h-4',
@@ -24,19 +29,19 @@ const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }
   );
 };
 
-// ✅ Enhanced loading state component
+// Enhanced loading state component
 const LoadingState: React.FC<{ 
   message: string; 
   progress?: number; 
-  isRetrying?: boolean; 
-  retryCount?: number;
+  isFromCache?: boolean;
   onCancel?: () => void;
-}> = ({ message, progress, isRetrying, retryCount, onCancel }) => (
+}> = ({ message, progress, isFromCache, onCancel }) => (
   <div className="flex flex-col items-center justify-center p-8 space-y-4">
     <LoadingSpinner size="lg" />
     <div className="text-center space-y-2">
-      <h3 className="text-lg font-medium">
-        {isRetrying ? `Retrying... (${retryCount}/3)` : 'Loading Profile'}
+      <h3 className="text-lg font-medium flex items-center gap-2">
+        Loading Profile
+        {isFromCache && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">⚡ Fast</span>}
       </h3>
       <p className="text-gray-600 dark:text-gray-400">{message}</p>
       {progress !== undefined && (
@@ -47,11 +52,6 @@ const LoadingState: React.FC<{
           />
         </div>
       )}
-      {isRetrying && (
-        <p className="text-sm text-yellow-600 dark:text-yellow-400">
-          This is taking longer than usual. Please wait...
-        </p>
-      )}
     </div>
     {onCancel && (
       <Button variant="outline" onClick={onCancel} size="sm">
@@ -61,15 +61,13 @@ const LoadingState: React.FC<{
   </div>
 );
 
-// ✅ Enhanced error state component with retry options
+// Enhanced error state component
 const ErrorState: React.FC<{
   error: string;
   onRetry: () => void;
   onClose: () => void;
-  retryCount: number;
-  isRetrying: boolean;
   canRetry: boolean;
-}> = ({ error, onRetry, onClose, retryCount, isRetrying, canRetry }) => (
+}> = ({ error, onRetry, onClose, canRetry }) => (
   <div className="flex flex-col items-center justify-center p-8 space-y-4">
     <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
       <span className="text-2xl">⚠️</span>
@@ -81,36 +79,24 @@ const ErrorState: React.FC<{
       <p className="text-gray-600 dark:text-gray-400 max-w-md">
         {error}
       </p>
-      {retryCount > 0 && (
-        <p className="text-sm text-gray-500">
-          {retryCount} attempt(s) made
-        </p>
-      )}
     </div>
     <div className="flex gap-3">
       {canRetry && (
         <Button 
           onClick={onRetry} 
-          disabled={isRetrying}
           className="flex items-center gap-2"
         >
-          {isRetrying ? <LoadingSpinner size="sm" /> : '🔄'}
-          {isRetrying ? 'Retrying...' : 'Try Again'}
+          🔄 Try Again
         </Button>
       )}
       <Button variant="outline" onClick={onClose}>
         Close
       </Button>
     </div>
-    {!canRetry && (
-      <p className="text-xs text-gray-500 max-w-md text-center">
-        Maximum retry attempts reached. Please check your internet connection and try again later.
-      </p>
-    )}
   </div>
 );
 
-// ✅ Enhanced auth hook with better loading states
+// Enhanced auth hook
 const useAuth = () => {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +138,7 @@ const useAuth = () => {
   return { user, loading, error };
 };
 
-// ✅ Enhanced profile hook with comprehensive retry logic
+// Enhanced profile hook with fast fetching
 const useProfileCustomizer = () => {
   const DEFAULT_PROFILE: UserProfile = {
     username: '',
@@ -175,106 +161,53 @@ const useProfileCustomizer = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
-  const MAX_RETRIES = 3;
-  const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff: 1s, 2s, 4s
-
-  // ✅ Enhanced profile loading with progress tracking and retry logic
-  const loadProfile = useCallback(async (userId: string, isRetry: boolean = false) => {
+  // Fast profile loading with cache
+  const loadProfile = useCallback(async (userId: string, forceRefresh: boolean = false) => {
     if (!userId) {
       console.warn('No user ID provided to loadProfile');
       setError('No user ID provided');
       return;
     }
 
-    // Cancel any existing request
-    if (abortController) {
-      abortController.abort();
-    }
-
-    const newAbortController = new AbortController();
-    setAbortController(newAbortController);
-
+    const startTime = Date.now();
     setLoading(true);
     setError(null);
     setLoadingProgress(0);
-    
-    if (isRetry) {
-      setIsRetrying(true);
-    }
 
     try {
-      console.log(`Loading profile for user: ${userId} ${isRetry ? `(retry ${retryCount + 1}/${MAX_RETRIES})` : ''}`);
+      console.log(`ProfileCustomizer: Fast loading profile for ${userId}${forceRefresh ? ' (force refresh)' : ''}`);
       
       // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setLoadingProgress(prev => {
-          const next = prev + 10;
-          return next >= 90 ? 90 : next; // Stop at 90%, complete when done
+          const next = prev + 15;
+          return next >= 90 ? 90 : next;
         });
-      }, 200);
+      }, 100);
 
-      const { data, error: fetchError, signal } = await Promise.race([
-        supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', userId)
-          .abortSignal(newAbortController.signal)
-          .single(),
-        new Promise<never>((_, reject) => {
-          newAbortController.signal.addEventListener('abort', () => {
-            reject(new Error('Request was cancelled'));
-          });
-        })
-      ]) as any;
+      const profileData = await fastProfileFetcher.fetchFullProfile(userId, forceRefresh);
 
       clearInterval(progressInterval);
       setLoadingProgress(100);
 
-      if (newAbortController.signal.aborted) {
-        console.log('Profile fetch was cancelled');
-        return;
-      }
+      const fetchTime = Date.now() - startTime;
+      setIsFromCache(fetchTime < 200); // Likely from cache if very fast
 
-      if (fetchError) {
-        // PGRST116 means no profile found - this is OK for new users
-        if (fetchError.code === 'PGRST116') {
-          console.log('No existing profile found, using defaults for new user');
-          setProfile({ ...DEFAULT_PROFILE, id: userId });
-          setBadges([]);
-          setCustomCSS('');
-          setError(null);
-          setRetryCount(0);
-          return;
-        }
-        
-        throw new Error(fetchError.message || 'Failed to fetch profile');
-      }
-
-      if (data) {
-        console.log('Profile loaded successfully:', data);
+      if (profileData) {
+        console.log(`ProfileCustomizer: Profile loaded in ${fetchTime}ms:`, profileData);
         
         // Parse badges safely
         let parsedBadges: Badge[] = [];
-        if (data.badges) {
+        if (profileData.badges) {
           try {
-            parsedBadges = typeof data.badges === 'string' 
-              ? JSON.parse(data.badges) 
-              : data.badges;
-            
-            if (!Array.isArray(parsedBadges)) {
-              console.warn('Badges data is not an array, resetting to empty');
-              parsedBadges = [];
-            } else {
-              // Filter out invalid badges
-              parsedBadges = parsedBadges.filter(badge => 
-                badge && typeof badge === 'object' && badge.id && badge.url
-              );
-            }
+            parsedBadges = Array.isArray(profileData.badges) ? profileData.badges : [];
+            // Filter out invalid badges
+            parsedBadges = parsedBadges.filter(badge => 
+              badge && typeof badge === 'object' && badge.id && badge.url
+            );
           } catch (e) {
             console.warn('Failed to parse badges, using empty array:', e);
             parsedBadges = [];
@@ -282,72 +215,41 @@ const useProfileCustomizer = () => {
         }
 
         setProfile({
-          ...data,
+          ...profileData,
           badges: undefined // Remove badges from profile object
         });
         setBadges(parsedBadges);
-        setCustomCSS(data.profile_card_css || '');
+        setCustomCSS(profileData.profile_card_css || '');
         setError(null);
-        setRetryCount(0);
       } else {
-        console.log('No profile data returned, using defaults');
+        console.log('ProfileCustomizer: No profile data returned, using defaults');
         setProfile({ ...DEFAULT_PROFILE, id: userId });
         setBadges([]);
         setCustomCSS('');
         setError(null);
-        setRetryCount(0);
       }
     } catch (error: any) {
-      if (newAbortController.signal.aborted) {
-        console.log('Profile fetch was cancelled, ignoring error');
-        return;
-      }
-
-      console.error('Exception loading profile:', error);
+      console.error('ProfileCustomizer: Load error:', error);
+      setError(error.message || 'Failed to load profile');
       
-      const errorMessage = error.message || 'Failed to load profile';
-      setError(errorMessage);
-      
-      // Auto-retry logic
-      if (retryCount < MAX_RETRIES && !error.message?.includes('cancelled')) {
-        const delay = RETRY_DELAYS[retryCount] || 4000;
-        console.log(`Auto-retrying in ${delay}ms... (${retryCount + 1}/${MAX_RETRIES})`);
-        
-        setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-          loadProfile(userId, true);
-        }, delay);
-      } else {
-        // Set defaults even on final error so the form is usable
-        setProfile({ ...DEFAULT_PROFILE, id: userId });
-        setBadges([]);
-        setCustomCSS('');
-      }
+      // Set defaults even on error so the form is usable
+      setProfile({ ...DEFAULT_PROFILE, id: userId });
+      setBadges([]);
+      setCustomCSS('');
     } finally {
       setLoading(false);
-      setIsRetrying(false);
       setLoadingProgress(0);
     }
-  }, [retryCount, abortController]);
+  }, []);
 
-  // ✅ Manual retry function
+  // Retry with cache invalidation
   const retryLoadProfile = useCallback((userId: string) => {
-    setRetryCount(0);
-    loadProfile(userId, false);
+    // Invalidate cache for this user
+    profileCache.invalidate(userId);
+    loadProfile(userId, true);
   }, [loadProfile]);
 
-  // ✅ Cancel loading function
-  const cancelLoading = useCallback(() => {
-    if (abortController) {
-      abortController.abort();
-      setLoading(false);
-      setIsRetrying(false);
-      setLoadingProgress(0);
-      setError('Loading was cancelled');
-    }
-  }, [abortController]);
-
-  // ✅ Enhanced save function with loading states
+  // Enhanced save with optimistic updates
   const saveProfile = useCallback(async (userId: string) => {
     if (!userId) {
       throw new Error('User ID is required');
@@ -357,7 +259,7 @@ const useProfileCustomizer = () => {
     setError(null);
     
     try {
-      console.log('Saving profile for user:', userId);
+      console.log('ProfileCustomizer: Saving profile for user:', userId);
       
       // Enhanced validation
       if (!profile.username?.trim()) {
@@ -407,7 +309,7 @@ const useProfileCustomizer = () => {
         updated_at: new Date().toISOString()
       };
 
-      console.log('Saving profile data:', profileData);
+      console.log('ProfileCustomizer: Saving profile data:', profileData);
 
       const { error } = await supabase
         .from('user_profiles')
@@ -416,14 +318,18 @@ const useProfileCustomizer = () => {
         });
 
       if (error) {
-        console.error('Error saving profile:', error);
+        console.error('ProfileCustomizer: Save error:', error);
         throw new Error(error.message || 'Failed to save profile');
       }
 
-      console.log('Profile saved successfully');
+      console.log('ProfileCustomizer: Profile saved successfully');
+      
+      // Update cache with new data
+      profileCache.set(userId, { ...profileData, badges });
+      
       setError(null);
     } catch (error: any) {
-      console.error('Exception saving profile:', error);
+      console.error('ProfileCustomizer: Save exception:', error);
       setError(error.message || 'Failed to save profile');
       throw error;
     } finally {
@@ -436,7 +342,6 @@ const useProfileCustomizer = () => {
     setBadges([]);
     setCustomCSS('');
     setError(null);
-    setRetryCount(0);
     setLoadingProgress(0);
   }, []);
 
@@ -450,15 +355,12 @@ const useProfileCustomizer = () => {
     saving,
     loading,
     error,
-    retryCount,
-    isRetrying,
+    isFromCache,
     loadingProgress,
     saveProfile,
     loadProfile,
     retryLoadProfile,
-    cancelLoading,
-    resetToDefaults,
-    canRetry: retryCount < MAX_RETRIES
+    resetToDefaults
   };
 };
 
@@ -481,21 +383,18 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     saving,
     loading,
     error,
-    retryCount,
-    isRetrying,
+    isFromCache,
     loadingProgress,
     saveProfile,
     loadProfile,
     retryLoadProfile,
-    cancelLoading,
-    resetToDefaults,
-    canRetry
+    resetToDefaults
   } = useProfileCustomizer();
 
   // Load profile when component opens
   useEffect(() => {
     if (isOpen && user?.id && !authLoading) {
-      console.log('ProfileCustomizer: Loading profile for user:', user.id);
+      console.log('ProfileCustomizer: Fast loading profile for user:', user.id);
       loadProfile(user.id);
     }
   }, [isOpen, user?.id, authLoading, loadProfile]);
@@ -514,8 +413,8 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     try {
       await saveProfile(user.id);
       toast({
-        title: "Profile Saved",
-        description: "Your profile has been updated successfully!",
+        title: "Profile Saved! ⚡",
+        description: "Your profile has been updated successfully and cached for fast loading!",
         variant: "default"
       });
     } catch (error: any) {
@@ -563,8 +462,6 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           error={authError}
           onRetry={() => window.location.reload()}
           onClose={onClose}
-          retryCount={0}
-          isRetrying={false}
           canRetry={true}
         />
       </Modal>
@@ -594,15 +491,9 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     return (
       <Modal isOpen={isOpen} onClose={onClose} title="Profile Customizer">
         <LoadingState 
-          message={
-            isRetrying 
-              ? "The server is taking longer than usual. Please wait while we retry..."
-              : "Loading your profile data..."
-          }
+          message={isFromCache ? "Loading from cache..." : "Fetching your profile data..."}
           progress={loadingProgress}
-          isRetrying={isRetrying}
-          retryCount={retryCount}
-          onCancel={cancelLoading}
+          isFromCache={isFromCache}
         />
       </Modal>
     );
@@ -616,19 +507,29 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           error={error}
           onRetry={handleRetry}
           onClose={onClose}
-          retryCount={retryCount}
-          isRetrying={isRetrying}
-          canRetry={canRetry}
+          canRetry={true}
         />
       </Modal>
     );
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Customize Your Profile" maxWidth="6xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Customize Your Profile ⚡" maxWidth="6xl">
       <div className="flex flex-col lg:flex-row gap-6 h-[80vh]">
         {/* Left Panel - Customization Controls */}
         <div className="flex-1 overflow-y-auto">
+          {/* Performance indicator */}
+          {isFromCache && (
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-green-600 dark:text-green-400">⚡</span>
+                <span className="text-green-700 dark:text-green-300 text-sm font-medium">
+                  Profile loaded instantly from cache
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Show saving overlay */}
           {saving && (
             <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -655,7 +556,10 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         <div className="flex-1 lg:max-w-md">
           <div className="sticky top-0">
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-4 text-center">Live Preview</h3>
+              <h3 className="text-lg font-medium mb-4 text-center flex items-center justify-center gap-2">
+                Live Preview
+                {isFromCache && <span className="text-xs">⚡</span>}
+              </h3>
               <div className="space-y-4">
                 {/* Profile Card Preview */}
                 <ProfileCardPreview
@@ -714,11 +618,10 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             <Button
               variant="outline"
               onClick={handleRetry}
-              disabled={loading || isRetrying || !canRetry}
+              disabled={loading}
               className="flex items-center gap-2"
             >
-              {isRetrying ? <LoadingSpinner size="sm" /> : '🔄'}
-              {isRetrying ? 'Retrying...' : 'Reload Profile'}
+              🔄 Reload Profile
             </Button>
           )}
         </div>
@@ -762,9 +665,4 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
       `}</style>
     </Modal>
   );
-}
-
-// Helper function for default avatar
-function getDefaultAvatar() {
-  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }

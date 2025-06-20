@@ -1,4 +1,7 @@
-//src/components/AuthButtons.tsx - FIXED VERSION
+// ===============================================================================
+// src/components/AuthButtons.tsx - WITH FAST PROFILE FETCHING
+// ===============================================================================
+
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
@@ -6,8 +9,8 @@ import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button-themed';
 import { usePathname, useRouter } from 'next/navigation';
-// REMOVED: ProfileCustomizer import - let parent handle rendering
 import { cn } from '@/lib/utils';
+import { fastProfileFetcher } from '@/lib/fastProfileFetcher';
 
 interface AuthButtonsProps {
   onOpenProfileCustomizer?: () => void;
@@ -19,16 +22,45 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
   const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
-  // REMOVED: isCustomizerOpen state - parent handles this now
+  const [profileLoading, setProfileLoading] = useState(false);
+  
   const router = useRouter();
   const pathname = usePathname();
   
-  // Use refs to prevent unnecessary re-renders and race conditions
-  const initializationRef = useRef(false);
   const mountedRef = useRef(true);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const initializationRef = useRef(false);
 
-  // Simplified and more robust auth initialization
+  // Fast profile fetch with caching
+  const fetchUserProfile = useCallback(async (userId: string): Promise<string | null> => {
+    if (!userId || !mountedRef.current) return null;
+
+    setProfileLoading(true);
+    
+    try {
+      console.log('AuthButtons: Fast fetching profile for', userId);
+      
+      const profile = await fastProfileFetcher.fetchMinimalProfile(userId);
+      
+      if (!mountedRef.current) return null;
+
+      if (profile) {
+        const displayName = profile.username || profile.display_name;
+        console.log('AuthButtons: Fast profile loaded:', displayName);
+        return displayName;
+      }
+
+      return null;
+    } catch (error: any) {
+      console.warn('AuthButtons: Fast profile fetch failed:', error.message);
+      return null;
+    } finally {
+      if (mountedRef.current) {
+        setProfileLoading(false);
+      }
+    }
+  }, []);
+
+  // Initialize auth with fast profile loading
   const initializeAuth = useCallback(async () => {
     if (initializationRef.current || !mountedRef.current) {
       console.log("AuthButtons: Skipping initialization - already initialized or unmounted");
@@ -38,22 +70,9 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     initializationRef.current = true;
     
     try {
-      console.log("AuthButtons: Starting auth initialization...");
+      console.log("AuthButtons: Starting fast auth initialization...");
       
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      // Set a safety timeout
-      timeoutRef.current = setTimeout(() => {
-        if (mountedRef.current && authLoading) {
-          console.warn("AuthButtons: Auth loading timeout reached, forcing completion");
-          setAuthLoading(false);
-        }
-      }, 3000);
-
-      // Get current session with error handling
+      // Get current session quickly
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (!mountedRef.current) return;
@@ -70,45 +89,13 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
       console.log("AuthButtons: Auth check complete. User:", currentUser?.id || 'anonymous');
       
       setUser(currentUser);
+      setAuthLoading(false); // Set auth as loaded immediately
 
+      // Fetch profile in background if user exists
       if (currentUser) {
-        try {
-          // Fetch user profile with timeout
-          const profilePromise = supabase
-            .from('user_profiles')
-            .select('username, display_name')
-            .eq('id', currentUser.id)
-            .single();
-
-          // Add timeout to profile fetch
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 2000);
-          });
-
-          const { data: profileData, error: profileError } = await Promise.race([
-            profilePromise,
-            timeoutPromise
-          ]) as any;
-
-          if (!mountedRef.current) return;
-
-          if (profileError && profileError.code !== 'PGRST116') {
-            console.error("AuthButtons: Profile fetch error:", profileError);
-            setProfileUsername(null);
-          } else if (profileData) {
-            // Prioritize username over display_name
-            const displayName = profileData.username || profileData.display_name;
-            setProfileUsername(displayName);
-            console.log("AuthButtons: Profile loaded:", displayName);
-          } else {
-            console.log("AuthButtons: No profile found");
-            setProfileUsername(null);
-          }
-        } catch (profileError) {
-          console.error("AuthButtons: Profile fetch exception:", profileError);
-          if (mountedRef.current) {
-            setProfileUsername(null);
-          }
+        const displayName = await fetchUserProfile(currentUser.id);
+        if (mountedRef.current) {
+          setProfileUsername(displayName);
         }
       } else {
         setProfileUsername(null);
@@ -119,19 +106,12 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
       if (mountedRef.current) {
         setUser(null);
         setProfileUsername(null);
-      }
-    } finally {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (mountedRef.current) {
         setAuthLoading(false);
-        console.log("AuthButtons: Auth initialization complete");
       }
     }
-  }, [authLoading]);
+  }, [fetchUserProfile]);
 
-  // Set up auth listener with better error handling
+  // Set up auth listener with fast profile fetching
   useEffect(() => {
     mountedRef.current = true;
 
@@ -146,52 +126,22 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
       
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      setAuthLoading(false); // Always clear auth loading
 
       const isAuthPage = pathname.startsWith('/signin') || pathname.startsWith('/signup');
 
       if (currentUser) {
-        // User signed in - fetch profile with timeout
-        try {
-          const { data: profileData, error: profileError } = await Promise.race([
-            supabase
-              .from('user_profiles')
-              .select('username, display_name, profile_complete')
-              .eq('id', currentUser.id)
-              .single(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Profile timeout')), 2000))
-          ]) as any;
+        // User signed in - fetch profile quickly
+        const displayName = await fetchUserProfile(currentUser.id);
+        
+        if (!mountedRef.current) return;
+        
+        setProfileUsername(displayName);
 
-          if (!mountedRef.current) return;
-
-          if (profileError && profileError.code !== 'PGRST116') {
-            console.error("AuthButtons: Profile error in auth change:", profileError);
-            setProfileUsername(null);
-          } else if (profileData) {
-            // Prioritize username over display_name
-            const displayName = profileData.username || profileData.display_name;
-            setProfileUsername(displayName);
-            console.log("AuthButtons: Profile updated via auth change:", displayName);
-
-            // Handle navigation for sign-in events
-            if (event === 'SIGNED_IN' && isAuthPage) {
-              if (profileData.profile_complete) {
-                console.log("AuthButtons: Redirecting to home (profile complete)");
-                router.push('/');
-              } else {
-                console.log("AuthButtons: Redirecting to onboarding (profile incomplete)");
-                router.push('/onboarding');
-              }
-            }
-          } else if (mountedRef.current) {
-            setProfileUsername(null);
-            if (event === 'SIGNED_IN' && isAuthPage) {
-              console.log("AuthButtons: No profile found, redirecting to onboarding");
-              router.push('/onboarding');
-            }
-          }
-        } catch (error) {
-          console.error("AuthButtons: Profile fetch error in auth change:", error);
-          if (mountedRef.current) setProfileUsername(null);
+        // Handle navigation for sign-in events
+        if (event === 'SIGNED_IN' && isAuthPage) {
+          console.log("AuthButtons: Redirecting to home after sign-in");
+          router.push('/');
         }
       } else {
         // User signed out
@@ -205,21 +155,17 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
           router.push('/');
         }
       }
-
-      // Ensure loading state is cleared
-      if (mountedRef.current) {
-        setAuthLoading(false);
-      }
     });
 
     return () => {
       mountedRef.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      // Cancel any pending profile fetches
+      if (user?.id) {
+        fastProfileFetcher.cancelRequest(user.id);
       }
       authListener.subscription?.unsubscribe();
     };
-  }, [router, pathname, initializeAuth]);
+  }, [router, pathname, initializeAuth, fetchUserProfile, user?.id]);
 
   const handleSignOut = async () => {
     if (signingOut || !mountedRef.current) return;
@@ -247,7 +193,6 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   };
 
-  // FIXED: Simplified handler - always use parent
   const handleOpenCustomizer = useCallback(() => {
     if (mountedRef.current && onOpenProfileCustomizer) {
       onOpenProfileCustomizer();
@@ -256,19 +201,24 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   }, [onOpenProfileCustomizer]);
 
-  // Show loading state with shorter timeout
+  // Show minimal loading state
   if (authLoading) {
-    return <div className="text-xs animate-pulse text-gray-500">Auth...</div>;
+    return (
+      <div className="flex items-center space-x-2">
+        <div className="w-3 h-3 border border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-xs text-gray-500">Auth...</span>
+      </div>
+    );
   }
 
   // Show authenticated user UI
   if (user) {
-    // Show username instead of email, fallback to email only if no username
+    // Show cached username immediately, or email as fallback
     const displayName = profileUsername || user.email;
     
     return (
       <div className="flex items-center space-x-2">
-        {/* Profile Customizer Button - Only show if handler provided */}
+        {/* Profile Customizer Button */}
         {onOpenProfileCustomizer && (
           <Button 
             onClick={handleOpenCustomizer}
@@ -287,11 +237,15 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
           </Button>
         )}
 
+        {/* Display Name with loading indicator */}
         <span 
-          className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white" 
+          className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white flex items-center gap-1" 
           title={displayName ?? undefined}
         >
-          {displayName}
+          {displayName || 'User'}
+          {profileLoading && (
+            <div className="w-2 h-2 border border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+          )}
         </span>
 
         <Button 
