@@ -477,17 +477,19 @@ export const useVideoChat = () => {
     isPartnerLeftRecently
   });
 
-  useSystemMessages({
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    connectionError: socketResult.connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently,
-    partnerInterests,
-    interests,
-    messages: chatState.messages,
-    setMessages: chatState.setMessages
-  });
+    useSystemMessages({
+      isPartnerConnected: chatState.isPartnerConnected,
+      isFindingPartner: chatState.isFindingPartner,
+      connectionError: socketResult.connectionError,
+      isSelfDisconnectedRecently,
+      isPartnerLeftRecently,
+      partnerInterests,
+      interests,
+      messages: chatState.messages,
+      setMessages: chatState.setMessages,
+      wasSkippedByPartner: false, // Add default value
+      didSkipPartner: false       // Add default value
+    });
 
   const chatActions = useVideoChatActions({
     isConnected: socketResult.isConnected,
