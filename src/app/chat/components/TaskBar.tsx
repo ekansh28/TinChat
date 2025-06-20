@@ -12,6 +12,8 @@ export const TaskBar: React.FC = () => {
   const [isWin7Mode, setIsWin7Mode] = useState(false);
   const [isWinXPMode, setIsWinXPMode] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [audioVolume, setAudioVolume] = useState(2); // Range: 0-4 for Win7, 0-3 for others
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   // Check theme mode
   const checkThemeMode = useCallback(() => {
@@ -40,6 +42,54 @@ export const TaskBar: React.FC = () => {
     setCurrentTime(timeString);
   }, []);
 
+  // Get audio icon based on theme and volume
+  const getAudioIcon = useCallback(() => {
+    if (isWin7Mode) {
+      // Windows 7: 0.ico (muted), 1.ico-3.ico (volume levels)
+      if (audioVolume === 0) return '/icons/Taskbar/7/0.ico';
+      if (audioVolume === 1) return '/icons/Taskbar/7/1.ico';
+      if (audioVolume === 2) return '/icons/Taskbar/7/2.ico';
+      return '/icons/Taskbar/7/3.ico'; // audioVolume === 3
+    } else if (isWinXPMode) {
+      // Windows XP: XP.png (unmuted), XPMute.png (muted)
+      return audioVolume === 0 ? '/icons/Taskbar/XP/XPMute.png' : '/icons/Taskbar/XP/XP.png';
+    } else {
+      // Windows 98: 98.png (unmuted), 98Mute.png (muted)
+      return audioVolume === 0 ? '/icons/Taskbar/98/98Mute.png' : '/icons/Taskbar/98/98.png';
+    }
+  }, [isWin7Mode, isWinXPMode, audioVolume]);
+
+  // Handle volume change
+  const handleVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseInt(event.target.value);
+    setAudioVolume(newVolume);
+  }, []);
+
+  // Handle audio icon click
+  const handleAudioIconClick = useCallback(() => {
+    setShowVolumeSlider(prev => !prev);
+  }, []);
+
+  // Close volume slider when clicking outside
+  useEffect(() => {
+    if (!showVolumeSlider) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.volume-control-container')) {
+        setShowVolumeSlider(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showVolumeSlider]);
+
+  // Get max volume based on theme (all themes now use 1-3 range)
+  const getMaxVolume = useCallback(() => {
+    return 3;
+  }, []);
+
   // Theme detection effect
   useEffect(() => {
     if (!mounted) return;
@@ -48,6 +98,9 @@ export const TaskBar: React.FC = () => {
       const { isWin7, isWinXP } = checkThemeMode();
       setIsWin7Mode(isWin7);
       setIsWinXPMode(isWinXP);
+      
+      // Adjust volume range when theme changes (all themes now use 0-3)
+      setAudioVolume(prev => Math.min(prev, 3));
     };
 
     updateThemeState();
@@ -97,7 +150,7 @@ export const TaskBar: React.FC = () => {
     return null;
   }
 
-  // Windows 98 TaskBar (based on your paste.txt)
+  // Windows 98 TaskBar
   if (!isWin7Mode && !isWinXPMode) {
     return (
       <div className="taskbar" style={{ 
@@ -134,7 +187,6 @@ export const TaskBar: React.FC = () => {
             alt="Start" 
             style={{ width: '16px', height: '16px' }}
             onError={(e) => {
-              // Fallback if start.png doesn't exist
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
@@ -154,7 +206,7 @@ export const TaskBar: React.FC = () => {
           }}
         />
 
-        {/* Tasks area (empty but takes up space) */}
+        {/* Tasks area */}
         <div 
           className="tasks" 
           style={{ 
@@ -187,12 +239,55 @@ export const TaskBar: React.FC = () => {
             padding: '2px 4px',
             backgroundColor: '#c0c0c0',
             border: '1px inset #c0c0c0',
-            minWidth: '80px'
+            minWidth: '120px',
+            position: 'relative'
           }}
         >
-          {/* Tray icons container (empty but ready for future additions) */}
-          <div className="tray-icons" style={{ display: 'flex', gap: '2px' }}>
-            {/* Icons would go here - keeping empty as requested */}
+          {/* Audio Control */}
+          <div className="volume-control-container" style={{ position: 'relative' }}>
+            <img 
+              src={getAudioIcon()}
+              alt="Volume"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                marginRight: '4px'
+              }}
+              onClick={handleAudioIconClick}
+              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+            />
+            
+            {/* Volume Slider Popup */}
+            {showVolumeSlider && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginBottom: '8px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                padding: '8px',
+                zIndex: 6000
+              }}>
+                <div className="field-row">
+                  <label htmlFor="range25">Volume</label>
+                  <div className="is-vertical">
+                    <input 
+                      id="range25"
+                      className="has-box-indicator" 
+                      type="range" 
+                      min="0" 
+                      max="3"
+                      step="1" 
+                      value={audioVolume}
+                      onChange={handleVolumeChange}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Time */}
@@ -218,7 +313,7 @@ export const TaskBar: React.FC = () => {
     );
   }
 
-  // Windows 7 TaskBar (based on your paste.txt)
+  // Windows 7 TaskBar
   if (isWin7Mode) {
     return (
       <div 
@@ -240,7 +335,7 @@ export const TaskBar: React.FC = () => {
           zIndex: 5000
         }}
       >
-        {/* Start Button - Windows 7 style */}
+        {/* Start Button */}
         <button
           style={{
             width: '52px',
@@ -267,13 +362,12 @@ export const TaskBar: React.FC = () => {
             alt="Start" 
             style={{ width: '20px', height: '20px' }}
             onError={(e) => {
-              // Fallback - show Windows logo text
               (e.target as HTMLImageElement).outerHTML = '<span style="color: white; font-size: 12px; font-weight: bold;">⊞</span>';
             }}
           />
         </button>
 
-        {/* Taskbar items area (empty) */}
+        {/* Taskbar items area */}
         <div 
           id="taskbar-items" 
           style={{ 
@@ -294,12 +388,57 @@ export const TaskBar: React.FC = () => {
             background: 'rgba(255, 255, 255, 0.1)',
             borderRadius: '4px',
             backdropFilter: 'blur(5px)',
-            minWidth: '100px'
+            minWidth: '140px',
+            position: 'relative'
           }}
         >
-          {/* Tray icons area (empty but ready) */}
-          <div style={{ display: 'flex', gap: '4px', flex: 1 }}>
-            {/* Icons would go here */}
+          {/* Audio Control */}
+          <div className="volume-control-container" style={{ position: 'relative' }}>
+            <img 
+              src={getAudioIcon()}
+              alt="Volume"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                filter: 'brightness(0) invert(1)'
+              }}
+              onClick={handleAudioIconClick}
+              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+            />
+            
+            {/* Volume Slider Popup */}
+            {showVolumeSlider && (
+              <div className="glass active" style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginBottom: '8px',
+                background: 'rgba(240, 240, 240, 0.95)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '6px',
+                padding: '12px',
+                backdropFilter: 'blur(10px)',
+                zIndex: 6000,
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
+              }}>
+                <div className="field-row">
+                  <label>Volume</label>
+                  <div className="is-vertical">
+                    <input 
+                      className="has-box-indicator" 
+                      type="range" 
+                      min="0" 
+                      max="3"
+                      step="1" 
+                      value={audioVolume}
+                      onChange={handleVolumeChange}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Show Desktop Button */}
@@ -357,7 +496,7 @@ export const TaskBar: React.FC = () => {
     );
   }
 
-  // Windows XP TaskBar (based on your paste.txt footer)
+  // Windows XP TaskBar
   if (isWinXPMode) {
     return (
       <footer 
@@ -378,7 +517,7 @@ export const TaskBar: React.FC = () => {
           boxShadow: '0 -1px 3px rgba(0, 0, 0, 0.3)'
         }}
       >
-        {/* Start Button - XP Style */}
+        {/* Start Button */}
         <button
           style={{
             height: '24px',
@@ -409,14 +548,13 @@ export const TaskBar: React.FC = () => {
             alt="Start" 
             style={{ width: '16px', height: '16px' }}
             onError={(e) => {
-              // Fallback for missing start icon
               (e.target as HTMLImageElement).outerHTML = '<span style="color: white; font-size: 12px;">⊞</span>';
             }}
           />
           <span>start</span>
         </button>
 
-        {/* Task buttons area (empty) */}
+        {/* Task buttons area */}
         <div 
           className="footer__items left" 
           style={{ 
@@ -437,12 +575,57 @@ export const TaskBar: React.FC = () => {
             border: '1px inset #1941a5',
             borderRadius: '2px',
             padding: '2px 4px',
-            minWidth: '80px'
+            minWidth: '120px',
+            position: 'relative'
           }}
         >
-          {/* System tray icons area (empty but ready) */}
-          <div style={{ display: 'flex', gap: '2px', flex: 1 }}>
-            {/* Icons would go here */}
+          {/* Audio Control */}
+          <div className="volume-control-container" style={{ position: 'relative' }}>
+            <img 
+              src={getAudioIcon()}
+              alt="Volume"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                marginRight: '4px'
+              }}
+              onClick={handleAudioIconClick}
+              title={`Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
+            />
+            
+            {/* Volume Slider Popup */}
+            {showVolumeSlider && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginBottom: '8px',
+                background: '#ece9d8',
+                border: '2px outset #ece9d8',
+                borderRadius: '4px',
+                padding: '8px',
+                zIndex: 6000,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}>
+                <div className="field-row">
+                  <label htmlFor="range28">Volume</label>
+                  <div className="is-vertical">
+                    <input 
+                      id="range28"
+                      className="has-box-indicator" 
+                      type="range" 
+                      min="0" 
+                      max="3"
+                      step="1" 
+                      value={audioVolume}
+                      onChange={handleVolumeChange}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Time */}
