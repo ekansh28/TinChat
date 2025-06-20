@@ -3,15 +3,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Badge, UserProfile } from '../ProfileCustomizer/types';
-
-export interface ProfilePopupProps {
-  profile: UserProfile;
-  badges: Badge[];
-  customCSS: string;
-  isOpen: boolean;
-  onClose: () => void;
-}
+import { useProfilePopup } from '../ProfilePopup/ProfilePopupProvider';
 
 const STATUS_CONFIG = {
   online: { icon: '🟢', text: 'Online', color: '#43b581' },
@@ -20,37 +12,44 @@ const STATUS_CONFIG = {
   offline: { icon: '⚫', text: 'Offline', color: '#747f8d' }
 } as const;
 
-export function ProfilePopup({ profile, badges, customCSS, isOpen, onClose }: ProfilePopupProps) {
+export function ProfilePopup() {
+  const { popupState, hideProfile } = useProfilePopup();
   const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
-        onClose();
+        hideProfile();
       }
     };
 
-    if (isOpen) {
+    if (popupState.isVisible) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen, onClose]);
+  }, [popupState.isVisible, hideProfile]);
 
-  if (!isOpen) return null;
+  if (!popupState.isVisible || !popupState.profile) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div 
         ref={popupRef}
         className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden"
+        style={{
+          position: 'absolute',
+          left: popupState.position?.x ? `${popupState.position.x}px` : 'auto',
+          top: popupState.position?.y ? `${popupState.position.y}px` : 'auto',
+          transform: popupState.position ? 'translate(-50%, 0)' : 'none'
+        }}
       >
         <div className="p-4">
           <div className="flex items-center space-x-4">
             <img
-              src={profile.avatar_url || getDefaultAvatar()}
+              src={popupState.profile.avatar_url || getDefaultAvatar()}
               alt="Profile"
               className="w-16 h-16 rounded-full object-cover"
               onError={(e) => {
@@ -61,22 +60,22 @@ export function ProfilePopup({ profile, badges, customCSS, isOpen, onClose }: Pr
               <div 
                 className="text-lg font-semibold"
                 style={{ 
-                  color: profile.display_name_color || '#ffffff',
-                  animation: profile.display_name_animation === 'rainbow' ? 
-                    `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
+                  color: popupState.profile.display_name_color || '#ffffff',
+                  animation: popupState.profile.display_name_animation === 'rainbow' ? 
+                    `rainbow ${popupState.profile.rainbow_speed || 3}s infinite` : 'none'
                 }}
               >
-                {profile.display_name || profile.username || 'Unknown User'}
+                {popupState.profile.display_name || popupState.profile.username || 'Unknown User'}
               </div>
-              {profile.status && (
+              {popupState.profile.status && (
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {STATUS_CONFIG[profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
+                  {STATUS_CONFIG[popupState.profile.status as keyof typeof STATUS_CONFIG]?.text || 'Offline'}
                 </div>
               )}
             </div>
           </div>
 
-          {badges?.length > 0 && (
+          {popupState.badges?.length > 0 && (
             <div 
               className="mt-4 overflow-x-auto no-scrollbar"
               style={{ maxWidth: '100%' }}
@@ -89,7 +88,7 @@ export function ProfilePopup({ profile, badges, customCSS, isOpen, onClose }: Pr
               }}
             >
               <div className="flex gap-2 w-max">
-                {badges.map(badge => (
+                {popupState.badges.map(badge => (
                   <img
                     key={badge.id}
                     src={badge.url}
@@ -102,19 +101,10 @@ export function ProfilePopup({ profile, badges, customCSS, isOpen, onClose }: Pr
             </div>
           )}
           
-          {customCSS && (
-            <style dangerouslySetInnerHTML={{ __html: customCSS }} />
+          {popupState.customCSS && (
+            <style dangerouslySetInnerHTML={{ __html: popupState.customCSS }} />
           )}
         </div>
-        <style jsx>{`
-          .no-scrollbar::-webkit-scrollbar {
-            display: none;
-          }
-          .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-        `}</style>
       </div>
     </div>
   );

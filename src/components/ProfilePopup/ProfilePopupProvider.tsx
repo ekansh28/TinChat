@@ -2,6 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { Badge, UserProfile } from '../ProfileCustomizer/types';
 
 interface PopupPosition {
   x: number;
@@ -10,14 +11,15 @@ interface PopupPosition {
 
 interface PopupState {
   isVisible: boolean;
-  userId: string | null;
+  profile: UserProfile | null;
+  badges: Badge[];
+  customCSS: string;
   position: PopupPosition | null;
-  anchorRect: DOMRect | null;
 }
 
 interface ProfilePopupContextType {
   popupState: PopupState;
-  showProfile: (userId: string, clickEvent: React.MouseEvent | MouseEvent) => void;
+  showProfile: (profile: UserProfile, badges: Badge[], customCSS: string, clickEvent: React.MouseEvent | MouseEvent) => void;
   hideProfile: () => void;
 }
 
@@ -25,77 +27,58 @@ const ProfilePopupContext = createContext<ProfilePopupContextType | undefined>(u
 
 interface ProfilePopupProviderProps {
   children: ReactNode;
+  defaultCustomCSS?: string;
 }
 
-// Smart positioning algorithm
-const calculatePopupPosition = (
-  anchorRect: DOMRect, 
-  popupDimensions = { width: 320, height: 400 }
-): PopupPosition => {
-  const viewport = {
-    width: window.innerWidth,
-    height: window.innerHeight
+const calculatePopupPosition = (clickEvent: React.MouseEvent | MouseEvent) => {
+  return {
+    x: (clickEvent as MouseEvent).clientX,
+    y: (clickEvent as MouseEvent).clientY
   };
-  
-  const padding = 16; // Minimum distance from viewport edges
-  
-  // Default position: bottom-right of anchor element
-  let x = anchorRect.left;
-  let y = anchorRect.bottom + 8;
-  
-  // Horizontal boundary checks
-  if (x + popupDimensions.width > viewport.width - padding) {
-    // Flip to left side of anchor
-    x = anchorRect.right - popupDimensions.width;
-  }
-  
-  // Vertical boundary checks  
-  if (y + popupDimensions.height > viewport.height - padding) {
-    // Flip to top of anchor
-    y = anchorRect.top - popupDimensions.height - 8;
-  }
-  
-  // Ensure minimum padding from edges
-  x = Math.max(padding, Math.min(x, viewport.width - popupDimensions.width - padding));
-  y = Math.max(padding, Math.min(y, viewport.height - popupDimensions.height - padding));
-  
-  return { x, y };
 };
 
-export const ProfilePopupProvider: React.FC<ProfilePopupProviderProps> = ({ children }) => {
+export const ProfilePopupProvider: React.FC<ProfilePopupProviderProps> = ({ 
+  children,
+  defaultCustomCSS = ''
+}) => {
   const [popupState, setPopupState] = useState<PopupState>({
     isVisible: false,
-    userId: null,
-    position: null,
-    anchorRect: null
+    profile: null,
+    badges: [],
+    customCSS: defaultCustomCSS,
+    position: null
   });
 
-  const showProfile = useCallback((userId: string, clickEvent: React.MouseEvent | MouseEvent) => {
-    if (!userId || userId === 'anonymous') return;
-    
-    const target = clickEvent.target as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const position = calculatePopupPosition(rect);
+  const showProfile = useCallback((
+    profile: UserProfile,
+    badges: Badge[] = [],
+    customCSS: string = defaultCustomCSS,
+    clickEvent: React.MouseEvent | MouseEvent
+  ) => {
+    const position = calculatePopupPosition(clickEvent);
     
     setPopupState({
       isVisible: true,
-      userId,
-      position,
-      anchorRect: rect
+      profile,
+      badges,
+      customCSS,
+      position
     });
-  }, []);
+  }, [defaultCustomCSS]);
 
   const hideProfile = useCallback(() => {
-    setPopupState({
-      isVisible: false,
-      userId: null,
-      position: null,
-      anchorRect: null
-    });
+    setPopupState(prev => ({
+      ...prev,
+      isVisible: false
+    }));
   }, []);
 
   return (
-    <ProfilePopupContext.Provider value={{ popupState, showProfile, hideProfile }}>
+    <ProfilePopupContext.Provider value={{ 
+      popupState, 
+      showProfile, 
+      hideProfile 
+    }}>
       {children}
     </ProfilePopupContext.Provider>
   );
