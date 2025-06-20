@@ -6,6 +6,41 @@ html.theme-98.subtheme-dark-theme body {
   color: #f0f0f0 !important;
 }
 
+/* TaskBar Styling for Dark Theme */
+html.theme-98.subtheme-dark-theme .taskbar {
+  background-color: #0a0a0a !important;
+  border-top: 2px outset #2e2e2e !important;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+html.theme-98.subtheme-dark-theme .taskbar .start-button {
+  background-color: #1a1a1a !important;
+  border: 1px outset #2e2e2e !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+}
+
+html.theme-98.subtheme-dark-theme .taskbar .start-button:hover {
+  background-color: #2e2e2e !important;
+  border: 1px outset #3e3e3e !important;
+}
+
+html.theme-98.subtheme-dark-theme .taskbar .taskbar-divider {
+  background-color: #2e2e2e !important;
+  border-left: 1px solid #1a1a1a !important;
+  border-right: 1px solid #3e3e3e !important;
+}
+
+html.theme-98.subtheme-dark-theme .taskbar .tray {
+  background-color: #0a0a0a !important;
+  border: 1px inset #2e2e2e !important;
+}
+
+html.theme-98.subtheme-dark-theme .taskbar .taskbar-time {
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+}
+
 /* Window */
 html.theme-98.subtheme-dark-theme .window {
   background-color: #0a0a0a !important;

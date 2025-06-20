@@ -8,6 +8,43 @@
   background-size: auto !important;
 }
 
+/* TaskBar Styling for Pink Theme */
+.subtheme-pink-theme .taskbar {
+  background-color: #FFC0CB !important;
+  border-top: 2px outset #FFB6C1 !important;
+  box-shadow: 0 -2px 8px rgba(231, 84, 128, 0.3) !important;
+}
+
+.subtheme-pink-theme .taskbar .start-button {
+  background-color: #FFB6C1 !important;
+  border: 1px outset #FFDEE9 !important;
+  color: #800080 !important;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8) !important;
+}
+
+.subtheme-pink-theme .taskbar .start-button:hover {
+  background-color: #FF69B4 !important;
+  border: 1px outset #FFC0CB !important;
+  color: #ffffff !important;
+}
+
+.subtheme-pink-theme .taskbar .taskbar-divider {
+  background-color: #FF69B4 !important;
+  border-left: 1px solid #E75480 !important;
+  border-right: 1px solid #FFDEE9 !important;
+}
+
+.subtheme-pink-theme .taskbar .tray {
+  background-color: #FFB6C1 !important;
+  border: 1px inset #FF69B4 !important;
+}
+
+.subtheme-pink-theme .taskbar .taskbar-time {
+  color: #800080 !important;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8) !important;
+  font-weight: bold !important;
+}
+
 /* Window itself (outer border/background) */
 .theme-98 .window {
   background-color: #FFC0CB !important; /* Pink background */

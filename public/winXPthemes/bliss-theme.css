@@ -23,9 +23,36 @@ html.subtheme-bliss-theme body {
   min-height: 100vh !important;
 }
 
+/* TaskBar Styling for Bliss Theme */
+html.subtheme-bliss-theme .taskbar {
+  background: linear-gradient(to bottom, #4272db, #245edb, #1941a5) !important;
+  border-top: 2px solid #6090ff !important;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3) !important;
+}
 
+html.subtheme-bliss-theme .taskbar button {
+  background: linear-gradient(to bottom, #5080ff, #3375f0, #1941a5) !important;
+  border: 1px outset #4272db !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px 8px 8px 0 !important;
+}
 
+html.subtheme-bliss-theme .taskbar button:hover {
+  background: linear-gradient(to bottom, #6090ff, #4080ff, #2050c0) !important;
+  border: 1px outset #5080ff !important;
+}
 
+html.subtheme-bliss-theme .taskbar .footer__items.right {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px inset #245edb !important;
+  border-radius: 3px !important;
+}
+
+html.subtheme-bliss-theme .taskbar .footer__items.right > div:last-child {
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+}
 
 /* XP Status bar styling */
 html.subtheme-bliss-theme .status-bar {
@@ -76,8 +103,6 @@ html.subtheme-bliss-theme .modal {
   border: 1px solid #0054e3 !important;
   border-radius: 6px !important;
 }
-
-
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
