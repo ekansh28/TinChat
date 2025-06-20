@@ -196,4 +196,4 @@ const WebampPlayer: React.FC<WebampProps> = ({
   );
 };
 
-export default WebampPlayer;
+export default React.memo(WebampPlayer);

@@ -20,6 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Google AdSense Meta Tag */}
+        <meta 
+          name="google-adsense-account" 
+          content="ca-pub-5670235631357216" 
+        />
+
         {/* Load 98.css and 7.css from CDN */}
         <link 
           rel="stylesheet" 
@@ -37,7 +43,6 @@ export default function RootLayout({
           {children}
         </ThemeProvider>
         
-    
         {/* Load animated cursor script */}
         <Script 
           src="/animatedcursor.js" 
@@ -45,7 +50,7 @@ export default function RootLayout({
           id="animated-cursor-script"
         />
         
-        {/* Optional: Load oneko script if you want it always available */}
+        {/* Optional: Load oneko script */}
         <Script 
           src="/oneko.js" 
           strategy="lazyOnload"
