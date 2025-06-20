@@ -3,7 +3,6 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { saveCustomStamp, validateCssFileName } from '@/utils/themeManager';
 
 interface ThemeStampUploaderProps {
   isOpen: boolean;
@@ -18,12 +17,49 @@ interface ThemeStampUploaderProps {
   }) => void;
 }
 
-interface StampData {
+export interface StampData {
   name: string;
   imageUrl: string;
   cssFile: string;
   dataAiHint: string;
 }
+
+// Helper function to validate CSS filename
+const validateCssFileName = (filename: string): { valid: boolean; error?: string } => {
+  if (!filename.trim()) {
+    return { valid: false, error: 'CSS filename is required' };
+  }
+  
+  const trimmed = filename.trim();
+  
+  // Check for invalid characters
+  const invalidChars = /[<>:"/\\|?*]/;
+  if (invalidChars.test(trimmed)) {
+    return { valid: false, error: 'Filename contains invalid characters: < > : " / \\ | ? *' };
+  }
+  
+  // Check length
+  if (trimmed.length > 100) {
+    return { valid: false, error: 'Filename is too long (max 100 characters)' };
+  }
+  
+  return { valid: true };
+};
+
+// Helper function to save custom stamp
+const saveCustomStamp = (mode: 'win98' | 'win7' | 'winxp', stampData: StampData): boolean => {
+  try {
+    const storageKey = `customThemeStamps_${mode}`;
+    const existingStamps = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    const updatedStamps = [...existingStamps, stampData];
+    localStorage.setItem(storageKey, JSON.stringify(updatedStamps));
+    console.log(`[ThemeStampUploader] Saved custom stamp for ${mode}:`, stampData);
+    return true;
+  } catch (error) {
+    console.error('[ThemeStampUploader] Error saving custom stamp:', error);
+    return false;
+  }
+};
 
 const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
   isOpen,
@@ -130,6 +166,61 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
             let inRule = false;
             let braceDepth = 0;
             
+            // Helper function to check if a string contains balanced quotes within CSS functions
+            const hasBalancedQuotesInFunctions = (line: string): boolean => {
+              // More robust function detection that handles URLs with protocols
+              let processedLine = line;
+              
+              // First, handle url() functions specifically (most common case with protocols)
+              const urlPattern = /url\s*\(\s*(['"]?)[^)]*\1\s*\)/gi;
+              processedLine = processedLine.replace(urlPattern, '__URL_FUNCTION__');
+              
+              // Handle other CSS functions
+              const otherFunctionPattern = /(calc|linear-gradient|radial-gradient|rgba|hsla|attr|var|cubic-bezier|matrix|translate|rotate|scale|skew)\s*\([^)]*\)/gi;
+              processedLine = processedLine.replace(otherFunctionPattern, '__CSS_FUNCTION__');
+              
+              // Special handling for incomplete URLs (like when split across analysis)
+              // Check if we have url(' or url(" without closing
+              const incompleteUrlPattern = /url\s*\(\s*(['"][^'"]*$)/gi;
+              if (incompleteUrlPattern.test(line)) {
+                // This is likely an incomplete URL due to line splitting, consider it balanced
+                return true;
+              }
+              
+              // Now count quotes in the remaining content
+              const singleQuotes = (processedLine.match(/(?<!\\)'/g) || []).length;
+              const doubleQuotes = (processedLine.match(/(?<!\\)"/g) || []).length;
+              
+              return singleQuotes % 2 === 0 && doubleQuotes % 2 === 0;
+            };
+            
+            // Helper function to check if a line is a complete CSS property
+            const isCompleteProperty = (line: string): boolean => {
+              const trimmed = line.trim();
+              
+              // Skip if it's not a property-like line
+              if (!trimmed.includes(':') || trimmed.includes('{') || trimmed.includes('}')) {
+                return true; // Not a property, so don't check
+              }
+              
+              // Check if it's inside a CSS function that might span multiple lines
+              const openParens = (trimmed.match(/\(/g) || []).length;
+              const closeParens = (trimmed.match(/\)/g) || []).length;
+              
+              // If parentheses are unbalanced, this might be a multi-line function
+              if (openParens !== closeParens) {
+                return true; // Assume it's part of a multi-line declaration
+              }
+              
+              // Check for common multi-line scenarios
+              if (trimmed.endsWith(',') || trimmed.endsWith('\\')) {
+                return true; // Likely continuation
+              }
+              
+              // Check if it ends with semicolon or is the last property before closing brace
+              return trimmed.endsWith(';') || trimmed.endsWith('{');
+            };
+            
             lines.forEach((line, index) => {
               const lineNum = index + 1;
               let processedLine = line;
@@ -178,16 +269,26 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
               
               // Check for properties (lines with colons inside rules)
               if (inRule && trimmedLine.includes(':') && !trimmedLine.includes('{') && !trimmedLine.includes('}')) {
-                // This looks like a property declaration
-                if (!trimmedLine.endsWith(';') && !trimmedLine.endsWith('{')) {
-                  // Only flag as error if it's clearly a property (has a colon and looks like property: value)
+                // Check if this is a complete property and needs semicolon
+                if (!isCompleteProperty(trimmedLine)) {
                   const colonIndex = trimmedLine.indexOf(':');
                   const beforeColon = trimmedLine.substring(0, colonIndex).trim();
                   const afterColon = trimmedLine.substring(colonIndex + 1).trim();
                   
-                  // Basic check: if it looks like a CSS property
-                  if (beforeColon && afterColon && beforeColon.match(/^[a-zA-Z-]+$/)) {
-                    errors.push(`Line ${lineNum}: Missing semicolon - "${trimmedLine}"`);
+                  // Basic check: if it looks like a CSS property and isn't a pseudo-selector
+                  if (beforeColon && afterColon && beforeColon.match(/^[a-zA-Z-]+$/) && !beforeColon.includes('::') && !beforeColon.includes(':')) {
+                    // Check if next line might be a continuation
+                    const nextLine = lines[index + 1];
+                    const isNextLineContinuation = nextLine && (
+                      nextLine.trim().startsWith(',') ||
+                      nextLine.trim().startsWith(')') ||
+                      !nextLine.trim().includes(':') ||
+                      nextLine.trim().startsWith('}')
+                    );
+                    
+                    if (!isNextLineContinuation) {
+                      errors.push(`Line ${lineNum}: Missing semicolon - "${trimmedLine}"`);
+                    }
                   }
                 }
                 
@@ -195,21 +296,45 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                 const propertyMatch = trimmedLine.match(/^([^:]+):/);
                 if (propertyMatch) {
                   const property = propertyMatch[1].trim();
-                  // Check for spaces in property names (excluding CSS custom properties)
-                  if (property.includes(' ') && !property.startsWith('--')) {
+                  // Check for spaces in property names (excluding CSS custom properties and pseudo-selectors)
+                  if (property.includes(' ') && !property.startsWith('--') && !property.includes('::') && !property.includes(':')) {
                     errors.push(`Line ${lineNum}: Invalid property name "${property}"`);
                   }
                 }
               }
               
-              // Check for unclosed strings
-              const singleQuotes = (trimmedLine.match(/(?<!\\)'/g) || []).length;
-              const doubleQuotes = (trimmedLine.match(/(?<!\\)"/g) || []).length;
-              if (singleQuotes % 2 !== 0) {
-                errors.push(`Line ${lineNum}: Unclosed single quote in "${trimmedLine}"`);
-              }
-              if (doubleQuotes % 2 !== 0) {
-                errors.push(`Line ${lineNum}: Unclosed double quote in "${trimmedLine}"`);
+              // Check for unclosed strings (but handle CSS functions properly)
+              if (trimmedLine.includes('"') || trimmedLine.includes("'")) {
+                // Check if this line contains a complete CSS function with quotes
+                const hasCompleteUrl = /url\s*\(\s*(['"])[^'"]*\1\s*\)/.test(trimmedLine);
+                const hasCompleteFunction = /(calc|linear-gradient|radial-gradient|rgba|hsla|attr|var|cubic-bezier)\s*\([^)]*\)/.test(trimmedLine);
+                
+                if (!hasCompleteUrl && !hasCompleteFunction && !hasBalancedQuotesInFunctions(trimmedLine)) {
+                  // Additional check: see if this might be a URL that was truncated in our analysis
+                  const hasUrlStart = /url\s*\(\s*(['"])/i.test(trimmedLine);
+                  const hasHttps = /https?:/i.test(trimmedLine);
+                  
+                  // If it has url( and https: but doesn't look complete, it might be a parsing issue
+                  if (hasUrlStart && hasHttps) {
+                    // Skip validation for this line as it's likely a valid but complex URL
+                    return;
+                  }
+                  
+                  // Only report if it's clearly a problem (not within CSS functions)
+                  const withoutFunctions = trimmedLine
+                    .replace(/url\s*\([^)]*\)/gi, '')
+                    .replace(/(calc|linear-gradient|radial-gradient|rgba|hsla|attr|var|cubic-bezier)\s*\([^)]*\)/gi, '');
+                  
+                  const singleQuotes = (withoutFunctions.match(/(?<!\\)'/g) || []).length;
+                  const doubleQuotes = (withoutFunctions.match(/(?<!\\)"/g) || []).length;
+                  
+                  if (singleQuotes % 2 !== 0) {
+                    errors.push(`Line ${lineNum}: Unclosed single quote in "${trimmedLine}"`);
+                  }
+                  if (doubleQuotes % 2 !== 0) {
+                    errors.push(`Line ${lineNum}: Unclosed double quote in "${trimmedLine}"`);
+                  }
+                }
               }
             });
             
@@ -603,10 +728,10 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
     return canvas.toDataURL();
   }, [cssFileName, stampName, mode]);
 
-  // Handle stamp name change
+  // Handle stamp name change (max 20 characters)
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (value.length <= 30) {
+    if (value.length <= 20) {
       setStampName(value);
     }
   }, []);
@@ -650,7 +775,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
         {/* Title Bar */}
         <div 
           className={cn("flex items-center justify-between p-2", themeStyles.titleBar)}
-          style={{ flexShrink: 0 }} // Prevent title bar from shrinking
+          style={{ flexShrink: 0 }}
         >
           <div className="flex items-center gap-2">
             <span className="text-lg">🎨</span>
@@ -679,17 +804,16 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
-            // Hide scrollbars
-            scrollbarWidth: 'none', // Firefox
-            msOverflowStyle: 'none', // IE and Edge
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           }}
         >
-          {/* CSS injection to hide webkit scrollbars */}
           <style jsx>{`
             div::-webkit-scrollbar {
               display: none;
             }
           `}</style>
+
           {/* CSS File Upload Section */}
           <div className="mb-4">
             <label className="block text-sm font-bold mb-2">
@@ -798,6 +922,9 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                 placeholder="e.g., mytheme"
                 className={cn("w-full", themeStyles.input)}
                 disabled={isCreating}
+                style={{
+                  borderRadius: mode === 'win98' ? '0' : '4px'
+                }}
               />
               <div className="text-xs text-gray-500 mt-1">
                 Will be saved as: {cssFileName || 'filename'}.css in /{mode === 'win98' ? 'win98themes' : mode === 'win7' ? 'win7themes' : 'winxpthemes'}/
@@ -808,7 +935,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
           {/* Theme Name Input */}
           <div className="mb-4">
             <label className="block text-sm font-bold mb-2">
-              Theme Display Name (Optional)
+              Theme Display Name (max 20 characters)
             </label>
             <input
               type="text"
@@ -816,11 +943,14 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
               onChange={handleNameChange}
               placeholder={cssFileName ? cssFileName : 'Theme name'}
               className={cn("w-full", themeStyles.input)}
-              maxLength={30}
+              maxLength={20}
               disabled={isCreating}
+              style={{
+                borderRadius: mode === 'win98' ? '0' : '4px'
+              }}
             />
             <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
-              <span>{stampName.length}/30 characters</span>
+              <span>{stampName.length}/20 characters</span>
               {!stampName.trim() && cssFileName && (
                 <span className="text-blue-600">Will use: {cssFileName}</span>
               )}
@@ -830,7 +960,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
           {/* Theme Image Upload */}
           <div className="mb-4">
             <label className="block text-sm font-bold mb-2">
-              Theme Preview Image (Optional, max 10MB)
+              Theme Preview Image (max 10MB)
             </label>
             
             <div className="flex gap-4">
@@ -848,7 +978,8 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '8px'
+                    padding: '8px',
+                    borderRadius: mode === 'win98' ? '0' : '4px'
                   }}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -868,14 +999,17 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                   )}
                 </div>
                 
-                {/* Remove Image Button - Below Upload Box */}
+                {/* Remove Image Button */}
                 {uploadedImage && (
                   <button
                     onClick={handleRemoveImage}
                     className={cn(
                       "w-full mt-2 py-1 text-xs flex items-center justify-center gap-1",
-                      "bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 rounded transition-colors"
+                      "bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 transition-colors"
                     )}
+                    style={{
+                      borderRadius: mode === 'win98' ? '0' : '4px'
+                    }}
                     title="Remove uploaded image"
                   >
                     <span>×</span>
@@ -902,7 +1036,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                     style={{
                       width: '99px',
                       height: '55px',
-                      objectFit: 'stretch' // Force stretch to exact dimensions
+                      objectFit: 'stretch'
                     }}
                   />
                 ) : (
@@ -916,7 +1050,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
 
           {/* Error Display */}
           {error && (
-            <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 text-sm rounded flex items-start gap-2">
+            <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 text-sm flex items-start gap-2" style={{ borderRadius: mode === 'win98' ? '0' : '4px' }}>
               <span className="text-red-500">⚠️</span>
               <div>{error}</div>
             </div>
@@ -924,7 +1058,7 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
 
           {/* Preview of final stamp */}
           {cssFileName && (
-            <div className="mb-4 p-2 bg-gray-50 border border-gray-300 rounded">
+            <div className="mb-4 p-2 bg-gray-50 border border-gray-300" style={{ borderRadius: mode === 'win98' ? '0' : '4px' }}>
               <div className="text-xs font-bold mb-2">Final Preview:</div>
               <div className="flex items-center gap-2">
                 <img
@@ -932,9 +1066,9 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                   alt="Final preview"
                   className="border border-gray-400"
                   style={{ 
-                    width: '64px', // Scaled down for preview
-                    height: '35px', // Scaled down maintaining 99:55 ratio
-                    objectFit: 'stretch', // Force stretch to exact dimensions
+                    width: '64px',
+                    height: '35px',
+                    objectFit: 'stretch',
                     imageRendering: 'pixelated' 
                   }}
                 />
@@ -958,6 +1092,26 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
               className={cn(
                 "px-4 py-2", 
                 themeStyles.button,
+                isCreating && 'opacity-50 cursor-not-allowed'
+              )}
+              style={{
+                borderRadius: mode === 'win98' ? '0' : '4px'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateStamp}
+              disabled={
+                isCreating || 
+                !!error || 
+                !cssFileName.trim() || 
+                cssValidationStatus === 'validating' ||
+                (uploadedCssContent && cssValidationStatus === 'invalid')
+              }
+              className={cn(
+                "px-4 py-2", 
+                themeStyles.button,
                 (isCreating || 
                  !!error || 
                  !cssFileName.trim() || 
@@ -965,6 +1119,9 @@ const ThemeStampUploader: React.FC<ThemeStampUploaderProps> = ({
                  (uploadedCssContent && cssValidationStatus === 'invalid')
                 ) && 'opacity-50 cursor-not-allowed'
               )}
+              style={{
+                borderRadius: mode === 'win98' ? '0' : '4px'
+              }}
             >
               {isCreating ? (
                 <span className="flex items-center gap-2">
@@ -1012,5 +1169,3 @@ export const removeCustomStamp = (mode: 'win98' | 'win7' | 'winxp', cssFile: str
 };
 
 export default ThemeStampUploader;
-export type { StampData };
-             

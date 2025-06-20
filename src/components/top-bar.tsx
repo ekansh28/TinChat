@@ -49,6 +49,9 @@ export function TopBar() {
   const [isWinXPMode, setIsWinXPMode] = useState(false);
   const [isUploaderOpen, setIsUploaderOpen] = useState(false);
   const [uploadCssFileName, setUploadCssFileName] = useState('');
+  const [isLoadingStamps, setIsLoadingStamps] = useState(false);
+  const [isApplyingTheme, setIsApplyingTheme] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Force re-render trigger
   const [customStamps, setCustomStamps] = useState<{
     win98: StampData[];
     win7: StampData[];
@@ -62,29 +65,44 @@ export function TopBar() {
   const themeIconRef = useRef<HTMLImageElement>(null);
   const customizerWindowRef = useRef<HTMLDivElement>(null);
 
-  // Load custom stamps from localStorage
-  const loadAllCustomStamps = useCallback(() => {
-    setCustomStamps({
-      win98: loadCustomStamps('win98'),
-      win7: loadCustomStamps('win7'),
-      winxp: loadCustomStamps('winxp')
-    });
-  }, []);
-
   // Get current mode
   const currentMode = isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98');
-    // ← add AFTER mounted is true
-  useEffect(() => {
-    if (!isUploaderOpen) {
-      loadAllCustomStamps();
-    }
-  }, [isUploaderOpen, loadAllCustomStamps]);
-  // ↑ This reloads themes when uploader closes
 
-    useEffect(() => {
-    setMounted(true);
+  // Load custom stamps from localStorage with loading state
+  const loadAllCustomStamps = useCallback(async () => {
+    setIsLoadingStamps(true);
+    console.log('[TopBar] Loading custom stamps...');
+    
+    try {
+      // Add a small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const win98Stamps = loadCustomStamps('win98');
+      const win7Stamps = loadCustomStamps('win7');
+      const winxpStamps = loadCustomStamps('winxp');
+      
+      console.log('[TopBar] Loaded stamps:', {
+        win98: win98Stamps.length,
+        win7: win7Stamps.length,
+        winxp: winxpStamps.length
+      });
+      
+      setCustomStamps({
+        win98: win98Stamps,
+        win7: win7Stamps,
+        winxp: winxpStamps
+      });
+      
+      // Force refresh of the theme list
+      setRefreshTrigger(prev => prev + 1);
+      
+    } catch (error) {
+      console.error('[TopBar] Error loading custom stamps:', error);
+    } finally {
+      setIsLoadingStamps(false);
+    }
   }, []);
-  
+
   // Combine built-in and custom stamps
   const currentStamps = React.useMemo(() => {
     let builtInStamps: ThemeStamp[] = [];
@@ -101,9 +119,12 @@ export function TopBar() {
       customStampsForMode = customStamps.win98;
     }
 
-    // Add custom stamps
+    // Add custom stamps with proper typing
     const customThemeStamps: ThemeStamp[] = customStampsForMode.map(stamp => ({
-      ...stamp,
+      name: stamp.name,
+      imageUrl: stamp.imageUrl,
+      cssFile: stamp.cssFile,
+      dataAiHint: stamp.dataAiHint,
       isCustom: true
     }));
 
@@ -116,15 +137,32 @@ export function TopBar() {
       isCustom: false
     };
 
-    return [...builtInStamps, ...customThemeStamps, addThemeStamp];
-  }, [isWinXPMode, isWin7Mode, customStamps, currentMode]);
+    const allStamps = [...builtInStamps, ...customThemeStamps, addThemeStamp];
+    console.log('[TopBar] Current stamps for', currentMode, ':', allStamps.length);
+    
+    return allStamps;
+  }, [isWinXPMode, isWin7Mode, customStamps, currentMode, refreshTrigger]);
 
   // Load custom stamps on mount and when mode changes
   useEffect(() => {
     if (mounted) {
+      console.log('[TopBar] Mode changed, reloading stamps for:', currentMode);
       loadAllCustomStamps();
     }
   }, [mounted, loadAllCustomStamps, isWin7Mode, isWinXPMode]);
+
+  // Load stamps when uploader closes
+  useEffect(() => {
+    if (!isUploaderOpen && mounted) {
+      console.log('[TopBar] Uploader closed, reloading stamps');
+      loadAllCustomStamps();
+    }
+  }, [isUploaderOpen, loadAllCustomStamps, mounted]);
+
+  // Initial mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Helper function for title button styles
   const getTitleButtonStyle = useCallback((currentMode: 'win98' | 'win7' | 'winxp', isClose = false) => {
@@ -191,86 +229,109 @@ export function TopBar() {
     }
   }, []);
 
-  const applySubTheme = useCallback((cssFile: string | null, forceMode?: 'win98' | 'win7' | 'winxp') => {
+  const applySubTheme = useCallback(async (cssFile: string | null, forceMode?: 'win98' | 'win7' | 'winxp') => {
     if (typeof window === 'undefined') return;
     
-    const currentMode = forceMode || (isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98'));
-    const htmlElement = document.documentElement;
-    const subThemeClassName = cssFile ? `subtheme-${cssFile.replace('.css', '')}` : null;
-
-    // Remove all existing sub-theme classes
-    [...availableStamps, ...available7Stamps, ...availableXPStamps, ...customStamps.win98, ...customStamps.win7, ...customStamps.winxp].forEach(stamp => {
-      if (stamp.cssFile) {
-        const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
-        htmlElement.classList.remove(existingSubThemeClass);
-      }
-    });
-
-    if (subThemeClassName) {
-      htmlElement.classList.add(subThemeClassName);
-    }
+    setIsApplyingTheme(true);
+    console.log('[TopBar] Applying theme:', cssFile, 'for mode:', forceMode || currentMode);
     
-    htmlElement.classList.add('theme-transitioning');
+    try {
+      const currentMode = forceMode || (isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98'));
+      const htmlElement = document.documentElement;
+      const subThemeClassName = cssFile ? `subtheme-${cssFile.replace('.css', '')}` : null;
 
-    let link = document.getElementById(DYNAMIC_THEME_STYLE_ID) as HTMLLinkElement | null;
+      // Remove all existing sub-theme classes
+      [...availableStamps, ...available7Stamps, ...availableXPStamps, ...customStamps.win98, ...customStamps.win7, ...customStamps.winxp].forEach(stamp => {
+        if (stamp.cssFile) {
+          const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
+          htmlElement.classList.remove(existingSubThemeClass);
+        }
+      });
 
-    if (cssFile) {
-      let folderPrefix = 'win98themes';
-      if (currentMode === 'win7') folderPrefix = 'win7themes';
-      else if (currentMode === 'winxp') folderPrefix = 'winxpthemes';
+      if (subThemeClassName) {
+        htmlElement.classList.add(subThemeClassName);
+      }
       
-      const newHref = `/${folderPrefix}/${cssFile}`;
-      
-      if (link) {
-        if (link.getAttribute('href') !== newHref) {
+      htmlElement.classList.add('theme-transitioning');
+
+      let link = document.getElementById(DYNAMIC_THEME_STYLE_ID) as HTMLLinkElement | null;
+
+      if (cssFile) {
+        let folderPrefix = 'win98themes';
+        if (currentMode === 'win7') folderPrefix = 'win7themes';
+        else if (currentMode === 'winxp') folderPrefix = 'winxpthemes';
+        
+        const newHref = `/${folderPrefix}/${cssFile}`;
+        
+        if (link) {
+          if (link.getAttribute('href') !== newHref) {
+            link.href = newHref;
+          }
+        } else {
+          link = document.createElement('link');
+          link.id = DYNAMIC_THEME_STYLE_ID;
+          link.rel = 'stylesheet';
           link.href = newHref;
+          document.head.appendChild(link);
+        }
+        
+        if (pathname !== '/') {
+          const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
+          localStorage.setItem(storageKey, cssFile);
         }
       } else {
-        link = document.createElement('link');
-        link.id = DYNAMIC_THEME_STYLE_ID;
-        link.rel = 'stylesheet';
-        link.href = newHref;
-        document.head.appendChild(link);
+        if (link) {
+          link.remove();
+        }
+        
+        if (pathname !== '/') {
+          const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
+          localStorage.removeItem(storageKey);
+        }
       }
       
-      if (pathname !== '/') {
-        const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
-        localStorage.setItem(storageKey, cssFile);
-      }
-    } else {
-      if (link) {
-        link.remove();
-      }
+      // Add a small delay to show the loading state
+      await new Promise(resolve => setTimeout(resolve, 150));
       
-      if (pathname !== '/') {
-        const storageKey = `selected${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}SubTheme`;
-        localStorage.removeItem(storageKey);
-      }
-    }
-    
-    setTimeout(() => {
       htmlElement.classList.remove('theme-transitioning');
-    }, 150);
-  }, [pathname, isWin7Mode, isWinXPMode, customStamps]);
+    } catch (error) {
+      console.error('[TopBar] Error applying theme:', error);
+    } finally {
+      setIsApplyingTheme(false);
+    }
+  }, [pathname, isWin7Mode, isWinXPMode, customStamps, currentMode]);
 
-  // Handle stamp created
-  const handleStampCreated = useCallback((stampData: StampData) => {
+  // Handle stamp created with better integration
+  const handleStampCreated = useCallback(async (stampData: StampData) => {
     console.log('[TopBar] Theme stamp created:', stampData);
     
-    // Reload custom stamps to show the new one immediately
-    loadAllCustomStamps();
+    setIsLoadingStamps(true);
     
-    // Optionally apply the new theme immediately
-    applySubTheme(stampData.cssFile, currentMode);
-    
-    // Force re-render by updating a state
-    setIsCustomizerOpen(false);
-    setTimeout(() => {
+    try {
+      // Reload custom stamps to show the new one immediately
+      await loadAllCustomStamps();
+      
+      // Apply the new theme immediately if we're not on home page
       if (pathname !== '/') {
-        setIsCustomizerOpen(true);
-        setCustomizerPosition(calculateCustomizerPosition());
+        await applySubTheme(stampData.cssFile, currentMode);
       }
-    }, 100);
+      
+      console.log('[TopBar] Successfully integrated new theme:', stampData.name);
+      
+    } catch (error) {
+      console.error('[TopBar] Error integrating new theme:', error);
+    } finally {
+      setIsLoadingStamps(false);
+      
+      // Close and reopen customizer to refresh the view
+      setIsCustomizerOpen(false);
+      setTimeout(() => {
+        if (pathname !== '/') {
+          setIsCustomizerOpen(true);
+          setCustomizerPosition(calculateCustomizerPosition());
+        }
+      }, 100);
+    }
   }, [loadAllCustomStamps, currentMode, applySubTheme, pathname]);
 
   const loadWin7CSS = useCallback(() => {
@@ -323,7 +384,7 @@ export function TopBar() {
     try {
       const iconRect = themeIconRef.current.getBoundingClientRect();
       const windowWidth = 300;
-      const windowHeight = Math.min(500, window.innerHeight * 0.8); // Increased height for more stamps
+      const windowHeight = Math.min(500, window.innerHeight * 0.8);
       const margin = 20;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -365,7 +426,7 @@ export function TopBar() {
   }, []);
 
   // Handle minimize (Windows 98)
-  const handleMinimize = useCallback(() => {
+  const handleMinimize = useCallback(async () => {
     const wasCustomizerOpen = isCustomizerOpen;
     setIsCustomizerOpen(false);
     setIsWin7Mode(false);
@@ -381,11 +442,11 @@ export function TopBar() {
     }
     
     const storedWin98SubTheme = localStorage.getItem('selectedWin98SubTheme');
-    applySubTheme(storedWin98SubTheme || null, 'win98');
+    await applySubTheme(storedWin98SubTheme || null, 'win98');
   }, [isCustomizerOpen, removeWin7CSS, removeWinXPCSS, applySubTheme, calculateCustomizerPosition]);
 
   // Handle maximize (Windows 7)
-  const handleMaximize = useCallback(() => {
+  const handleMaximize = useCallback(async () => {
     const wasCustomizerOpen = isCustomizerOpen;
     setIsCustomizerOpen(false);
     setIsWin7Mode(true);
@@ -400,14 +461,14 @@ export function TopBar() {
       }, 300);
     }
     
-    setTimeout(() => {
+    setTimeout(async () => {
       const storedWin7SubTheme = localStorage.getItem('selectedWin7SubTheme');
-      applySubTheme(storedWin7SubTheme || null, 'win7');
+      await applySubTheme(storedWin7SubTheme || null, 'win7');
     }, 400);
   }, [isCustomizerOpen, loadWin7CSS, removeWinXPCSS, applySubTheme, calculateCustomizerPosition]);
 
   // Handle close (Windows XP)
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     const wasCustomizerOpen = isCustomizerOpen;
     setIsCustomizerOpen(false);
     setIsWin7Mode(false);
@@ -422,9 +483,9 @@ export function TopBar() {
       }, 300);
     }
     
-    setTimeout(() => {
+    setTimeout(async () => {
       const storedWinXPSubTheme = localStorage.getItem('selectedWinxpSubTheme');
-      applySubTheme(storedWinXPSubTheme || null, 'winxp');
+      await applySubTheme(storedWinXPSubTheme || null, 'winxp');
     }, 400);
   }, [isCustomizerOpen, loadWinXPCSS, removeWin7CSS, applySubTheme, calculateCustomizerPosition]);
 
@@ -453,34 +514,38 @@ export function TopBar() {
     }
   }, [pathname, applySubTheme, mounted, isWin7Mode, isWinXPMode, removeWin7CSS, removeWinXPCSS]);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   // Handle delete custom stamp
-  const handleDeleteCustomStamp = useCallback((cssFile: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent theme selection when clicking delete
+  const handleDeleteCustomStamp = useCallback(async (cssFile: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     
     if (confirm(`Are you sure you want to delete the custom theme "${cssFile}"?`)) {
-      // Remove from localStorage
-      const storageKey = `customThemeStamps_${currentMode}`;
-      const existingStamps = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      const filteredStamps = existingStamps.filter((stamp: StampData) => stamp.cssFile !== cssFile);
-      localStorage.setItem(storageKey, JSON.stringify(filteredStamps));
+      setIsLoadingStamps(true);
       
-      // Also remove CSS content if stored
-      const cssStorageKey = `cssContent_${currentMode}_${cssFile}`;
-      localStorage.removeItem(cssStorageKey);
-      
-      // Reload stamps to update UI
-      loadAllCustomStamps();
-      
-      console.log(`[TopBar] Deleted custom theme: ${cssFile}`);
+      try {
+        // Remove from localStorage
+        const storageKey = `customThemeStamps_${currentMode}`;
+        const existingStamps = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        const filteredStamps = existingStamps.filter((stamp: StampData) => stamp.cssFile !== cssFile);
+        localStorage.setItem(storageKey, JSON.stringify(filteredStamps));
+        
+        // Also remove CSS content if stored
+        const cssStorageKey = `cssContent_${currentMode}_${cssFile}`;
+        localStorage.removeItem(cssStorageKey);
+        
+        // Reload stamps to update UI
+        await loadAllCustomStamps();
+        
+        console.log(`[TopBar] Deleted custom theme: ${cssFile}`);
+      } catch (error) {
+        console.error('[TopBar] Error deleting custom theme:', error);
+      } finally {
+        setIsLoadingStamps(false);
+      }
     }
   }, [currentMode, loadAllCustomStamps]);
 
   // Handle sub-theme selection
-  const handleSubThemeSelect = useCallback((cssFile: string | null) => {
+  const handleSubThemeSelect = useCallback(async (cssFile: string | null) => {
     if (pathname === '/') return;
     
     // Handle Add Theme click - open modal directly
@@ -489,7 +554,7 @@ export function TopBar() {
       return;
     }
     
-    applySubTheme(cssFile);
+    await applySubTheme(cssFile);
     setIsCustomizerOpen(false);
   }, [pathname, applySubTheme]);
 
@@ -563,19 +628,32 @@ export function TopBar() {
 
   // Calculate if we need scrolling (more than 5 stamps)
   const needsScrolling = currentStamps.length > 5;
-  const maxHeight = needsScrolling ? '400px' : 'auto'; // Increased max height
+  const maxHeight = needsScrolling ? '400px' : 'auto';
 
   return (
     <>
       <div className="flex justify-end items-center p-2 space-x-2">
         <span className="mr-2 text-sm"></span>
 
+        {/* Loading indicator in top bar */}
+        {(isLoadingStamps || isApplyingTheme) && (
+          <div className="flex items-center mr-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+            <span className="ml-1 text-xs text-gray-600">
+              {isApplyingTheme ? 'Applying...' : 'Loading...'}
+            </span>
+          </div>
+        )}
+
         {pathname !== '/' && (
           <img
             ref={themeIconRef}
             src="/icons/theme.png"
             alt="Customize Theme"
-            className="w-5 h-5 cursor-pointer"
+            className={cn(
+              "w-5 h-5 cursor-pointer transition-opacity",
+              (isLoadingStamps || isApplyingTheme) && "opacity-50"
+            )}
             onClick={toggleCustomizer}
             data-ai-hint="theme settings icon"
           />
@@ -651,6 +729,7 @@ export function TopBar() {
                 ...(isWinXPMode ? { color: '#fff' } : isWin7Mode ? { color: '#333' } : {})
               }}>
                 Theme Customizer {needsScrolling && `(${currentStamps.length} themes)`}
+                {isLoadingStamps && ' - Loading...'}
               </div>
               
               {/* Title Bar Controls */}
@@ -722,6 +801,20 @@ export function TopBar() {
                     📜 Scroll to see all {currentStamps.length} themes
                   </p>
                 )}
+                
+                {/* Loading indicator inside customizer */}
+                {isLoadingStamps && (
+                  <div className="flex items-center justify-center mb-3 p-2" style={{
+                    background: isWinXPMode ? '#f0f0f0' : isWin7Mode ? 'rgba(255, 255, 255, 0.9)' : '#e0e0e0',
+                    borderRadius: '4px',
+                    border: isWinXPMode ? '1px solid #ccc' : isWin7Mode ? '1px solid #ddd' : '1px inset'
+                  }}>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                    <span className="text-xs" style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}>
+                      Loading custom themes...
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Scrollable theme list */}
@@ -732,13 +825,15 @@ export function TopBar() {
                   flexGrow: 1,
                   scrollbarWidth: 'thin',
                   scrollbarColor: isWinXPMode ? '#0054e3 #ece9d8' : isWin7Mode ? '#ccc #f0f0f0' : '#808080 #c0c0c0',
+                  opacity: isLoadingStamps ? 0.6 : 1,
+                  transition: 'opacity 0.3s ease'
                 }}
                 className="theme-stamps-container"
               >
                 <ul className="list-none p-0 m-0">
                   {currentStamps.map((stamp, index) => (
                     <li 
-                      key={`${stamp.name}-${index}`}
+                      key={`${stamp.name}-${index}-${refreshTrigger}`}
                       className={cn(
                         "mb-2 p-1 cursor-pointer flex items-center transition-colors relative group",
                         isWinXPMode
@@ -746,9 +841,10 @@ export function TopBar() {
                           : isWin7Mode 
                             ? "hover:bg-white hover:bg-opacity-60 rounded" 
                             : "hover:bg-gray-300",
-                        stamp.cssFile === 'ADD_THEME_PLACEHOLDER' && "border-2 border-dashed border-gray-400"
+                        stamp.cssFile === 'ADD_THEME_PLACEHOLDER' && "border-2 border-dashed border-gray-400",
+                        (isLoadingStamps || isApplyingTheme) && "pointer-events-none"
                       )}
-                      onClick={() => handleSubThemeSelect(stamp.cssFile)}
+                      onClick={() => !isLoadingStamps && !isApplyingTheme && handleSubThemeSelect(stamp.cssFile)}
                     >
                       <img 
                         src={stamp.imageUrl}
@@ -756,12 +852,11 @@ export function TopBar() {
                         className="w-16 h-auto mr-2 border border-gray-400 flex-shrink-0"
                         style={{ 
                           imageRendering: 'pixelated',
-                          width: '66px', // Scaled down from 99px
-                          height: '37px' // Scaled down from 55px
+                          width: '66px',
+                          height: '37px'
                         }}
                         data-ai-hint={stamp.dataAiHint}
                         onError={(e) => {
-                          // Fallback for missing images
                           const img = e.currentTarget;
                           if (stamp.cssFile === 'ADD_THEME_PLACEHOLDER') {
                             img.src = 'data:image/svg+xml;base64,' + btoa(`
@@ -795,12 +890,12 @@ export function TopBar() {
                       </div>
                       
                       {/* Delete button for custom themes */}
-                      {stamp.isCustom && stamp.cssFile !== 'ADD_THEME_PLACEHOLDER' && (
+                      {stamp.isCustom && stamp.cssFile !== 'ADD_THEME_PLACEHOLDER' && !isLoadingStamps && (
                         <button
                           onClick={(e) => handleDeleteCustomStamp(stamp.cssFile!, e)}
                           className={cn(
                             "ml-2 w-5 h-5 flex items-center justify-center text-xs font-bold transition-all",
-                            "opacity-0 group-hover:opacity-100", // Show on hover
+                            "opacity-0 group-hover:opacity-100",
                             isWinXPMode
                               ? "bg-red-500 hover:bg-red-600 text-white rounded border border-red-600"
                               : isWin7Mode
@@ -857,6 +952,7 @@ export function TopBar() {
         onClose={() => setIsUploaderOpen(false)}
         mode={currentMode}
         onStampCreated={handleStampCreated}
+        cssFileName={uploadCssFileName}
       />
     </>
   );
