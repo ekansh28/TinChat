@@ -259,36 +259,55 @@ export function ProfilePopup({
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
                   Badges ({badges.length})
                 </h3>
-                <div className="flex flex-wrap gap-2">
-                  {badges.slice(0, 8).map((badge) => (
-                    <div
-                      key={badge.id}
-                      className="relative group"
-                      title={badge.name || 'Badge'}
-                    >
-                      <img
-                        src={badge.url}
-                        alt={badge.name || 'Badge'}
-                        className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-gray-600 hover:scale-110 transition-transform duration-200"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                      
-                      {/* Tooltip */}
-                      {badge.name && (
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
-                          {badge.name}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                
+                {/* ✅ FIXED: Horizontal scrollable badge container */}
+                <div className="relative">
+                  <div 
+                    className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 pb-1"
+                    style={{
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: '#d1d5db transparent',
+                      maxWidth: '100%'
+                    }}
+                  >
+                    {badges.map((badge) => (
+                      <div
+                        key={badge.id}
+                        className="relative group flex-shrink-0"
+                        title={badge.name || 'Badge'}
+                      >
+                        <img
+                          src={badge.url}
+                          alt={badge.name || 'Badge'}
+                          className="object-contain hover:scale-110 transition-transform duration-200"
+                          style={{
+                            // ✅ FIXED: Preserve original badge dimensions, no forced size
+                            height: 'auto',
+                            width: 'auto',
+                            maxHeight: '32px', // Reasonable max height
+                            maxWidth: '64px',   // Allow wider badges
+                            minWidth: '24px',   // Minimum width for very small badges
+                            minHeight: '24px'   // Minimum height for very small badges
+                          }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        
+                        {/* Tooltip */}
+                        {badge.name && (
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                            {badge.name}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   
-                  {badges.length > 8 && (
-                    <div className="w-8 h-8 rounded border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 flex items-center justify-center">
-                      <span className="text-xs text-gray-600 dark:text-gray-400 font-semibold">
-                        +{badges.length - 8}
-                      </span>
+                  {/* ✅ NEW: Scroll hint for many badges */}
+                  {badges.length > 4 && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+                      ← Scroll to see more badges →
                     </div>
                   )}
                 </div>
@@ -375,11 +394,58 @@ export function ProfilePopup({
           animation: popup-enter 200ms ease-out;
         }
 
+        /* Custom scrollbar styling for badges */
+        .scrollbar-thin {
+          scrollbar-width: thin;
+        }
+        
+        .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+          background-color: #d1d5db;
+          border-radius: 4px;
+        }
+        
+        .scrollbar-track-transparent::-webkit-scrollbar-track {
+          background-color: transparent;
+        }
+        
+        .hover\\:scrollbar-thumb-gray-400:hover::-webkit-scrollbar-thumb {
+          background-color: #9ca3af;
+        }
+        
+        /* Webkit scrollbar styling */
+        .flex.overflow-x-auto::-webkit-scrollbar {
+          height: 6px;
+        }
+        
+        .flex.overflow-x-auto::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .flex.overflow-x-auto::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 3px;
+        }
+        
+        .flex.overflow-x-auto:hover::-webkit-scrollbar-thumb {
+          background: #9ca3af;
+        }
+        
+        /* Badge container specific styling */
+        .flex.overflow-x-auto {
+          scrollbar-width: thin;
+          scrollbar-color: #d1d5db transparent;
+        }
+
         /* Mobile responsive adjustments */
         @media (max-width: 768px) {
           .profile-popup-custom {
             width: calc(100vw - 40px) !important;
             max-width: 280px !important;
+          }
+          
+          /* Ensure badges are still scrollable on mobile */
+          .flex.overflow-x-auto::-webkit-scrollbar {
+            height: 4px;
           }
         }
 
