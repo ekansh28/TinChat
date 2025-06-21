@@ -16,7 +16,7 @@ const nextConfig = {
       style-src 'self' 'unsafe-inline' ${cdn} https://fonts.googleapis.com https://unpkg.com;
       font-src 'self' ${cdn} https://fonts.gstatic.com https://unpkg.com;
       img-src 'self' data: blob: *;  # This allows images from any source
-      media-src 'self' blob: ${cdn} https://s3-us-east-2.amazonaws.com;
+      media-src 'self' blob: *;  # This allows media from any source
       connect-src 'self' ${cdn} ${socketServerUrl} ${socketWsUrl} ${socketWssUrl} ws://localhost:3000 ws://127.0.0.1:3000 ws://localhost:3001 ws://127.0.0.1:3001 wss://localhost:3001 wss://127.0.0.1:3001 wss://${supabaseHostname} https://${supabaseHostname} https://unpkg.com https://s3-us-east-2.amazonaws.com;
       frame-src 'self' ${cdn} *.youtube.com *.paypal.com;
       object-src 'self' ${cdn};
