@@ -1,4 +1,5 @@
-// server/services/redis/QueueModule.ts
+
+// server/services/redis/QueueModule.ts - ENHANCED WITH BETTER ERROR HANDLING
 import Redis from 'ioredis';
 import { RedisConfig } from './RedisConfig';
 import { User } from '../../types/User';
@@ -6,24 +7,53 @@ import { logger } from '../../utils/logger';
 
 interface QueuedUser extends User {
   queuedAt: number;
+  version: number; // For conflict resolution
 }
 
 export class QueueModule {
-  constructor(private redis: Redis) {}
+  private redis: Redis;
+  private readonly QUEUE_VERSION = 1;
+  private readonly MAX_QUEUE_SIZE = 1000;
+
+  constructor(redis: Redis) {
+    this.redis = redis;
+  }
 
   async addToQueue(chatType: 'text' | 'video', user: User): Promise<boolean> {
     try {
       const key = RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, chatType);
+      
+      // Check queue size first to prevent overflow
+      const currentSize = await this.redis.llen(key);
+      if (currentSize >= this.MAX_QUEUE_SIZE) {
+        logger.warn(`❌ Queue ${chatType} is full (${currentSize}/${this.MAX_QUEUE_SIZE})`);
+        return false;
+      }
+      
+      // Remove user from queue first (deduplication)
+      await this.removeFromQueue(chatType, user.id);
+      
       const queuedUser: QueuedUser = {
         ...user,
-        queuedAt: Date.now()
+        queuedAt: Date.now(),
+        version: this.QUEUE_VERSION
       };
       
-      await this.redis.rpush(key, JSON.stringify(queuedUser));
-      await this.redis.expire(key, RedisConfig.TTL.QUEUE);
+      // Use atomic operation to add user and set expiration
+      const pipeline = this.redis.pipeline();
+      pipeline.rpush(key, JSON.stringify(queuedUser));
+      pipeline.expire(key, RedisConfig.TTL.QUEUE);
       
-      logger.debug(`⏳ Added ${user.id} to ${chatType} queue`);
-      return true;
+      const results = await pipeline.exec();
+      const success = results?.every(([err]) => !err);
+      
+      if (success) {
+        logger.debug(`⏳ Added ${user.id} to ${chatType} queue (size: ${currentSize + 1})`);
+        return true;
+      } else {
+        logger.error(`❌ Failed to add ${user.id} to ${chatType} queue:`, results);
+        return false;
+      }
     } catch (error) {
       logger.error(`❌ Failed to add ${user.id} to ${chatType} queue:`, error);
       return false;
@@ -36,10 +66,29 @@ export class QueueModule {
       const userData = await this.redis.lpop(key);
       
       if (userData) {
-        const user = JSON.parse(userData) as QueuedUser;
-        const { queuedAt, ...cleanUser } = user;
-        logger.debug(`⏳ Popped ${user.id} from ${chatType} queue`);
-        return cleanUser;
+        try {
+          const user = JSON.parse(userData) as QueuedUser;
+          const { queuedAt, version, ...cleanUser } = user;
+          
+          // Validate queue entry version
+          if (version !== this.QUEUE_VERSION) {
+            logger.warn(`⚠️ Queue entry version mismatch for ${user.id}, discarding`);
+            return this.popFromQueue(chatType); // Try next entry
+          }
+          
+          // Check if entry is not too old
+          const age = Date.now() - queuedAt;
+          if (age > 15 * 60 * 1000) { // 15 minutes
+            logger.warn(`⚠️ Queue entry too old for ${user.id} (${age}ms), discarding`);
+            return this.popFromQueue(chatType); // Try next entry
+          }
+          
+          logger.debug(`⏳ Popped ${user.id} from ${chatType} queue (waited: ${age}ms)`);
+          return cleanUser;
+        } catch (parseError) {
+          logger.error(`❌ Failed to parse queue entry:`, parseError);
+          return this.popFromQueue(chatType); // Try next entry
+        }
       }
       
       return null;
@@ -64,13 +113,25 @@ export class QueueModule {
       const key = RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, chatType);
       const queueItems = await this.redis.lrange(key, 0, -1);
       
+      let removedCount = 0;
+      
       for (const item of queueItems) {
-        const user = JSON.parse(item) as QueuedUser;
-        if (user.id === userId) {
+        try {
+          const user = JSON.parse(item) as QueuedUser;
+          if (user.id === userId) {
+            await this.redis.lrem(key, 1, item);
+            removedCount++;
+          }
+        } catch (parseError) {
+          // Remove invalid entries
           await this.redis.lrem(key, 1, item);
-          logger.debug(`🗑️ Removed ${userId} from ${chatType} queue`);
-          return true;
+          logger.warn(`🧹 Removed invalid queue entry from ${chatType}`);
         }
+      }
+      
+      if (removedCount > 0) {
+        logger.debug(`🗑️ Removed ${removedCount} instances of ${userId} from ${chatType} queue`);
+        return true;
       }
       
       return false;
@@ -81,12 +142,19 @@ export class QueueModule {
   }
 
   async removeFromAllQueues(userId: string): Promise<boolean> {
-    const results = await Promise.all([
-      this.removeFromQueue('text', userId),
-      this.removeFromQueue('video', userId)
-    ]);
-    
-    return results.some(success => success);
+    try {
+      const results = await Promise.allSettled([
+        this.removeFromQueue('text', userId),
+        this.removeFromQueue('video', userId)
+      ]);
+      
+      return results.some(result => 
+        result.status === 'fulfilled' && result.value === true
+      );
+    } catch (error) {
+      logger.error(`❌ Failed to remove ${userId} from all queues:`, error);
+      return false;
+    }
   }
 
   async getAllFromQueue(chatType: 'text' | 'video'): Promise<User[]> {
@@ -94,18 +162,56 @@ export class QueueModule {
       const key = RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, chatType);
       const items = await this.redis.lrange(key, 0, -1);
       
-      return items.map(item => {
+      const validUsers: User[] = [];
+      const invalidItems: string[] = [];
+      
+      for (const item of items) {
         try {
           const queuedUser = JSON.parse(item) as QueuedUser;
-          const { queuedAt, ...user } = queuedUser;
-          return user;
-        } catch {
-          return null;
+          const { queuedAt, version, ...user } = queuedUser;
+          
+          // Validate version and age
+          if (version === this.QUEUE_VERSION) {
+            const age = Date.now() - queuedAt;
+            if (age <= 15 * 60 * 1000) { // 15 minutes
+              validUsers.push(user);
+            } else {
+              invalidItems.push(item);
+            }
+          } else {
+            invalidItems.push(item);
+          }
+        } catch (parseError) {
+          invalidItems.push(item);
         }
-      }).filter((user): user is User => user !== null);
+      }
+      
+      // Clean up invalid items in background
+      if (invalidItems.length > 0) {
+        this.cleanupInvalidItems(key, invalidItems).catch(err =>
+          logger.debug(`Background cleanup failed for ${chatType}:`, err)
+        );
+      }
+      
+      return validUsers;
     } catch (error) {
       logger.error(`❌ Failed to get all users from ${chatType} queue:`, error);
       return [];
+    }
+  }
+
+  private async cleanupInvalidItems(key: string, invalidItems: string[]): Promise<void> {
+    try {
+      const pipeline = this.redis.pipeline();
+      
+      for (const item of invalidItems) {
+        pipeline.lrem(key, 1, item);
+      }
+      
+      await pipeline.exec();
+      logger.debug(`🧹 Cleaned ${invalidItems.length} invalid items from queue`);
+    } catch (error) {
+      logger.error('Failed to cleanup invalid queue items:', error);
     }
   }
 
@@ -115,14 +221,25 @@ export class QueueModule {
       const userData = await this.redis.lindex(key, index);
       
       if (userData) {
-        const queuedUser = JSON.parse(userData) as QueuedUser;
-        const { queuedAt, ...user } = queuedUser;
-        return user;
+        try {
+          const queuedUser = JSON.parse(userData) as QueuedUser;
+          const { queuedAt, version, ...user } = queuedUser;
+          
+          // Validate entry
+          if (version === this.QUEUE_VERSION) {
+            const age = Date.now() - queuedAt;
+            if (age <= 15 * 60 * 1000) {
+              return user;
+            }
+          }
+        } catch (parseError) {
+          logger.warn(`Invalid queue entry at index ${index}:`, parseError);
+        }
       }
       
       return null;
     } catch (error) {
-      logger.debug(`❌ Failed to peek at queue position ${index}:`, error);
+      logger.error(`❌ Failed to peek at queue position ${index}:`, error);
       return null;
     }
   }
@@ -132,6 +249,7 @@ export class QueueModule {
     video: number;
     total: number;
     oldestWaitTimes: { text: number; video: number };
+    health: { text: boolean; video: boolean };
   }> {
     try {
       const [textLength, videoLength] = await Promise.all([
@@ -139,7 +257,7 @@ export class QueueModule {
         this.getQueueLength('video')
       ]);
 
-      // Get oldest wait times
+      // Get oldest wait times and health status
       const [oldestText, oldestVideo] = await Promise.all([
         this.peekAtQueue('text', 0),
         this.peekAtQueue('video', 0)
@@ -156,6 +274,10 @@ export class QueueModule {
         oldestWaitTimes: {
           text: Math.round(textWait / 1000),
           video: Math.round(videoWait / 1000)
+        },
+        health: {
+          text: textLength < this.MAX_QUEUE_SIZE * 0.8,
+          video: videoLength < this.MAX_QUEUE_SIZE * 0.8
         }
       };
     } catch (error) {
@@ -164,26 +286,32 @@ export class QueueModule {
         text: 0,
         video: 0,
         total: 0,
-        oldestWaitTimes: { text: 0, video: 0 }
+        oldestWaitTimes: { text: 0, video: 0 },
+        health: { text: false, video: false }
       };
     }
   }
 
   async clearAllQueues(): Promise<{ cleared: number }> {
     try {
-      const [textLength, videoLength] = await Promise.all([
+      const [textLength, videoLength] = await Promise.allSettled([
         this.getQueueLength('text'),
         this.getQueueLength('video')
       ]);
 
-      const total = textLength + videoLength;
+      const textCount = textLength.status === 'fulfilled' ? textLength.value : 0;
+      const videoCount = videoLength.status === 'fulfilled' ? videoLength.value : 0;
+      const total = textCount + videoCount;
 
-      await Promise.all([
-        this.redis.del(RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, 'text')),
-        this.redis.del(RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, 'video'))
-      ]);
+      if (total > 0) {
+        await Promise.allSettled([
+          this.redis.del(RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, 'text')),
+          this.redis.del(RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, 'video'))
+        ]);
 
-      logger.warn(`🧹 Cleared all queues: ${total} users removed`);
+        logger.warn(`🧹 Cleared all queues: ${total} users removed`);
+      }
+      
       return { cleared: total };
     } catch (error) {
       logger.error('❌ Failed to clear queues:', error);
@@ -199,26 +327,39 @@ export class QueueModule {
       for (const chatType of ['text', 'video'] as const) {
         const key = RedisConfig.buildKey(RedisConfig.PREFIXES.QUEUE, chatType);
         const queueItems = await this.redis.lrange(key, 0, -1);
+        const itemsToRemove: string[] = [];
 
         for (const item of queueItems) {
           try {
             const user = JSON.parse(item) as QueuedUser;
-            if (user.queuedAt < cutoffTime) {
-              await this.redis.lrem(key, 1, item);
-              totalCleaned++;
-              logger.debug(`🧹 Cleaned stale queue entry: ${user.id}`);
+            
+            // Check if entry is stale or has wrong version
+            if (user.queuedAt < cutoffTime || user.version !== this.QUEUE_VERSION) {
+              itemsToRemove.push(item);
             }
           } catch (parseError) {
             // Remove invalid entries
-            await this.redis.lrem(key, 1, item);
-            totalCleaned++;
-            logger.warn(`🧹 Removed invalid queue entry`);
+            itemsToRemove.push(item);
           }
+        }
+
+        // Remove stale items in batch
+        if (itemsToRemove.length > 0) {
+          const pipeline = this.redis.pipeline();
+          
+          for (const item of itemsToRemove) {
+            pipeline.lrem(key, 1, item);
+          }
+          
+          await pipeline.exec();
+          totalCleaned += itemsToRemove.length;
+          
+          logger.debug(`🧹 Cleaned ${itemsToRemove.length} stale entries from ${chatType} queue`);
         }
       }
 
       if (totalCleaned > 0) {
-        logger.info(`🧹 Cleaned ${totalCleaned} stale queue entries`);
+        logger.info(`🧹 Cleaned ${totalCleaned} total stale queue entries`);
       }
 
       return totalCleaned;
@@ -227,4 +368,47 @@ export class QueueModule {
       return 0;
     }
   }
+
+  async getQueueHealth(): Promise<{
+    healthy: boolean;
+    issues: string[];
+    stats: any;
+  }> {
+    const issues: string[] = [];
+    
+    try {
+      const stats = await this.getQueueStats();
+      
+      // Check for overloaded queues
+      if (stats.text > this.MAX_QUEUE_SIZE * 0.8) {
+        issues.push(`Text queue near capacity: ${stats.text}/${this.MAX_QUEUE_SIZE}`);
+      }
+      
+      if (stats.video > this.MAX_QUEUE_SIZE * 0.8) {
+        issues.push(`Video queue near capacity: ${stats.video}/${this.MAX_QUEUE_SIZE}`);
+      }
+      
+      // Check for users waiting too long
+      if (stats.oldestWaitTimes.text > 300) { // 5 minutes
+        issues.push(`Users waiting too long in text queue: ${stats.oldestWaitTimes.text}s`);
+      }
+      
+      if (stats.oldestWaitTimes.video > 300) {
+        issues.push(`Users waiting too long in video queue: ${stats.oldestWaitTimes.video}s`);
+      }
+      
+      return {
+        healthy: issues.length === 0,
+        issues,
+        stats
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        issues: [`Queue health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        stats: null
+      };
+    }
+  }
 }
+
