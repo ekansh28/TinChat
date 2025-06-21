@@ -414,20 +414,20 @@ export class SocketManager {
   // Health check with Redis information
   public healthCheck(): SocketManagerHealthCheck {
     const baseHealth = this.connectionManager.healthCheck();
-    
-    let redisHealth = null;
-    if (this.redisService) {
-      redisHealth = {
-        connected: this.matchmakingEngine.isUsingRedis(),
-        mode: this.matchmakingEngine.isUsingRedis() ? 'redis-primary' : 'memory-fallback'
-      };
-    }
+
+    const redisHealth = {
+      connected: this.redisService ? this.matchmakingEngine.isUsingRedis() : false,
+      mode: this.redisService && this.matchmakingEngine.isUsingRedis()
+        ? 'redis-primary'
+        : 'memory-fallback'
+    };
 
     return {
       ...baseHealth,
       redis: redisHealth
     };
   }
+
 
   // Debug matchmaking with Redis information
   public debugMatchmaking(): MatchmakingDebugInfo {
@@ -622,25 +622,34 @@ export class SocketManager {
     // Test database connection
     const dbHealth = await this.profileManager.testConnection();
     
-    // Test Redis connection and get stats
-    let redisInfo = { available: false };
-    if (this.redisService) {
-      try {
-        const connected = await this.redisService.testConnection();
-        const stats = connected ? await this.redisService.getRedisStats() : null;
-        redisInfo = {
-          available: true,
-          connected,
-          stats
-        };
-      } catch (error) {
-        redisInfo = {
-          available: true,
-          connected: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        };
-      }
-    }
+interface RedisInfo {
+  available: boolean;
+  connected?: boolean;
+  stats?: any;
+  error?: string;
+}
+
+let redisInfo: RedisInfo = { available: false };
+
+if (this.redisService) {
+  try {
+    const connected = await this.redisService.testConnection();
+    const stats = connected ? await this.redisService.getRedisStats() : null;
+
+    redisInfo = {
+      available: true,
+      connected,
+      stats
+    };
+  } catch (error) {
+    redisInfo = {
+      available: true,
+      connected: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
 
     return {
       server: {
