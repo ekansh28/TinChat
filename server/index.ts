@@ -7,7 +7,7 @@ import { setupDebugRoutes, setSocketManager, handleDebugDashboard } from './rout
 import { configureSocketIO } from './config/socketIO';
 import { initializeSupabase, testDatabaseConnection } from './config/supabase';
 import { SocketManager } from './managers/SocketManager';
-import { ProfileManager } from './managers/ProfileManager';
+import { ProfileManager } from './managers/profile/ProfileManager';
 import { MessageBatcher } from './utils/MessageBatcher';
 import { PerformanceMonitor } from './utils/PerformanceMonitor';
 import { RedisService } from './services/RedisService';

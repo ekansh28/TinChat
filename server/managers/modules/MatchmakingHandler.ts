@@ -3,7 +3,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { MatchmakingEngine } from '../../services/MatchmakingEngine';
 import { RoomManager, Room } from '../../services/RoomManager';
-import { ProfileManager } from '../ProfileManager';
+import { ProfileManager } from '../profile/ProfileManager';
 import { ProfileCache } from '../../utils/ProfileCache';
 import { PerformanceMonitor } from '../../utils/PerformanceMonitor';
 import { ValidationSchemas } from '../../validation/schemas';

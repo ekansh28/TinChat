@@ -1,10 +1,10 @@
 // server/managers/ProfileManager.ts - COMPLETE ENHANCED VERSION WITH FRIENDS SYSTEM
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { logger } from '../utils/logger';
-import { LRUCache } from '../utils/LRUCache';
-import { RedisService } from '../services/RedisService';
-import { UserStatus } from '../types/User';
+import { logger } from '../../utils/logger';
+import { LRUCache } from '../../utils/LRUCache';
+import { RedisService } from '../../services/RedisService';
+import { UserStatus } from '../../types/User';
 
 export interface UserProfile {
   id: string;

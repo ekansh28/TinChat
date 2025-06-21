@@ -1,6 +1,6 @@
 // server/managers/modules/UserStatusHandler.ts
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { ProfileManager } from '../ProfileManager';
+import { ProfileManager } from '../profile/ProfileManager';
 import { RoomManager } from '../../services/RoomManager';
 import { ProfileCache } from '../../utils/ProfileCache';
 import { ValidationSchemas } from '../../validation/schemas';

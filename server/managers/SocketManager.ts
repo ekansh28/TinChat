@@ -1,6 +1,6 @@
 // server/managers/SocketManager.ts - CONSTRUCTOR FIX ONLY
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { ProfileManager } from './ProfileManager';
+import { ProfileManager } from './profile/ProfileManager';
 import { MessageBatcher } from '../utils/MessageBatcher';
 import { PerformanceMonitor } from '../utils/PerformanceMonitor';
 import { ProfileCache } from '../utils/ProfileCache';
