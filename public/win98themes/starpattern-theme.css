@@ -200,3 +200,245 @@ html.theme-98.subtheme-starpattern-theme .input-area.status-bar {
 html.theme-98.subtheme-starpattern-theme .status-bar-field {
   border-right: 1px solid #c41281 !important;
 }
+
+
+/* ===== UPDATED STARPATTERN-THEME.CSS ===== */
+/* Star Pattern Sub-theme using #f61ea3 */
+
+html.theme-98.subtheme-starpattern-theme body {
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/starpattern.gif') !important;
+  background-repeat: repeat !important;
+  background-attachment: fixed !important;
+  background-size: 200px !important; /* Changed from auto to 200px for more visible repetition */
+}
+
+/* TaskBar Styling for Star Pattern Theme */
+html.theme-98.subtheme-starpattern-theme .taskbar {
+  background-color: #f61ea3 !important;
+  border-top: 2px outset #ff69cb !important;
+  box-shadow: 0 -2px 8px rgba(246, 30, 163, 0.3) !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .start-button {
+  background-color: #ff69cb !important;
+  border: 1px outset #ff9edc !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(196, 18, 129, 0.8) !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .start-button:hover {
+  background-color: #ffc6eb !important;
+  border: 1px outset #ffe4f2 !important;
+  color: #800080 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .taskbar-divider {
+  background-color: #c41281 !important;
+  border-left: 1px solid #9b0f6a !important;
+  border-right: 1px solid #ff9edc !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .tray {
+  background-color: #ff69cb !important;
+  border: 1px inset #c41281 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .taskbar-time {
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(196, 18, 129, 0.8) !important;
+  font-weight: bold !important;
+}
+
+/* Window */
+html.theme-98.subtheme-starpattern-theme .window {
+  background-color: #f61ea3 !important;
+  border-top: 1px solid #ff9edc !important;
+  border-left: 1px solid #ff9edc !important;
+  border-right: 1px solid #c41281 !important;
+  border-bottom: 1px solid #c41281 !important;
+  box-shadow: inset 1px 1px 0px #ff69cb, inset -1px -1px 0px #ff9edc !important;
+}
+
+/* Window Body */
+html.theme-98.subtheme-starpattern-theme .window-body {
+  background-color: #fff0f7 !important;
+  color: #6A0DAD !important;
+  border-top: 1px solid #c41281 !important;
+  border-left: 1px solid #c41281 !important;
+  border-right: 1px solid #ff9edc !important;
+  border-bottom: 1px solid #ff9edc !important;
+  box-shadow: inset 1px 1px 0px #ff69cb, inset -1px -1px 0px #ffc6eb !important;
+}
+
+/* Title Bar */
+html.theme-98.subtheme-starpattern-theme .title-bar {
+  background: linear-gradient(to right, #ff69cb, #f61ea3) !important;
+  color: #ffffff !important;
+  padding: 2px 3px !important;
+  text-shadow: 1px 1px #c41281 !important;
+}
+
+/* Active Title Bar */
+html.theme-98.subtheme-starpattern-theme .window.active > .title-bar {
+  background: linear-gradient(to right, #f61ea3, #c41281) !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px #9b0f6a !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .title-bar-text {
+  color: #ffffff !important;
+}
+
+/* Buttons */
+html.theme-98.subtheme-starpattern-theme button,
+html.theme-98.subtheme-starpattern-theme .button {
+  background-color: #ffc6eb !important;
+  color: #800080 !important;
+  border-top: 1px solid #ffe4f2 !important;
+  border-left: 1px solid #ffe4f2 !important;
+  border-right: 1px solid #c41281 !important;
+  border-bottom: 1px solid #c41281 !important;
+  box-shadow: inset 1px 1px 0px #ff9edc, 1px 1px 0px #9b0f6a !important;
+}
+
+html.theme-98.subtheme-starpattern-theme button:focus,
+html.theme-98.subtheme-starpattern-theme .button:focus {
+  outline: 1px dotted #800080 !important;
+  outline-offset: -3px !important;
+}
+
+html.theme-98.subtheme-starpattern-theme button:active,
+html.theme-98.subtheme-starpattern-theme .button:active,
+html.theme-98.subtheme-starpattern-theme button.active,
+html.theme-98.subtheme-starpattern-theme .button.active {
+  background-color: #f61ea3 !important;
+  color: #ffffff !important;
+  border-top: 1px solid #c41281 !important;
+  border-left: 1px solid #c41281 !important;
+  border-right: 1px solid #ffe4f2 !important;
+  border-bottom: 1px solid #ffe4f2 !important;
+  box-shadow: inset 1px 1px 0px #ff69cb !important;
+}
+
+/* Inputs */
+html.theme-98.subtheme-starpattern-theme input[type="text"],
+html.theme-98.subtheme-starpattern-theme input[type="password"],
+html.theme-98.subtheme-starpattern-theme textarea,
+html.theme-98.subtheme-starpattern-theme .themed-input {
+  background-color: #fff0f7 !important;
+  color: #6A0DAD !important;
+  border: 1px solid #f61ea3 !important;
+  box-shadow: inset 1px 1px 1px #ffc6eb, inset -1px -1px 1px #ff9edc !important;
+  padding: 2px 3px !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .themed-input-inner {
+  background-color: transparent !important;
+  color: #6A0DAD !important;
+}
+
+/* Sunken Panels */
+html.theme-98.subtheme-starpattern-theme .sunken-panel,
+html.theme-98.subtheme-starpattern-theme .tree-view {
+  background-color: #fff0f7 !important;
+  border-top: 1px solid #c41281 !important;
+  border-left: 1px solid #c41281 !important;
+  border-right: 1px solid #ff9edc !important;
+  border-bottom: 1px solid #ff9edc !important;
+  box-shadow: none !important;
+  padding: 2px !important;
+}
+
+/* Dropdown */
+html.theme-98.subtheme-starpattern-theme select,
+html.theme-98.subtheme-starpattern-theme .themed-select-trigger {
+  background-color: #fff0f7 !important;
+  color: #800080 !important;
+  border-top: 1px solid #ff9edc !important;
+  border-left: 1px solid #ff9edc !important;
+  border-right: 1px solid #c41281 !important;
+  border-bottom: 1px solid #c41281 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .themed-select-trigger.button {
+  background-color: #ffc6eb !important;
+  color: #800080 !important;
+  border-top: 1px solid #ffe4f2 !important;
+  border-left: 1px solid #ffe4f2 !important;
+  border-right: 1px solid #c41281 !important;
+  border-bottom: 1px solid #c41281 !important;
+  box-shadow: inset 1px 1px 0px #ff9edc, 1px 1px 0px #9b0f6a !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .select-content.themed-select-content,
+html.theme-98.subtheme-starpattern-theme .menu {
+  background-color: #ffc6eb !important;
+  border-color: #f61ea3 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .select-item.themed-select-item:hover,
+html.theme-98.subtheme-starpattern-theme .select-item.themed-select-item[data-highlighted] {
+  background-color: #f61ea3 !important;
+  color: white !important;
+}
+
+/* Scrollbars */
+html.theme-98.subtheme-starpattern-theme .themed-scrollbar-98 {
+  background-color: #ffc6eb !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .themed-scrollbar-98 > [data-radix-scroll-area-thumb] {
+  background-color: #f61ea3 !important;
+  border-top: 1px solid #ff9edc !important;
+  border-left: 1px solid #ff9edc !important;
+  border-right: 1px solid #c41281 !important;
+  border-bottom: 1px solid #c41281 !important;
+  box-shadow: inset 1px 1px #ffc6eb, inset -1px -1px #9b0f6a !important;
+}
+
+/* Tabs */
+html.theme-98.subtheme-starpattern-theme [role="tab"] {
+  background-color: #ffc6eb !important;
+  border-color: #ff9edc #ff9edc #c41281 #ff9edc !important;
+}
+
+html.theme-98.subtheme-starpattern-theme [role="tab"][aria-selected="true"] {
+  background-color: #fff0f7 !important;
+  border-bottom-color: #fff0f7 !important;
+}
+
+/* Labels */
+html.theme-98.subtheme-starpattern-theme label,
+html.theme-98.subtheme-starpattern-theme .label,
+html.theme-98.subtheme-starpattern-theme .themed-label {
+  color: #800080 !important;
+}
+
+/* Links */
+html.theme-98.subtheme-starpattern-theme a {
+  color: #9b0f6a !important;
+}
+html.theme-98.subtheme-starpattern-theme a:hover {
+  color: #f61ea3 !important;
+}
+
+/* Card components */
+html.theme-98.subtheme-starpattern-theme .card .title-bar .title-bar-text { /* More specific for card titles */
+  color: #ffffff !important;
+}
+html.theme-98.subtheme-starpattern-theme .card-title { /* General card title if not in title-bar */
+  color: #800080 !important; 
+}
+html.theme-98.subtheme-starpattern-theme .card-description {
+  color: #4B0082 !important;
+}
+
+/* Status bar */
+html.theme-98.subtheme-starpattern-theme .status-bar,
+html.theme-98.subtheme-starpattern-theme .input-area.status-bar {
+  color: #800080 !important;
+  border-top: 1px solid #c41281 !important;
+}
+html.theme-98.subtheme-starpattern-theme .status-bar-field {
+  border-right: 1px solid #c41281 !important;
+}

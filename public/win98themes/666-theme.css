@@ -337,3 +337,95 @@ html.theme-98.subtheme-666-theme .chat-window button  {
   background-color: #4d0000 !important;
   box-shadow: inset 1px 1px 0px #660000, 1px 1px 0px #000000, 0 0 3px #330000 !important;
 }
+
+
+/* ===== 666-THEME.CSS ADDITIONS ===== */
+/* Add these rules to 666-theme.css */
+
+/* TaskBar Styling for 666 Theme - Using wallpaper images */
+html.theme-98.subtheme-666-theme .taskbar {
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red4.jpg') !important;
+  background-size: 150px !important;
+  background-repeat: repeat !important;
+  background-color: #330000 !important;
+  border-top: 2px outset #660000 !important;
+  box-shadow: 0 -2px 8px rgba(102, 0, 0, 0.5) !important;
+}
+
+html.theme-98.subtheme-666-theme .taskbar .start-button {
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red3.jpg') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-color: #4d0000 !important;
+  border: 1px outset #660000 !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+}
+
+html.theme-98.subtheme-666-theme .taskbar .start-button:hover {
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  background-color: #660000 !important;
+  border: 1px outset #800000 !important;
+}
+
+html.theme-98.subtheme-666-theme .taskbar .taskbar-divider {
+  background-color: #660000 !important;
+  border-left: 1px solid #330000 !important;
+  border-right: 1px solid #800000 !important;
+}
+
+html.theme-98.subtheme-666-theme .taskbar .tray {
+  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red.jpg') !important;
+  background-size: 120px !important;
+  background-repeat: repeat !important;
+  background-color: #330000 !important;
+  border: 1px inset #660000 !important;
+}
+
+html.theme-98.subtheme-666-theme .taskbar .taskbar-time {
+  color: #ff9999 !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+  font-weight: bold !important;
+}
+
+/* ===== STARPATTERN-THEME.CSS ADDITIONS ===== */
+/* Add these rules to starpattern-theme.css */
+
+/* TaskBar Styling for Star Pattern Theme */
+html.theme-98.subtheme-starpattern-theme .taskbar {
+  background-color: #f61ea3 !important;
+  border-top: 2px outset #ff69cb !important;
+  box-shadow: 0 -2px 8px rgba(246, 30, 163, 0.3) !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .start-button {
+  background-color: #ff69cb !important;
+  border: 1px outset #ff9edc !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(196, 18, 129, 0.8) !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .start-button:hover {
+  background-color: #ffc6eb !important;
+  border: 1px outset #ffe4f2 !important;
+  color: #800080 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .taskbar-divider {
+  background-color: #c41281 !important;
+  border-left: 1px solid #9b0f6a !important;
+  border-right: 1px solid #ff9edc !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .tray {
+  background-color: #ff69cb !important;
+  border: 1px inset #c41281 !important;
+}
+
+html.theme-98.subtheme-starpattern-theme .taskbar .taskbar-time {
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(196, 18, 129, 0.8) !important;
+  font-weight: bold !important;
+}

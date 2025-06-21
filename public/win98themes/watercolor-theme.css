@@ -197,3 +197,43 @@
 .theme-98 .status-bar-field {
   border-right: 1px solid #115c5b !important;
 }
+
+/* ===== WATERCOLOR-THEME.CSS ADDITIONS ===== */
+/* Add these rules to watercolor-theme.css */
+
+/* TaskBar Styling for Watercolor Theme */
+html.theme-98.subtheme-watercolor-theme .taskbar {
+  background-color: #3b8b8a !important;
+  border-top: 2px outset #4da6a5 !important;
+  box-shadow: 0 -2px 8px rgba(59, 139, 138, 0.3) !important;
+}
+
+html.theme-98.subtheme-watercolor-theme .taskbar .start-button {
+  background-color: #4da6a5 !important;
+  border: 1px outset #88c7c6 !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(17, 92, 91, 0.8) !important;
+}
+
+html.theme-98.subtheme-watercolor-theme .taskbar .start-button:hover {
+  background-color: #88c7c6 !important;
+  border: 1px outset #a3d6d5 !important;
+  color: #115c5b !important;
+}
+
+html.theme-98.subtheme-watercolor-theme .taskbar .taskbar-divider {
+  background-color: #156f6f !important;
+  border-left: 1px solid #115c5b !important;
+  border-right: 1px solid #4da6a5 !important;
+}
+
+html.theme-98.subtheme-watercolor-theme .taskbar .tray {
+  background-color: #4da6a5 !important;
+  border: 1px inset #156f6f !important;
+}
+
+html.theme-98.subtheme-watercolor-theme .taskbar .taskbar-time {
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(17, 92, 91, 0.8) !important;
+  font-weight: bold !important;
+}

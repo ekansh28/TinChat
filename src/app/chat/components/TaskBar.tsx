@@ -499,7 +499,7 @@ export const TaskBar: React.FC = () => {
                 width: '16px', 
                 height: '16px', 
                 cursor: 'pointer',
-                filter: 'brightness(0) invert(1)'
+                
               }}
               onClick={handleAudioIconClick}
               title={`Message Volume: ${audioVolume === 0 ? 'Muted' : `${Math.round((audioVolume / 3) * 100)}%`}`}
