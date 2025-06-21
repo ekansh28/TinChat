@@ -45,7 +45,7 @@ export class MatchmakingHandler {
       await this.cleanupUserFromQueuesAndRooms(socket.id);
       
       const currentUser = await this.createEnhancedUser(socket.id, chatType, interests, authId);
-      const matchedPartner = this.matchmakingEngine.findMatch(currentUser);
+      const matchedPartner = await this.matchmakingEngine.findMatch(currentUser);
 
       if (matchedPartner) {
         logger.info(`🎊 MATCH FOUND: ${currentUser.id} ↔ ${matchedPartner.id} (${chatType})`);
