@@ -504,7 +504,7 @@ export class RedisService {
       // Force garbage collection on Redis
       try {
         const redis = this.connection.getRedisInstance();
-        await redis.memory('purge');
+        await redis.call('MEMORY', 'PURGE');
       } catch (error) {
         logger.debug('Redis memory purge failed (may not be supported):', error);
       }
