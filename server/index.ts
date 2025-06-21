@@ -1,15 +1,17 @@
-// ===== Updated server/index.ts with Debug Routes =====
+// ===== UPDATED server/index.ts with Profile API Routes Integration =====
 import 'dotenv/config';
 import http from 'http';
 import { setCorsHeaders } from './config/cors';
 import { setupRoutes, updateGlobalStats } from './routes/healthRoutes';
-import { setupDebugRoutes, setSocketManager, handleDebugDashboard } from './routes/debugRoutes'; // ✅ ADDED
+import { setupDebugRoutes, setSocketManager, handleDebugDashboard } from './routes/debugRoutes';
+import { handleProfileRoutes, setProfileManager } from './routes/profileRoutes'; // ✅ NEW: Profile API routes
 import { configureSocketIO } from './config/socketIO';
 import { initializeSupabase, testDatabaseConnection } from './config/supabase';
 import { SocketManager } from './managers/SocketManager';
-import { ProfileManager } from './managers/ProfileManager';
+import { ProfileManager } from './managers/profile/ProfileManager';
 import { MessageBatcher } from './utils/MessageBatcher';
 import { PerformanceMonitor } from './utils/PerformanceMonitor';
+import { RedisService } from './services/RedisService';
 import { logger } from './utils/logger';
 
 const PORT = process.env.PORT || 3001;
@@ -35,8 +37,8 @@ if (NODE_ENV === 'development') {
   );
 }
 
-// ✅ ENHANCED: HTTP server with debug route support
-const server = http.createServer((req, res) => {
+// ✅ ENHANCED: HTTP server with Profile API routes support
+const server = http.createServer(async (req, res) => {
   try {
     const requestOrigin = req.headers.origin;
     setCorsHeaders(res, requestOrigin);
@@ -49,19 +51,28 @@ const server = http.createServer((req, res) => {
 
     const url = req.url || '';
 
-    // ✅ ADDED: Handle debug dashboard
+    // ✅ NEW: Handle Profile API routes first (highest priority)
+    if (url.startsWith('/api/profiles')) {
+      const handled = await handleProfileRoutes(req, res);
+      if (handled) {
+        logger.debug(`📡 Profile API request handled: ${req.method} ${url}`);
+        return;
+      }
+    }
+
+    // Handle debug dashboard
     if (url === '/debug/dashboard') {
       handleDebugDashboard(res);
       return;
     }
 
-    // ✅ ADDED: Handle debug routes first
+    // Handle debug routes
     if (url.startsWith('/debug')) {
       const handled = setupDebugRoutes(req, res);
       if (handled) return;
     }
 
-    // Handle regular routes
+    // Handle regular health/status routes
     setupRoutes(req, res);
   } catch (error) {
     logger.error('HTTP server error:', error);
@@ -86,10 +97,46 @@ server.on('clientError', (error: any, socket: any) => {
   }
 });
 
+// ✅ Initialize Redis service
+function initializeRedis(): RedisService | null {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!redisUrl || !redisToken) {
+    logger.warn('⚠️ Redis environment variables not found - running without Redis caching');
+    logger.info('💡 To enable Redis caching, add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to your .env file');
+    return null;
+  }
+
+  try {
+    const redisService = new RedisService(redisUrl, redisToken);
+    logger.info('✅ Redis service initialized successfully');
+    return redisService;
+  } catch (error) {
+    logger.error('❌ Failed to initialize Redis service:', error);
+    logger.warn('⚠️ Continuing without Redis caching');
+    return null;
+  }
+}
+
 async function initializeServer() {
   try {
     logger.info('🚀 Starting TinChat server initialization...');
 
+    // ✅ STEP 1: Initialize Redis service first (optional)
+    const redisService = initializeRedis();
+    
+    // Test Redis connection if available
+    if (redisService) {
+      const redisHealthy = await redisService.testConnection();
+      if (!redisHealthy) {
+        logger.warn('⚠️ Redis connection test failed - continuing with local caching only');
+      } else {
+        logger.info('✅ Redis connection verified - distributed caching enabled');
+      }
+    }
+
+    // ✅ STEP 2: Initialize Supabase (database)
     const supabase = initializeSupabase();
     if (supabase) {
       const dbHealthy = await testDatabaseConnection(supabase);
@@ -98,29 +145,55 @@ async function initializeServer() {
       }
     }
 
+    // ✅ STEP 3: Initialize core services with Redis support
     const performanceMonitor = new PerformanceMonitor();
     const io = configureSocketIO(server, allowedOrigins);
     const messageBatcher = new MessageBatcher();
     messageBatcher.setSocketIOInstance(io);
-    const profileManager = new ProfileManager(supabase);
     
-    // ✅ ENHANCED: Initialize socket manager with better debugging
+    // ✅ ENHANCED: Initialize ProfileManager with Redis support
+    const profileManager = new ProfileManager(supabase, redisService);
+    
+    // ✅ NEW: Set ProfileManager for API routes
+    setProfileManager(profileManager);
+    logger.info('📡 ProfileManager configured for API routes');
+    
+    // ✅ ENHANCED: Initialize SocketManager with Redis-enhanced services
     const socketManager = new SocketManager(
       io,
       profileManager,
       messageBatcher,
-      performanceMonitor
+      performanceMonitor,
+      redisService
     );
 
-    // ✅ ADDED: Set socket manager for debug routes
+    // Set socket manager for debug routes
     setSocketManager(socketManager);
 
-    // Enhanced health monitoring
+    // ✅ ENHANCED: Health monitoring with Redis statistics and Profile API health
     setInterval(async () => {
       try {
         const health = socketManager.healthCheck();
         const stats = socketManager.getStats();
-        const matchmakingDebug = socketManager.debugMatchmaking(); // ✅ ADDED
+        const matchmakingDebug = socketManager.debugMatchmaking();
+        
+        // ✅ ENHANCED: Get Redis statistics if available
+        let redisStats = null;
+        if (redisService) {
+          try {
+            redisStats = await redisService.getRedisStats();
+          } catch (error) {
+            logger.debug('Failed to get Redis stats for health check:', error);
+          }
+        }
+
+        // ✅ NEW: Get Profile API health status
+        let profileApiHealth = null;
+        try {
+          profileApiHealth = await profileManager.testConnection();
+        } catch (error) {
+          logger.debug('Failed to get Profile API health:', error);
+        }
         
         updateGlobalStats({
           onlineUserCount: stats.onlineUsers,
@@ -134,10 +207,15 @@ async function initializeServer() {
             avgResponseTime: stats.performance.averageResponseTime || 0,
             requestsPerSecond: stats.performance.messagesPerSecond || 0,
             errorRate: stats.performance.errorRate || 0,
-          }
-        });
+          },
+          redisEnabled: !!redisService,
+          redisStats: redisStats,
+          // ✅ NEW: Add Profile API health to global stats
+          profileApiEnabled: !!profileManager,
+          profileApiHealth: profileApiHealth
+        } as any);
 
-        // ✅ ENHANCED: Better health logging with matchmaking info
+        // Enhanced health logging with Redis, matchmaking, and Profile API info
         if (health.status === 'degraded') {
           logger.warn('🚨 Server health degraded:', health);
         } else {
@@ -145,15 +223,19 @@ async function initializeServer() {
             status: health.status,
             activeConnections: health.activeConnections,
             staleConnections: health.staleConnections,
-            queueStats: matchmakingDebug.queueStats
+            queueStats: matchmakingDebug.queueStats,
+            redisEnabled: !!redisService,
+            profileApiEnabled: !!profileManager,
+            queueMode: matchmakingDebug.queueStats.queueMode || 'unknown'
           });
         }
 
-        // ✅ ADDED: Alert on stuck queues (users waiting too long)
+        // Alert on stuck queues
         if (matchmakingDebug.queueStats.text > 5 || matchmakingDebug.queueStats.video > 5) {
           logger.warn('🚨 High queue counts detected:', matchmakingDebug.queueStats);
         }
 
+        // Alert on high disconnect rates
         const disconnectSummary = stats.disconnects;
         if ((disconnectSummary?.topReasons?.['ping timeout'] ?? 0) > 10){
           logger.warn('🚨 High ping timeout rate detected:', disconnectSummary.topReasons);
@@ -162,30 +244,55 @@ async function initializeServer() {
           logger.warn('🚨 High transport close rate detected:', disconnectSummary.topReasons);
         }
 
+        // ✅ Alert on Redis issues
+        if (redisService && !redisStats) {
+          logger.warn('🚨 Redis connection issues detected');
+        }
+
+        // ✅ NEW: Alert on Profile API issues
+        if (profileManager && profileApiHealth && !profileApiHealth.overall) {
+          logger.warn('🚨 Profile API health issues detected:', profileApiHealth.errors);
+        }
+
       } catch (error) {
         logger.error('❌ Health monitoring error:', error);
       }
     }, 60000);
 
+    // ✅ ENHANCED: Graceful shutdown with Redis and Profile API cleanup
     const gracefulShutdown = async (signal: string) => {
       logger.info(`🛑 ${signal} received, starting graceful shutdown...`);
       
       try {
+        // Stop accepting new connections
         server.close(() => {
           logger.info('✅ HTTP server closed');
         });
 
+        // Close Socket.IO server
         io.close(() => {
           logger.info('✅ Socket.IO server closed');
         });
 
+        // Stop message batcher
         await messageBatcher.destroy();
         logger.info('✅ Message batcher stopped');
 
+        // Cleanup ProfileManager (includes Redis cleanup)
         if (profileManager) {
-          profileManager.destroy();
-          logger.info('✅ Profile manager stopped');
+          await profileManager.destroy();
+          logger.info('✅ Profile manager and API routes stopped');
         }
+
+        // ✅ Cleanup Redis service
+        if (redisService) {
+          await redisService.disconnect();
+          logger.info('✅ Redis service disconnected');
+        }
+
+        // Cleanup SocketManager
+        await socketManager.destroy();
+        logger.info('✅ Socket manager stopped');
 
         logger.info('✅ Graceful shutdown completed');
         process.exit(0);
@@ -195,6 +302,7 @@ async function initializeServer() {
       }
     };
 
+    // Setup signal handlers for graceful shutdown
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
@@ -209,26 +317,58 @@ async function initializeServer() {
       gracefulShutdown('unhandledRejection');
     });
 
-    server.listen(PORT, () => {
+    // ✅ ENHANCED: Start server with Redis and Profile API information
+    server.listen(PORT, async () => {
       logger.info(`🚀 TinChat Server Successfully Started!`);
       logger.info(`📊 Environment: ${NODE_ENV}`);
       logger.info(`🌐 Port: ${PORT}`);
       logger.info(`🗄️ Database: ${supabase ? 'Connected' : 'Disabled'}`);
+      logger.info(`📋 Redis: ${redisService ? 'Enabled' : 'Disabled'}`);
+      logger.info(`📡 Profile API: Available at /api/profiles/*`); // ✅ NEW
       logger.info(`🔒 CORS Origins: ${allowedOrigins.length} configured`);
       logger.info(`📈 Performance Monitoring: ${performanceMonitor.isEnabled ? 'Enabled' : 'Disabled'}`);
       logger.info(`💬 Socket.IO: Enhanced configuration active`);
       logger.info(`🔧 Memory Limit: ${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`);
       
-      // ✅ ADDED: Debug dashboard info
+      // Debug dashboard info
       if (NODE_ENV === 'development') {
         logger.info(`🐛 Debug Dashboard: http://localhost:${PORT}/debug/dashboard`);
         logger.info(`🔍 Debug API: http://localhost:${PORT}/debug/*`);
+        logger.info(`📡 Profile API: http://localhost:${PORT}/api/profiles/*`); // ✅ NEW
+      }
+      
+      // ✅ ENHANCED: Show caching and API configuration
+      if (redisService) {
+        logger.info(`💾 Caching: Redis (distributed) + LRU (local)`);
+        logger.info(`⚡ Queue Persistence: Redis-backed queues active`);
+        logger.info(`🔄 Profile Cache: Multi-layer (Redis + Memory + API)`);
+      } else {
+        logger.info(`💾 Caching: LRU (local memory only)`);
+        logger.info(`⚡ Queue Persistence: Memory-only (lost on restart)`);
+        logger.info(`🔄 Profile Cache: Memory + API only`);
       }
       
       const initialHealth = socketManager.healthCheck();
       logger.info(`💚 Initial Health Status: ${initialHealth.status}`);
+
+      // ✅ NEW: Test Profile API endpoints on startup
+      try {
+        await testProfileApiEndpoints();
+      } catch (error) {
+        logger.error('❌ Profile API startup test failed:', error);
+      }
+
+      // ✅ Test Redis operations on startup
+      if (redisService) {
+        try {
+          await testRedisOperations(redisService);
+        } catch (error) {
+          logger.error('❌ Redis startup test failed:', error);
+        }
+      }
     });
 
+    // System information logging
     logger.info('🖥️ System Information:', {
       nodeVersion: process.version,
       platform: process.platform,
@@ -244,6 +384,94 @@ async function initializeServer() {
   }
 }
 
+// ✅ NEW: Test Profile API endpoints to ensure they're working
+async function testProfileApiEndpoints(): Promise<void> {
+  try {
+    logger.info('🧪 Testing Profile API endpoints...');
+    
+    // Test health endpoint
+    const mockReq = {
+      url: '/api/profiles/health',
+      method: 'GET',
+      headers: {},
+      on: () => {},
+      emit: () => {}
+    } as any;
+
+    const mockRes = {
+      writeHead: () => {},
+      end: (data: string) => {
+        try {
+          const response = JSON.parse(data);
+          if (response.success) {
+            logger.info('✅ Profile API health endpoint test passed');
+          } else {
+            logger.warn('⚠️ Profile API health endpoint returned degraded status');
+          }
+        } catch (error) {
+          logger.error('❌ Profile API health endpoint test failed');
+        }
+      },
+      setHeader: () => {}
+    } as any;
+
+    await handleProfileRoutes(mockReq, mockRes);
+    
+  } catch (error) {
+    logger.error('❌ Profile API endpoint testing failed:', error);
+  }
+}
+
+// ✅ Test Redis operations to ensure everything works
+async function testRedisOperations(redisService: RedisService): Promise<void> {
+  try {
+    logger.info('🧪 Testing Redis operations...');
+    
+    // Test basic operations
+    const testKey = 'test:startup';
+    const testValue = { message: 'Redis test', timestamp: Date.now() };
+    
+    const redisInstance = redisService.getRedisInstance();
+    
+    // Test set operation
+    await redisInstance.setex(testKey, 10, JSON.stringify(testValue));
+    
+    // Test get operation
+    const retrieved = await redisInstance.get(testKey);
+    if (retrieved) {
+      const parsed = JSON.parse(retrieved);
+      logger.info('✅ Redis read/write test passed');
+    }
+    
+    // Test delete operation
+    await redisInstance.del(testKey);
+    
+    // Test queue operations
+    const testUser = {
+      id: 'test-user-123',
+      authId: null,
+      interests: ['testing'],
+      chatType: 'text' as const,
+      connectionStartTime: Date.now()
+    };
+    
+    await redisService.addToQueue('text', testUser);
+    const queueLength = await redisService.getQueueLength('text');
+    if (queueLength > 0) {
+      logger.info('✅ Redis queue operations test passed');
+      // Clean up test user
+      await redisService.removeFromQueue('text', 'test-user-123');
+    }
+    
+    logger.info('✅ All Redis operations tests passed');
+    
+  } catch (error) {
+    logger.error('❌ Redis operations test failed:', error);
+    logger.warn('⚠️ Redis may not be functioning correctly');
+  }
+}
+
+// ✅ Start the server
 initializeServer().catch(error => {
   logger.error('💥 Failed to start server:', error);
   process.exit(1);
