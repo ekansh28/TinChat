@@ -107,6 +107,17 @@ export class RedisService {
     return this.onlineStatus.getCachedOnlineUsersList();
   }
 
+
+    async batchGetOnlineStatus(authIds: string[]): Promise<Array<{ authId: string; isOnline: boolean; lastSeen: string } | null>> {
+    return this.onlineStatus.batchGetOnlineStatus(authIds);
+    }
+    // Inside RedisService.ts
+
+async batchSetOnlineStatus(updates: Array<{ authId: string; isOnline: boolean; lastSeen?: Date }>): Promise<boolean> {
+  return this.onlineStatus.batchSetOnlineStatus(updates);
+}
+
+
   // ==================== QUEUE METHODS (Delegated) ====================
   
   async addToQueue(chatType: 'text' | 'video', user: User): Promise<boolean> {
