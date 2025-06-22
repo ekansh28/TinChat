@@ -1,4 +1,4 @@
-// server/managers/modules/EventRouter.ts - FIXED CONSTRUCTOR VERSION
+// server/managers/modules/EventRouter.ts - FIXED VERSION WITH PROPER EVENT HANDLING
 import { Socket, Server as SocketIOServer } from 'socket.io';
 import { TypingManager } from '../../services/TypingManager';
 import { logger } from '../../utils/logger';
@@ -53,35 +53,84 @@ export class EventRouter {
       await this.matchmakingHandler.handleFindPartner(socket, payload);
     });
 
-    // ✅ NEW: Handle stop searching event
+    // ✅ FIXED: Handle stop searching event properly
     socket.on('stopSearching', async (payload: unknown) => {
-      await this.handleStopSearching(socket, payload);
+      await this.matchmakingHandler.handleStopSearching(socket, payload);
+    });
+
+    // ✅ NEW: Handle restart search event
+    socket.on('restartSearch', async (payload: unknown) => {
+      await this.handleRestartSearch(socket, payload);
+    });
+
+    // ✅ NEW: Handle check search status
+    socket.on('checkSearchStatus', async () => {
+      await this.handleCheckSearchStatus(socket);
     });
   } 
 
-    // ✅ NEW: Stop searching handler
-  private async handleStopSearching(socket: Socket, payload: unknown): Promise<void> {
+  // ✅ NEW: Restart search handler
+  private async handleRestartSearch(socket: Socket, payload: unknown): Promise<void> {
     try {
-      console.log(`🛑 STOP SEARCHING request from : ${socket.id}:`, payload);
+      logger.info(`🔄 RESTART SEARCH request from ${socket.id}:`, payload);
 
       const data = payload as any;
       
-      // Remove user from all waiting lists on the server
-      this.matchmakingHandler.removeUserFromQueues(socket.id);
+      // First stop any existing search
+      await this.matchmakingHandler.handleStopSearching(socket, { reason: 'restart' });
       
-      // Send confirmation to client
-      socket.emit('stopSearchingConfirmed', {
-        stoppedBy: socket.id,
-        authId: data?.authId,
-        reason: data?.reason || 'manual_stop',
-        timestamp: Date.now()
-      });
+      // Small delay to ensure cleanup
+      setTimeout(async () => {
+        // Then start new search
+        await this.matchmakingHandler.handleFindPartner(socket, {
+          chatType: data?.chatType || 'text',
+          interests: data?.interests || [],
+          authId: data?.authId,
+          reason: 'restart_search'
+        });
+      }, 100);
 
-      console.log(`✅ Stop searching handled successfully for ${socket.id}`);
+      logger.info(`✅ Restart search handled for ${socket.id}`);
 
     } catch (error) {
-      console.error(`❌ Error handling stop searching for ${socket.id}:`, error);
-      socket.emit('error', { message: 'Failed to stop searching' });
+      logger.error(`❌ Error handling restart search for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Failed to restart search' });
+    }
+  }
+
+  // ✅ NEW: Check search status handler
+  private async handleCheckSearchStatus(socket: Socket): Promise<void> {
+    try {
+      const roomId = this.matchmakingHandler.getRoomIdForSocket(socket.id);
+      
+      if (roomId) {
+        // User is in a chat room
+        socket.emit('statusUpdate', {
+          status: 'in_chat',
+          message: 'Currently in chat',
+          searching: false,
+          inChat: true,
+          roomId: roomId
+        });
+      } else {
+        // Check if user is in queue (this would need to be added to MatchmakingHandler)
+        // For now, assume they're idle
+        socket.emit('statusUpdate', {
+          status: 'idle',
+          message: 'Ready to search',
+          searching: false,
+          inChat: false
+        });
+      }
+
+    } catch (error) {
+      logger.error(`❌ Error checking search status for ${socket.id}:`, error);
+      socket.emit('statusUpdate', {
+        status: 'error',
+        message: 'Failed to check status',
+        searching: false,
+        inChat: false
+      });
     }
   }
 
@@ -140,103 +189,23 @@ export class EventRouter {
       this.matchmakingHandler.handleLeaveChat(socket, payload);
     });
 
-    // Handle skip partner event
+    // ✅ ENHANCED: Handle skip partner event with proper state management
     socket.on('skipPartner', async (payload: unknown) => {
-      await this.handleSkipPartner(socket, payload);
+      await this.matchmakingHandler.handleSkipPartner(socket, payload);
     });
 
-    // Handle disconnect only (no auto-search)
+    // ✅ ENHANCED: Handle disconnect only (no auto-search)
     socket.on('disconnectOnly', async (payload: unknown) => {
       await this.handleDisconnectOnly(socket, payload);
     });
+
+    // ✅ NEW: Handle leave and search again
+    socket.on('leaveAndSearch', async (payload: unknown) => {
+      await this.handleLeaveAndSearch(socket, payload);
+    });
   }
 
-  // Skip partner handler with proper error handling
-  private async handleSkipPartner(socket: Socket, payload: unknown): Promise<void> {
-    try {
-      logger.info(`🔄 SKIP PARTNER request from ${socket.id}:`, payload);
-
-      const data = payload as any;
-      if (!data || typeof data !== 'object') {
-        socket.emit('skipError', { message: 'Invalid skip payload' });
-        return;
-      }
-
-      const roomId = data.roomId || this.matchmakingHandler.getRoomIdForSocket(socket.id);
-      if (!roomId) {
-        socket.emit('skipError', { message: 'Not in a chat room' });
-        return;
-      }
-
-      // Get partner before cleaning up room
-      const room = this.matchmakingHandler.getRoom(roomId);
-      if (!room || !room.users.includes(socket.id)) {
-        socket.emit('skipError', { message: 'Invalid room or not in room' });
-        return;
-      }
-
-      const partnerId = room.users.find(id => id !== socket.id);
-      if (!partnerId) {
-        socket.emit('skipError', { message: 'No partner found in room' });
-        return;
-      }
-
-      // Get io instance from one of the handlers that has it
-      const io = (this.messageHandler as any).io;
-      const partnerSocket = io.sockets.sockets.get(partnerId);
-
-      // Clean up the room with skip context (prevents "partnerLeft" message)
-      await this.matchmakingHandler.cleanupRoomForSkip(roomId, socket.id);
-
-      // Notify the skipped user (NO auto-search)
-      if (partnerSocket && partnerSocket.connected) {
-        partnerSocket.emit('partnerSkipped', {
-          skippedBy: socket.id,
-          skipperAuthId: data.authId,
-          timestamp: Date.now(),
-          message: 'Your partner skipped you'
-        });
-      }
-
-      // Send confirmation to the skipper and start auto-search
-      socket.emit('skipConfirmed', {
-        skippedUserId: partnerId,
-        autoSearchStarted: true,
-        timestamp: Date.now()
-      });
-
-      // Auto-search for the skipper ONLY
-      logger.info(`🔍 Starting auto-search for skipper ${socket.id}`);
-      
-      // Small delay to ensure cleanup is complete
-      setTimeout(async () => {
-        try {
-          await this.matchmakingHandler.handleFindPartner(socket, {
-            chatType: data.chatType || 'text',
-            interests: data.interests || [],
-            authId: data.authId,
-            reason: 'auto_search_after_skip'
-          });
-        } catch (error) {
-          logger.error(`❌ Auto-search failed for skipper ${socket.id}:`, error);
-          socket.emit('autoSearchFailed', { 
-            reason: 'Failed to start auto-search after skip'
-          });
-        }
-      }, 500);
-
-      logger.info(`✅ Skip handled: ${socket.id} skipped ${partnerId}`);
-
-    } catch (error) {
-      logger.error(`❌ Error handling skip partner for ${socket.id}:`, error);
-      socket.emit('skipError', { 
-        message: 'Failed to skip partner',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-
-  // Disconnect only handler (no auto-search)
+  // ✅ ENHANCED: Disconnect only handler (no auto-search) with proper state management
   private async handleDisconnectOnly(socket: Socket, payload: unknown): Promise<void> {
     try {
       logger.info(`🚪 DISCONNECT ONLY request from ${socket.id}:`, payload);
@@ -249,9 +218,18 @@ export class EventRouter {
         reason: 'manual_disconnect'
       });
 
+      // ✅ Send proper status update
       socket.emit('disconnectConfirmed', {
         disconnectedBy: socket.id,
+        newState: 'idle',
         timestamp: Date.now()
+      });
+
+      socket.emit('statusUpdate', {
+        status: 'idle',
+        message: 'Disconnected from chat',
+        searching: false,
+        inChat: false
       });
 
       logger.info(`✅ Disconnect only handled successfully for ${socket.id}`);
@@ -262,10 +240,98 @@ export class EventRouter {
     }
   }
 
+  // ✅ NEW: Leave current chat and immediately start searching again
+  private async handleLeaveAndSearch(socket: Socket, payload: unknown): Promise<void> {
+    try {
+      logger.info(`🔄 LEAVE AND SEARCH request from ${socket.id}:`, payload);
+
+      const data = payload as any;
+      
+      // First leave current chat
+      await this.matchmakingHandler.handleLeaveChat(socket, { 
+        roomId: data?.roomId,
+        reason: 'leave_and_search'
+      });
+
+      // Small delay to ensure cleanup
+      setTimeout(async () => {
+        // Then start new search
+        await this.matchmakingHandler.handleFindPartner(socket, {
+          chatType: data?.chatType || 'text',
+          interests: data?.interests || [],
+          authId: data?.authId,
+          reason: 'leave_and_search'
+        });
+      }, 200);
+
+      logger.info(`✅ Leave and search handled for ${socket.id}`);
+
+    } catch (error) {
+      logger.error(`❌ Error handling leave and search for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Failed to leave and search' });
+    }
+  }
+
   private setupStatusEventHandlers(socket: Socket): void {
     socket.on('updateStatus', async (payload: unknown) => {
       await this.userStatusHandler.handleUpdateStatus(socket, payload);
     });
+
+    // ✅ NEW: Handle manual status sync
+    socket.on('syncStatus', async () => {
+      await this.handleStatusSync(socket);
+    });
+  }
+
+  // ✅ NEW: Status sync handler to fix UI state issues
+  private async handleStatusSync(socket: Socket): Promise<void> {
+    try {
+      const roomId = this.matchmakingHandler.getRoomIdForSocket(socket.id);
+      
+      if (roomId) {
+        // User is in chat
+        const room = this.matchmakingHandler.getRoom(roomId);
+        if (room) {
+          socket.emit('statusUpdate', {
+            status: 'in_chat',
+            message: 'Currently in chat',
+            searching: false,
+            inChat: true,
+            roomId: roomId,
+            synchronized: true
+          });
+          
+          // Also send partner info if available
+          const partnerId = room.users.find(id => id !== socket.id);
+          if (partnerId) {
+            socket.emit('chatStateSync', {
+              roomId: roomId,
+              partnerId: partnerId,
+              inChat: true
+            });
+          }
+        }
+      } else {
+        // User is not in chat
+        socket.emit('statusUpdate', {
+          status: 'idle',
+          message: 'Ready to search',
+          searching: false,
+          inChat: false,
+          synchronized: true
+        });
+      }
+
+    } catch (error) {
+      logger.error(`❌ Error syncing status for ${socket.id}:`, error);
+      socket.emit('statusUpdate', {
+        status: 'error',
+        message: 'Failed to sync status',
+        searching: false,
+        inChat: false,
+        synchronized: false
+      });
+    }
   }
 
   private setupOnlineUsersEventHandlers(socket: Socket): void {
@@ -293,6 +359,37 @@ export class EventRouter {
       socket.emit('debugInfo', debugInfo);
       logger.debug(`🐛 Debug info sent to ${socket.id}`);
     });
+
+    // ✅ NEW: Enhanced debug events
+    socket.on('getFullState', () => {
+      const fullState = this.gatherFullState(socket.id);
+      socket.emit('fullState', fullState);
+      logger.debug(`🔍 Full state sent to ${socket.id}`);
+    });
+  }
+
+  // ✅ NEW: Gather full state for debugging
+  private gatherFullState(socketId: string) {
+    const connectionData = this.connectionManager.getConnectionData(socketId);
+    const matchmakingDebug = this.matchmakingHandler.debugMatchmaking();
+    const roomId = this.matchmakingHandler.getRoomIdForSocket(socketId);
+    const room = roomId ? this.matchmakingHandler.getRoom(roomId) : null;
+    
+    return {
+      socketId: socketId,
+      connectionData,
+      connectionDuration: this.connectionManager.getConnectionDuration(socketId),
+      matchmakingInfo: matchmakingDebug,
+      currentRoom: room ? {
+        id: room.id,
+        users: room.users,
+        chatType: room.chatType,
+        createdAt: room.createdAt,
+        lastActivity: room.lastActivity
+      } : null,
+      inChat: !!room,
+      timestamp: new Date().toISOString()
+    };
   }
 
   private setupCleanupEventHandlers(socket: Socket): void {
@@ -313,6 +410,48 @@ export class EventRouter {
     socket.on('connect_error', (error) => {
       logger.error(`🔌 Socket ${socket.id} connection error:`, error);
     });
+
+    // ✅ NEW: Handle manual cleanup request
+    socket.on('forceCleanup', async () => {
+      await this.handleForceCleanup(socket);
+    });
+  }
+
+  // ✅ NEW: Force cleanup handler for stuck states
+  private async handleForceCleanup(socket: Socket): Promise<void> {
+    try {
+      logger.info(`🧹 FORCE CLEANUP request from ${socket.id}`);
+
+      // Stop any searching
+      await this.matchmakingHandler.handleStopSearching(socket, { reason: 'force_cleanup' });
+      
+      // Leave any chat
+      await this.matchmakingHandler.handleLeaveChat(socket, { reason: 'force_cleanup' });
+      
+      // Clean up user completely
+      this.matchmakingHandler.cleanupUser(socket.id);
+      
+      // Send reset status
+      socket.emit('statusUpdate', {
+        status: 'idle',
+        message: 'Cleaned up and ready',
+        searching: false,
+        inChat: false,
+        forceCleanup: true
+      });
+
+      socket.emit('cleanupComplete', {
+        socketId: socket.id,
+        timestamp: Date.now(),
+        message: 'All states have been reset'
+      });
+
+      logger.info(`✅ Force cleanup completed for ${socket.id}`);
+
+    } catch (error) {
+      logger.error(`❌ Error in force cleanup for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Force cleanup failed' });
+    }
   }
 
   private setupHeartbeatHandler(socket: Socket): void {
@@ -329,7 +468,7 @@ export class EventRouter {
       logger.debug(`🏥 Connection health report from ${socket.id}:`, data);
     });
 
-    // Tab identification for video chat
+    // ✅ ENHANCED: Tab identification for video chat with state sync
     socket.on('identify_tab', (data: any) => {
       if (data?.tabId) {
         const connectionData = this.connectionManager.getConnectionData(socket.id);
@@ -344,8 +483,14 @@ export class EventRouter {
           socketId: socket.id, 
           tabId: data.tabId,
           chatType: data.chatType,
-          isReconnect: data.isReconnect || false
+          isReconnect: data.isReconnect || false,
+          timestamp: Date.now()
         });
+
+        // ✅ Auto-sync status after tab identification
+        setTimeout(() => {
+          this.handleStatusSync(socket);
+        }, 100);
       }
     });
 
@@ -356,6 +501,14 @@ export class EventRouter {
         socketId: socket.id,
         timestamp: Date.now(),
         serverTime: new Date().toISOString()
+      });
+    });
+
+    // ✅ NEW: Ping/pong for connection quality
+    socket.on('ping', (data: any) => {
+      socket.emit('pong', {
+        ...data,
+        serverTimestamp: Date.now()
       });
     });
   }
@@ -378,7 +531,23 @@ export class EventRouter {
 
   private notifyPartnerBeforeDisconnect(socketId: string): void {
     try {
-      logger.debug(`🔄 Notifying partner before ${socketId} disconnects`);
+      const roomId = this.matchmakingHandler.getRoomIdForSocket(socketId);
+      if (roomId) {
+        const room = this.matchmakingHandler.getRoom(roomId);
+        if (room) {
+          const partnerId = room.users.find(id => id !== socketId);
+          if (partnerId) {
+            const partnerSocket = (this.connectionManager as any).io?.sockets?.sockets?.get(partnerId);
+            if (partnerSocket) {
+              partnerSocket.emit('partnerDisconnecting', {
+                reason: 'Partner is disconnecting',
+                timestamp: Date.now()
+              });
+            }
+          }
+        }
+      }
+      logger.debug(`🔄 Notified partner before ${socketId} disconnects`);
     } catch (error) {
       logger.warn(`Failed to notify partner before disconnect for ${socketId}:`, error);
     }

@@ -1,4 +1,4 @@
-// server/managers/modules/MatchmakingHandler.ts - COMPLETE FIXED VERSION
+// server/managers/modules/MatchmakingHandler.ts - COMPLETE FIXED VERSION WITH PROPER STATE MANAGEMENT
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { MatchmakingEngine } from '../../services/MatchmakingEngine';
@@ -14,6 +14,15 @@ export class MatchmakingHandler {
   private readonly FIND_PARTNER_COOLDOWN_MS = 2000;
   private readonly DEFAULT_PROFILE_COLOR = '#667eea';
   private lastMatchRequest: Map<string, number> = new Map();
+  
+  // ✅ CRITICAL: Track user states to prevent duplicate connections
+  private userStates: Map<string, {
+    currentState: 'disconnected' | 'searching' | 'matched' | 'in_chat';
+    socketId: string;
+    roomId?: string;
+    lastActivity: number;
+    searchStartTime?: number;
+  }> = new Map();
 
   constructor(
     private io: SocketIOServer,
@@ -39,7 +48,29 @@ export class MatchmakingHandler {
         return;
       }
 
-      logger.info(`🔍 MATCHMAKING REQUEST : ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat`);
+      logger.info(`🔍 MATCHMAKING REQUEST: ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat`);
+      
+      // ✅ CRITICAL: Check current state to prevent duplicate searching
+      const currentState = this.getUserState(socket.id, authId);
+      if (currentState?.currentState === 'searching') {
+        logger.warn(`⚠️ User ${socket.id} already searching, ignoring duplicate request`);
+        socket.emit('alreadySearching', { 
+          message: 'You are already searching for a partner',
+          searchStartTime: currentState.searchStartTime 
+        });
+        return;
+      }
+
+      if (currentState?.currentState === 'in_chat') {
+        logger.warn(`⚠️ User ${socket.id} already in chat, must leave first`);
+        socket.emit('error', { 
+          message: 'You must leave your current chat before searching again' 
+        });
+        return;
+      }
+
+      // ✅ CRITICAL: Update user state to searching BEFORE processing
+      this.setUserState(socket.id, authId, 'searching');
       
       await this.setupUserMappings(socket.id, authId, interests);
       await this.cleanupUserFromQueuesAndRooms(socket.id);
@@ -53,23 +84,87 @@ export class MatchmakingHandler {
       } else {
         logger.debug(`⏳ NO MATCH FOUND - Adding ${socket.id} to ${chatType} waiting list`);
         this.matchmakingEngine.addToWaitingList(currentUser);
-        socket.emit('waitingForPartner');
+        
+        // ✅ CRITICAL: Send proper waiting state with search confirmation
+        socket.emit('searchStarted', {
+          message: 'Searching for a partner...',
+          chatType,
+          interests,
+          searchId: socket.id,
+          timestamp: Date.now()
+        });
+        
+        socket.emit('waitingForPartner', {
+          searchId: socket.id,
+          chatType,
+          queuePosition: await this.getQueuePosition(currentUser),
+          estimatedWaitTime: await this.getEstimatedWaitTime(chatType)
+        });
       }
 
       setTimeout(() => this.broadcastOnlineUsersList(), 200);
 
     } catch (error: any) {
       logger.error(`❌ MATCHMAKING ERROR for ${socket.id}:`, error);
-      socket.emit('error', { message: 'Invalid payload for findPartner.' });
+      
+      // ✅ CRITICAL: Reset user state on error
+      const authId = this.socketToAuthId.get(socket.id);
+      this.setUserState(socket.id, authId, 'disconnected');
+      
+      socket.emit('searchError', { 
+        message: 'Failed to start search. Please try again.',
+        error: 'SEARCH_FAILED'
+      });
     }
   }
 
-  // Handle skip partner with proper differentiation
+  // ✅ NEW: Handle stop searching event properly
+  async handleStopSearching(socket: Socket, payload: unknown): Promise<void> {
+    try {
+      logger.info(`🛑 STOP SEARCHING request from ${socket.id}:`, payload);
+
+      const data = payload as any;
+      const authId = this.socketToAuthId.get(socket.id);
+      
+      // ✅ CRITICAL: Update user state BEFORE removing from queues
+      this.setUserState(socket.id, authId, 'disconnected');
+      
+      // Remove user from all waiting lists
+      this.removeUserFromQueues(socket.id);
+      
+      // ✅ CRITICAL: Send proper confirmation with state reset
+      socket.emit('searchStopped', {
+        stoppedBy: socket.id,
+        authId: data?.authId || authId,
+        reason: data?.reason || 'manual_stop',
+        timestamp: Date.now(),
+        newState: 'idle'
+      });
+
+      // ✅ Emit status update to reset UI state
+      socket.emit('statusUpdate', {
+        status: 'idle',
+        message: 'Search stopped',
+        searching: false,
+        inChat: false
+      });
+
+      logger.info(`✅ Stop searching handled successfully for ${socket.id}`);
+
+    } catch (error) {
+      logger.error(`❌ Error handling stop searching for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Failed to stop searching' });
+    }
+  }
+
+  // ✅ ENHANCED: Handle skip partner with proper state management
   async handleSkipPartner(socket: Socket, payload: unknown): Promise<void> {
     try {
       logger.info(`🔄 SKIP PARTNER request from ${socket.id}:`, payload);
 
       const data = payload as any;
+      const authId = this.socketToAuthId.get(socket.id);
+      
       if (!data || typeof data !== 'object') {
         socket.emit('skipError', { message: 'Invalid skip payload' });
         return;
@@ -95,59 +190,134 @@ export class MatchmakingHandler {
       }
 
       const partnerSocket = this.io.sockets.sockets.get(partnerId);
+      const partnerAuthId = this.socketToAuthId.get(partnerId);
+
+      // ✅ CRITICAL: Update both users' states
+      this.setUserState(socket.id, authId, 'searching'); // Skipper goes to searching
+      this.setUserState(partnerId, partnerAuthId, 'disconnected'); // Skipped user goes to idle
 
       // Clean up the room first
       await this.cleanupRoom(roomId);
 
-      // Notify both users about the skip
-      // The skipper gets confirmation and auto-search
-      socket.emit('skipConfirmed', {
+      // ✅ CRITICAL: Send proper state updates to both users
+      socket.emit('partnerSkipped', {
         skippedUserId: partnerId,
         autoSearchStarted: true,
+        newState: 'searching',
         timestamp: Date.now()
       });
 
       // The skipped user gets notified but NO auto-search
       if (partnerSocket && partnerSocket.connected) {
-        partnerSocket.emit('partnerSkipped', {
+        partnerSocket.emit('partnerSkippedYou', {
           skippedBy: socket.id,
-          skipperAuthId: data.skipperAuthId,
+          skipperAuthId: data.skipperAuthId || authId,
           timestamp: Date.now(),
-          message: 'Your partner skipped you'
+          message: 'Your partner skipped you',
+          newState: 'idle'
+        });
+        
+        // ✅ Send status update to reset skipped user's UI
+        partnerSocket.emit('statusUpdate', {
+          status: 'idle',
+          message: 'Partner skipped you',
+          searching: false,
+          inChat: false
         });
       }
 
       // Auto-search ONLY for the skipper
-      if (data.autoSearchForSkipper) {
-        logger.info(`🔍 Starting auto-search for skipper ${socket.id}`);
-        
-        // Small delay to ensure cleanup is complete
-        setTimeout(async () => {
-          try {
-            await this.handleFindPartner(socket, {
-              chatType: data.chatType || 'text',
-              interests: data.interests || [],
-              authId: data.skipperAuthId,
-              reason: 'auto_search_after_skip'
-            });
-          } catch (error) {
-            logger.error(`❌ Auto-search failed for skipper ${socket.id}:`, error);
-            socket.emit('autoSearchFailed', { 
-              reason: 'Failed to start auto-search after skip'
-            });
-          }
-        }, 500);
-      }
+      logger.info(`🔍 Starting auto-search for skipper ${socket.id}`);
+      
+      // Small delay to ensure cleanup is complete
+      setTimeout(async () => {
+        try {
+          await this.handleFindPartner(socket, {
+            chatType: data.chatType || 'text',
+            interests: data.interests || [],
+            authId: data.skipperAuthId || authId,
+            reason: 'auto_search_after_skip'
+          });
+        } catch (error) {
+          logger.error(`❌ Auto-search failed for skipper ${socket.id}:`, error);
+          
+          // ✅ Reset state on auto-search failure
+          this.setUserState(socket.id, authId, 'disconnected');
+          
+          socket.emit('autoSearchFailed', { 
+            reason: 'Failed to start auto-search after skip',
+            newState: 'idle'
+          });
+          
+          socket.emit('statusUpdate', {
+            status: 'idle',
+            message: 'Auto-search failed',
+            searching: false,
+            inChat: false
+          });
+        }
+      }, 500);
 
       logger.info(`✅ Skip handled: ${socket.id} skipped ${partnerId}`);
 
     } catch (error) {
       logger.error(`❌ Error handling skip partner for ${socket.id}:`, error);
+      const authId = this.socketToAuthId.get(socket.id);
+      this.setUserState(socket.id, authId, 'disconnected');
+      
       socket.emit('skipError', { 
         message: 'Failed to skip partner',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        newState: 'idle'
       });
     }
+  }
+
+  // ✅ NEW: User state management methods
+  private getUserState(socketId: string, authId?: string | null) {
+    const key = authId || socketId;
+    return this.userStates.get(key);
+  }
+
+  private setUserState(socketId: string, authId: string | null | undefined, state: 'disconnected' | 'searching' | 'matched' | 'in_chat', roomId?: string) {
+    const key = authId || socketId;
+    const currentTime = Date.now();
+    
+    const stateData = {
+      currentState: state,
+      socketId,
+      roomId,
+      lastActivity: currentTime,
+      searchStartTime: state === 'searching' ? currentTime : undefined
+    };
+    
+    this.userStates.set(key, stateData);
+    
+    logger.debug(`📊 User state updated: ${key} -> ${state}${roomId ? ` (room: ${roomId})` : ''}`);
+  }
+
+  private cleanupUserState(socketId: string, authId?: string | null) {
+    const key = authId || socketId;
+    this.userStates.delete(key);
+    logger.debug(`🧹 User state cleaned up: ${key}`);
+  }
+
+  // ✅ ENHANCED: Queue position calculation
+  private async getQueuePosition(user: User): Promise<number> {
+    const queueDetails = this.matchmakingEngine.getQueueDetails();
+    const queue = queueDetails[user.chatType];
+    
+    const userIndex = queue.findIndex(u => u.id === user.id);
+    return userIndex >= 0 ? userIndex + 1 : 0;
+  }
+
+  // ✅ NEW: Estimated wait time calculation
+  private async getEstimatedWaitTime(chatType: 'text' | 'video'): Promise<number> {
+    const queueStats = this.matchmakingEngine.getQueueStats();
+    const queueLength = chatType === 'text' ? queueStats.text : queueStats.video;
+    
+    // Simple estimation: 30 seconds per person ahead in queue
+    return Math.max(30, queueLength * 30);
   }
 
   private checkRateLimit(socketId: string): boolean {
@@ -157,7 +327,10 @@ export class MatchmakingHandler {
     if (now - lastRequest < this.FIND_PARTNER_COOLDOWN_MS) {
       logger.debug(`⏱️ Rate limited findPartner for ${socketId}`);
       const socket = this.io.sockets.sockets.get(socketId);
-      socket?.emit('findPartnerCooldown');
+      socket?.emit('findPartnerCooldown', {
+        remainingTime: this.FIND_PARTNER_COOLDOWN_MS - (now - lastRequest),
+        message: 'Please wait before searching again'
+      });
       return false;
     }
     
@@ -232,13 +405,27 @@ export class MatchmakingHandler {
     const partnerSocket = this.io.sockets.sockets.get(matchedPartner.id);
     if (!partnerSocket || !partnerSocket.connected) {
       logger.warn(`⚠️ Partner ${matchedPartner.id} disconnected during room creation`);
+      
+      // ✅ Reset current user state and re-queue
+      const authId = this.socketToAuthId.get(currentUser.id);
+      this.setUserState(currentUser.id, authId, 'searching');
+      
       this.matchmakingEngine.addToWaitingList(currentUser);
-      this.io.to(currentUser.id).emit('waitingForPartner');
+      this.io.to(currentUser.id).emit('waitingForPartner', {
+        message: 'Partner disconnected, searching for another...'
+      });
       return;
     }
 
     const roomId = `room_${currentUser.id}_${matchedPartner.id}_${Date.now()}`;
     const room = this.roomManager.createRoom(roomId, [currentUser.id, matchedPartner.id], currentUser.chatType);
+    
+    // ✅ CRITICAL: Update both users' states to in_chat
+    const currentUserAuthId = this.socketToAuthId.get(currentUser.id);
+    const partnerAuthId = this.socketToAuthId.get(matchedPartner.id);
+    
+    this.setUserState(currentUser.id, currentUserAuthId, 'in_chat', roomId);
+    this.setUserState(matchedPartner.id, partnerAuthId, 'in_chat', roomId);
     
     // Update all tracking mappings
     this.socketToRoom.set(currentUser.id, roomId);
@@ -256,12 +443,39 @@ export class MatchmakingHandler {
       chatType: currentUser.chatType
     });
 
-    // Send enhanced partner found events
+    // ✅ CRITICAL: Send enhanced partner found events with proper state
     const currentUserData = this.buildPartnerFoundData(currentUser, roomId, matchedPartner.interests);
     const matchedPartnerData = this.buildPartnerFoundData(matchedPartner, roomId, currentUser.interests);
 
-    this.io.to(currentUser.id).emit('partnerFound', matchedPartnerData);
-    this.io.to(matchedPartner.id).emit('partnerFound', currentUserData);
+    // ✅ Enhanced events with state information
+    this.io.to(currentUser.id).emit('partnerFound', {
+      ...matchedPartnerData,
+      newState: 'in_chat',
+      message: 'Connected with a partner. You can start chatting!'
+    });
+    
+    this.io.to(matchedPartner.id).emit('partnerFound', {
+      ...currentUserData,
+      newState: 'in_chat',
+      message: 'Connected with a partner. You can start chatting!'
+    });
+
+    // ✅ Send status updates to both users
+    this.io.to(currentUser.id).emit('statusUpdate', {
+      status: 'in_chat',
+      message: 'Connected with partner',
+      searching: false,
+      inChat: true,
+      roomId: roomId
+    });
+    
+    this.io.to(matchedPartner.id).emit('statusUpdate', {
+      status: 'in_chat',
+      message: 'Connected with partner',
+      searching: false,
+      inChat: true,
+      roomId: roomId
+    });
 
     this.performanceMonitor.recordMatch(currentUser.id, true);
   }
@@ -300,22 +514,33 @@ export class MatchmakingHandler {
     }
   }
 
-  // Regular room cleanup with "partnerLeft" message
+  // ✅ ENHANCED: Regular room cleanup with proper state management
   async cleanupRoom(roomId: string): Promise<void> {
     const room: Room | null = this.roomManager.getRoom(roomId);
     if (!room) return;
 
-    // Notify all users in room
+    // ✅ CRITICAL: Update user states for all users in room
     room.users.forEach((userId: string) => {
-      if (userId !== roomId) { // Avoid self-notification
-        const socket = this.io.sockets.sockets.get(userId);
-        if (socket) {
-          socket.emit('partnerLeft', {
-            reason: 'Partner disconnected',
-            timestamp: new Date().toISOString(),
-          });
-          socket.leave(roomId);
-        }
+      const authId = this.socketToAuthId.get(userId);
+      this.setUserState(userId, authId, 'disconnected');
+      
+      const socket = this.io.sockets.sockets.get(userId);
+      if (socket) {
+        socket.emit('partnerLeft', {
+          reason: 'Partner disconnected',
+          timestamp: new Date().toISOString(),
+          newState: 'idle'
+        });
+        
+        // ✅ Send status update to reset UI
+        socket.emit('statusUpdate', {
+          status: 'idle',
+          message: 'Partner left',
+          searching: false,
+          inChat: false
+        });
+        
+        socket.leave(roomId);
       }
       
       // Clean up mappings
@@ -326,7 +551,29 @@ export class MatchmakingHandler {
     this.roomToSockets.delete(roomId);
     this.roomManager.deleteRoom(roomId);
     
-    logger.info(`🧹 Room ${roomId} completely cleaned up`);
+    logger.info(`🧹 Room ${roomId} completely cleaned up with state updates`);
+  }
+
+  // ✅ NEW: Remove user from queues when they stop searching
+  removeUserFromQueues(socketId: string): void {
+    try {
+      // Remove from matchmaking queues
+      const wasInQueue = this.isUserInQueue(socketId);
+      this.matchmakingEngine.removeFromWaitingLists(socketId);
+      
+      if (wasInQueue) {
+        logger.info(`🗑️ Removed ${socketId} from matchmaking queues due to stop searching`);
+      }
+      
+      // Clean up any associated state
+      const authId = this.socketToAuthId.get(socketId);
+      if (authId) {
+        logger.info(`📊 User ${authId} stopped searching`);
+      }
+      
+    } catch (error) {
+      logger.error(`❌ Error removing user ${socketId} from queues:`, error);
+    }
   }
 
   // Get room ID for a socket
@@ -444,6 +691,10 @@ export class MatchmakingHandler {
       
       const room = this.roomManager.getRoom(roomId) || this.roomManager.getRoomByUserId(socket.id);
       if (room && room.users.includes(socket.id)) {
+        // ✅ Update user state before cleanup
+        const authId = this.socketToAuthId.get(socket.id);
+        this.setUserState(socket.id, authId, 'disconnected');
+        
         this.cleanupRoom(room.id);
         logger.info(`🚪 User ${socket.id} left room ${room.id}`);
         setTimeout(() => this.broadcastOnlineUsersList(), 200);
@@ -471,7 +722,8 @@ export class MatchmakingHandler {
       authToSocketMapping: this.authIdToSocketId.size,
       userInterests: this.userInterests.size,
       roomMappings: this.socketToRoom.size,
-      roomToSocketMappings: this.roomToSockets.size
+      roomToSocketMappings: this.roomToSockets.size,
+      userStates: this.userStates.size // ✅ Include state tracking stats
     };
   }
 
@@ -480,6 +732,12 @@ export class MatchmakingHandler {
       queues: this.matchmakingEngine.getQueueStats(),
       matches: this.performanceMonitor.getStats().totalMatches,
       rateLimits: this.lastMatchRequest.size,
+      userStates: {
+        total: this.userStates.size,
+        searching: Array.from(this.userStates.values()).filter(s => s.currentState === 'searching').length,
+        inChat: Array.from(this.userStates.values()).filter(s => s.currentState === 'in_chat').length,
+        disconnected: Array.from(this.userStates.values()).filter(s => s.currentState === 'disconnected').length
+      },
       mappings: {
         socketToAuth: this.socketToAuthId.size,
         authToSocket: this.authIdToSocketId.size,
@@ -489,37 +747,18 @@ export class MatchmakingHandler {
       }
     };
   }
-    // ✅ NEW: Remove user from queues when they stop searching
-  removeUserFromQueues(socketId: string): void {
-    try {
-      // Remove from matchmaking queues
-      const wasInQueue = this.isUserInQueue(socketId);
-      this.matchmakingEngine.removeFromWaitingLists(socketId);
-      
-      if (wasInQueue) {
-        console.log(`🗑️ Removed ${socketId} from matchmaking queues due to stop searching`);
-      } else {
-        console.log(`ℹ️ User ${socketId} was not in any queues when stop searching was called`);
-      }
-      
-      // Clean up any associated state
-      const authId = this.socketToAuthId.get(socketId);
-      if (authId) {
-        // Could update user status if needed
-        console.log(`📊 User ${authId} stopped searching`);
-      }
-      
-    } catch (error) {
-      console.error(`❌ Error removing user ${socketId} from queues:`, error);
-    }
-  }
-  // Cleanup for disconnected users
+
+  // ✅ ENHANCED: Cleanup for disconnected users with state management
   cleanupUser(socketId: string): void {
+    const authId = this.socketToAuthId.get(socketId);
+    
+    // ✅ CRITICAL: Clean up user state
+    this.cleanupUserState(socketId, authId);
+    
     // Remove from queues
     this.matchmakingEngine.removeFromWaitingLists(socketId);
     
     // Clean up mappings
-    const authId = this.socketToAuthId.get(socketId);
     if (authId) {
       this.socketToAuthId.delete(socketId);
       this.authIdToSocketId.delete(authId);
@@ -532,5 +771,7 @@ export class MatchmakingHandler {
     if (roomId) {
       this.cleanupRoom(roomId);
     }
+    
+    logger.debug(`🧹 Complete user cleanup for ${socketId} with state management`);
   }
 }
