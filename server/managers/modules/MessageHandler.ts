@@ -1,6 +1,6 @@
-// server/managers/modules/MessageHandler.ts - FIXED WITH PROPER EXPORT
+// server/managers/modules/MessageHandler.ts - CRITICAL FIX FOR WebRTC SIGNALS
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { ProfileManager } from '../profile/ProfileManager';
+import { ProfileManager } from '../ProfileManager';
 import { MessageBatcher } from '../../utils/MessageBatcher';
 import { RoomManager, Room } from '../../services/RoomManager';
 import { ProfileCache } from '../../utils/ProfileCache';
@@ -19,7 +19,6 @@ export interface MessageData {
   roomId: string;
 }
 
-// ✅ FIXED: Added export to MessageHandler class
 export class MessageHandler {
   private readonly DEFAULT_PROFILE_COLOR = '#667eea';
 
