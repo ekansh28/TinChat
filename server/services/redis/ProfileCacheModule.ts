@@ -55,7 +55,7 @@ export class ProfileCacheModule {
       const cached = await this.cache.get<CachedProfile>(key);
       
       if (!cached) {
-        logger.debug(`👤 Profile cache miss: ${authId}`);
+        logger.debug(`👤 Profile cache miss : ${authId}`);
         return null;
       }
       

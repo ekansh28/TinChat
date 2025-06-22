@@ -43,7 +43,7 @@ export class FriendsCacheModule {
     const cached = await this.cache.get<CachedFriendsList>(key);
     
     if (cached) {
-      logger.debug(`👥 Friends cache hit: ${authId} (${cached.count} friends)`);
+      logger.debug(`👥 Friends cache hit ${authId} (${cached.count} friends)`);
       return cached.friends;
     }
     

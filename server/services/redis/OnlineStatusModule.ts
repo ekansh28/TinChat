@@ -56,7 +56,7 @@ export class OnlineStatusModule {
     
     const success = await this.cache.batchSet(operations);
     if (success) {
-      logger.debug(`📊 Batch updated ${updates.length} online statuses`);
+      logger.debug(`📊 Batch updated ${updates.length} online statuses.`);
     }
     return success;
   }

@@ -32,7 +32,7 @@ export class RedisConnection {
     this.redis.on('connect', () => {
       this.isConnected = true;
       this.retries = 0;
-      logger.info('✅ Redis connected successfully');
+      logger.info('✅ Redis connected successfully!');
     });
 
     this.redis.on('error', (err) => {

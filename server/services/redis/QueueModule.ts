@@ -51,7 +51,7 @@ export class QueueModule {
         logger.debug(`⏳ Added ${user.id} to ${chatType} queue (size: ${currentSize + 1})`);
         return true;
       } else {
-        logger.error(`❌ Failed to add ${user.id} to ${chatType} queue:`, results);
+        logger.error(`❌ Failed to add : ${user.id} to ${chatType} queue:`, results);
         return false;
       }
     } catch (error) {

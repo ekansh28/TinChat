@@ -12,7 +12,7 @@ export class RedisCache {
       logger.debug(`📋 Cached: ${key} (TTL: ${ttl}s)`);
       return true;
     } catch (error) {
-      logger.error(`❌ Cache set failed for ${key}:`, error);
+      logger.error(`❌ Cache set failed for : ${key}:`, error);
       return false;
     }
   }
