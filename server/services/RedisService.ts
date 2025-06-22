@@ -170,6 +170,8 @@ export class RedisService {
     return this.connection.disconnect();
   }
 
+
+
   // ==================== SAFE PROFILE METHODS ====================
   
   async cacheUserProfile(authId: string, profile: UserProfile, isFrequentlyUpdated: boolean = false): Promise<boolean> {
@@ -714,5 +716,15 @@ export class RedisService {
       logger.error('Memory usage retrieval failed:', error);
       return null;
     }
+  }
+
+    /**
+   * Create a Redis pipeline for batch operations
+   */
+  pipeline() {
+    if (!this.isInitialized) {
+      throw new Error('Redis not initialized');
+    }
+    return this.connection.getRedisInstance().pipeline();
   }
 }
