@@ -55,7 +55,7 @@ export class ConnectionManager {
       ip: socket.handshake.address || 'unknown'
     });
 
-    logger.info(`👤 User connected: ${socket.id}. Total online: ${this.onlineUserCount}`, {
+    logger.info(`👤 User connected : ${socket.id}. Total online: ${this.onlineUserCount}`, {
       userAgent: socket.handshake.headers['user-agent'],
       remoteAddress: socket.handshake.address,
       transport: socket.conn.transport.name,

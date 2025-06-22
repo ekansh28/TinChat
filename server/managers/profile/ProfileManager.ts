@@ -13,7 +13,7 @@ import { SearchModule } from './modules/SearchModule';
 import { StatusModule } from './modules/StatusModule';
 import { BlockingModule } from './modules/BlockingModule';
 
-// Re-export types for backward compatibility
+// Re-export types for backward compatibility.
 export interface UserProfile {
   id: string;
   username: string;

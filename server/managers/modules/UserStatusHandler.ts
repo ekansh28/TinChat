@@ -29,7 +29,7 @@ export class UserStatusHandler {
           socket.emit('statusUpdated', { status });
           logger.debug(`📊 Status updated: ${authId} → ${status}`);
         } else {
-          socket.emit('error', { message: 'Failed to update status.' });
+          socket.emit('error', { message: 'Failed to update status .' });
         }
       } else {
         socket.emit('error', { message: 'Authentication required to update status.' });

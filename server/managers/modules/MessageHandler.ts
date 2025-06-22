@@ -58,7 +58,7 @@ export class MessageHandler {
       
     } catch (error: any) {
       logger.error(`❌ CRITICAL MESSAGE ERROR for ${socket.id}:`, error);
-      socket.emit('error', { message: 'Failed to send message.' });
+      socket.emit('error', { message: 'Failed to send message .' });
     }
   }
 
