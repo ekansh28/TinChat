@@ -31,7 +31,7 @@ export class SearchModule {
       if (this.redisService) {
         const cached = await this.redisService.get<UserSearchResult[]>(cacheKey);
         if (cached) {
-          logger.debug(`🔍 Search cache hit for: ${query}`);
+          logger.debug(`🔍 Search cache hit for : ${query}`);
           return cached;
         }
       }

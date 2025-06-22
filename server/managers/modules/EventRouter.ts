@@ -62,7 +62,7 @@ export class EventRouter {
     // ✅ NEW: Stop searching handler
   private async handleStopSearching(socket: Socket, payload: unknown): Promise<void> {
     try {
-      console.log(`🛑 STOP SEARCHING request from ${socket.id}:`, payload);
+      console.log(`🛑 STOP SEARCHING request from : ${socket.id}:`, payload);
 
       const data = payload as any;
       

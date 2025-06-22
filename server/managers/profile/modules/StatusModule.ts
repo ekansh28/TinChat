@@ -34,7 +34,7 @@ export class StatusModule {
       logger.debug(`🌐 Set online status for ${authId}: ${isOnline}`);
       return true;
     } catch (error) {
-      logger.error(`❌ Failed to set online status for ${authId}:`, error);
+      logger.error(`❌ Failed to set online status for : ${authId}:`, error);
       return false;
     }
   }

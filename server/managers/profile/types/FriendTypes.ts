@@ -1,4 +1,6 @@
 // server/managers/profile/types/FriendTypes.ts
+// import { SupabaseClient } from '@supabase/supabase-js';
+
 import { UserStatus } from '../../../types/User';
 export interface FriendData {
   id: string;

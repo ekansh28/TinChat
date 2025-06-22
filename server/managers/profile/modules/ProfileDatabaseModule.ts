@@ -27,7 +27,7 @@ export class ProfileDatabaseModule {
 
       if (error) {
         if (error.code !== 'PGRST116') {
-          logger.error(`Database profile fetch error for ${authId}:`, error);
+          logger.error(`Database profile fetch error for : ${authId}:`, error);
         }
         return null;
       }

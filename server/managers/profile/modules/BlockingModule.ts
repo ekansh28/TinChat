@@ -34,7 +34,7 @@ export class BlockingModule {
         ]);
       }
 
-      logger.info(`🚫 User ${blockerId} blocked ${blockedId}`);
+      logger.info(`🚫 User ${blockerId} blocked  : ${blockedId}`);
       return true;
     } catch (error) {
       logger.error(`Failed to block user ${blockedId} by ${blockerId}:`, error);

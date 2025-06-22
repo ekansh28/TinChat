@@ -39,7 +39,7 @@ export class MatchmakingHandler {
         return;
       }
 
-      logger.info(`🔍 MATCHMAKING REQUEST: ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat`);
+      logger.info(`🔍 MATCHMAKING REQUEST : ${socket.id} (${authId || 'anonymous'}) - ${chatType} chat`);
       
       await this.setupUserMappings(socket.id, authId, interests);
       await this.cleanupUserFromQueuesAndRooms(socket.id);

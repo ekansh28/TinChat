@@ -173,7 +173,7 @@ export class FriendsModule {
 
       return { status: 'none' };
     } catch (error) {
-      logger.error(`Error getting friendship status between ${user1Id} and ${user2Id}:`, error);
+      logger.error(`Error getting friendship status between : ${user1Id} and ${user2Id}:`, error);
       return { status: 'none' };
     }
   }
