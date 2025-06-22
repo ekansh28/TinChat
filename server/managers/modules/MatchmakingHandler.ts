@@ -3,7 +3,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { MatchmakingEngine } from '../../services/MatchmakingEngine';
 import { RoomManager, Room } from '../../services/RoomManager';
-import { ProfileManager } from '../ProfileManager';
+import { ProfileManager } from '../profile/ProfileManager';
 import { ProfileCache } from '../../utils/ProfileCache';
 import { PerformanceMonitor } from '../../utils/PerformanceMonitor';
 import { ValidationSchemas } from '../../validation/schemas';
@@ -45,7 +45,7 @@ export class MatchmakingHandler {
       await this.cleanupUserFromQueuesAndRooms(socket.id);
       
       const currentUser = await this.createEnhancedUser(socket.id, chatType, interests, authId);
-      const matchedPartner = this.matchmakingEngine.findMatch(currentUser);
+      const matchedPartner = await this.matchmakingEngine.findMatch(currentUser);
 
       if (matchedPartner) {
         logger.info(`🎊 MATCH FOUND: ${currentUser.id} ↔ ${matchedPartner.id} (${chatType})`);

@@ -22,6 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/components/screensaver/bubbles/utils.ts", "src/components/screensaver/bubbles/Bubbles.js"],
   "exclude": ["node_modules"]
 }

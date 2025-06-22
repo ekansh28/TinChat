@@ -14,7 +14,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { ConnectionErrorScreen } from './components/ConnectionErrorScreen';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { initializeAudioSystem } from './utils/ChatHelpers'; // ✅ NEW: Import audio initializer
-
+import VistaBubbles from "@/components/screensaver/bubbles/VistaBubbles";
 // ✅ FIXED: Styles moved to separate component/file to avoid re-creating
 const displayNameAnimationCSS = `
   .display-name-rainbow {
@@ -110,7 +110,7 @@ const ChatPageClientContent: React.FC = () => {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
-      
+      <VistaBubbles />
       <ProfilePopupProvider>
         <div className="fixed top-0 right-0 z-50">
           <TopBar />

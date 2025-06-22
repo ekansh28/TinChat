@@ -12,8 +12,8 @@ const nextConfig = {
 
     const cspHeader = `
       default-src 'self' ${cdn};
-      script-src 'self' 'unsafe-eval' 'unsafe-inline' ${cdn} *.paypal.com *.paypalobjects.com *.googleapis.com https://unpkg.com https://static.cloudflareinsights.com;
-      script-src-elem 'self' 'unsafe-inline' ${cdn} *.paypal.com *.paypalobjects.com *.googleapis.com https://unpkg.com https://static.cloudflareinsights.com;
+      script-src 'self' 'unsafe-eval' 'unsafe-inline' ${cdn} *.paypal.com *.paypalobjects.com *.googleapis.com https://unpkg.com https://static.cloudflareinsights.com https://cdn.jsdelivr.net;
+      script-src-elem 'self' 'unsafe-inline' ${cdn} *.paypal.com *.paypalobjects.com *.googleapis.com https://unpkg.com https://static.cloudflareinsights.com https://cdn.jsdelivr.net;
       style-src 'self' 'unsafe-inline' ${cdn} https://fonts.googleapis.com https://unpkg.com;
       font-src 'self' ${cdn} https://fonts.gstatic.com https://unpkg.com;
       img-src 'self' data: blob: *;
