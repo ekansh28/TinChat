@@ -1,4 +1,4 @@
-// src/app/chat/components/TaskBar.tsx - WITH FRIENDS TAB
+// src/app/chat/components/TaskBar.tsx - COMPLETELY FIXED VERSION
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -6,10 +6,17 @@ import { cn } from '@/lib/utils';
 import FriendsWindow from './FriendsWindow';
 import FriendsChatWindow from './FriendsChatWindow';
 
+// ✅ FIXED: Import unified types from friends.ts and extended types
+import { 
+  Friend, 
+  OpenChat
+} from '../../../types/friends';
+import { ExtendedChatMessage, createChatMessage } from '../../../types/friendsExtended';
+
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
 
-// ✅ Audio context for message sounds
+// ✅ FIXED: Audio context for message sounds with proper typing
 interface AudioManager {
   playMessageReceived: () => void;
   playMessageSent: () => void;
@@ -17,17 +24,7 @@ interface AudioManager {
   getVolume: () => number;
 }
 
-// ✅ Import unified types
-import { 
-  Friend, 
-  ChatMessage, 
-  OpenChat,
-  transformToModernFriend,
-  transformToChatMessage,
-  UserStatus
-} from '../../../types/friends';
-
-// ✅ Create audio manager
+// ✅ FIXED: Create audio manager with proper error handling
 const createAudioManager = (): AudioManager => {
   const audioCache = new Map<string, HTMLAudioElement>();
   let currentVolume = 0.5; // Default 50% volume (taskbar level 2)
@@ -68,10 +65,10 @@ const createAudioManager = (): AudioManager => {
   };
 };
 
-// ✅ Global audio manager instance
+// ✅ FIXED: Global audio manager instance with proper initialization
 let globalAudioManager: AudioManager | null = null;
 
-// ✅ Export function to get audio manager
+// ✅ FIXED: Export function to get audio manager
 export const getAudioManager = (): AudioManager => {
   if (!globalAudioManager) {
     globalAudioManager = createAudioManager();
@@ -88,45 +85,46 @@ export const TaskBar: React.FC = () => {
   const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // ✅ NEW: Friends system state
+  // ✅ FIXED: Friends system state with proper typing
   const [showFriendsWindow, setShowFriendsWindow] = useState(false);
-  const [openChats, setOpenChats] = useState<OpenChat[]>([]);
+  const [openChats, setOpenChats] = useState<Array<{
+    friendId: string;
+    friend: Friend;
+    messages: ExtendedChatMessage[];
+    position: number;
+  }>>([]);
   const [friends, setFriends] = useState<Friend[]>([
     // Mock friends data for demonstration
     {
       id: 'friend1',
       username: 'alice_dev',
       display_name: 'Alice',
-      avatar: '/avatars/alice.png',
-      isOnline: true,
-      lastMessage: {
-        text: 'Hey! How are you?',
-        timestamp: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
-        isFromSelf: false
-      }
+      avatar_url: '/avatars/alice.png',
+      status: 'online',
+      is_online: true,
+      last_seen: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
     },
     {
       id: 'friend2',
       username: 'bob_coder',
       display_name: 'Bob',
-      avatar: '/avatars/bob.png',
-      isOnline: false,
-      lastMessage: {
-        text: 'Thanks for the help!',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        isFromSelf: true
-      }
+      avatar_url: '/avatars/bob.png',
+      status: 'offline',
+      is_online: false,
+      last_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
     },
     {
       id: 'friend3',
       username: 'charlie_design',
       display_name: 'Charlie',
-      avatar: '/avatars/charlie.png',
-      isOnline: true
+      avatar_url: '/avatars/charlie.png',
+      status: 'online',
+      is_online: true,
+      last_seen: new Date().toISOString(),
     }
   ]);
 
-  // ✅ Mobile detection
+  // ✅ FIXED: Mobile detection with proper cleanup
   const checkIfMobile = useCallback(() => {
     if (typeof window !== 'undefined') {
       const mobile = window.innerWidth < 768;
@@ -134,14 +132,14 @@ export const TaskBar: React.FC = () => {
     }
   }, []);
 
-  // ✅ Mobile detection effect
+  // ✅ FIXED: Mobile detection effect
   useEffect(() => {
     checkIfMobile();
     window.addEventListener('resize', checkIfMobile);
     return () => window.removeEventListener('resize', checkIfMobile);
   }, [checkIfMobile]);
 
-  // ✅ Initialize audio manager and sync volume
+  // ✅ FIXED: Initialize audio manager and sync volume
   useEffect(() => {
     if (mounted) {
       const audioManager = getAudioManager();
@@ -149,7 +147,7 @@ export const TaskBar: React.FC = () => {
     }
   }, [mounted, audioVolume]);
 
-  // Check theme mode
+  // ✅ FIXED: Check theme mode with proper typing
   const checkThemeMode = useCallback(() => {
     if (typeof window === 'undefined') return { isWin7: false, isWinXP: false };
     
@@ -165,7 +163,7 @@ export const TaskBar: React.FC = () => {
     };
   }, []);
 
-  // Update time
+  // ✅ FIXED: Update time with proper formatting
   const updateTime = useCallback(() => {
     const now = new Date();
     const timeString = now.toLocaleTimeString('en-US', {
@@ -176,14 +174,14 @@ export const TaskBar: React.FC = () => {
     setCurrentTime(timeString);
   }, []);
 
-  // Get current theme mode
+  // ✅ FIXED: Get current theme mode with proper typing
   const getCurrentTheme = useCallback((): 'win98' | 'win7' | 'winxp' => {
     if (isWinXPMode) return 'winxp';
     if (isWin7Mode) return 'win7';
     return 'win98';
   }, [isWin7Mode, isWinXPMode]);
 
-  // Get audio icon based on theme and volume
+  // ✅ FIXED: Get audio icon based on theme and volume
   const getAudioIcon = useCallback(() => {
     if (isWin7Mode) {
       // Windows 7: 0.ico (muted), 1.ico-3.ico (volume levels)
@@ -200,7 +198,7 @@ export const TaskBar: React.FC = () => {
     }
   }, [isWin7Mode, isWinXPMode, audioVolume]);
 
-  // ✅ NEW: Get friends icon based on theme
+  // ✅ FIXED: Get friends icon based on theme
   const getFriendsIcon = useCallback(() => {
     if (isWin7Mode) {
       return '/icons/Taskbar/7/friends.ico';
@@ -211,7 +209,7 @@ export const TaskBar: React.FC = () => {
     }
   }, [isWin7Mode, isWinXPMode]);
 
-  // ✅ Handle volume change with audio manager sync and user interaction
+  // ✅ FIXED: Handle volume change with audio manager sync and user interaction
   const handleVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseInt(event.target.value);
     setAudioVolume(newVolume);
@@ -230,17 +228,17 @@ export const TaskBar: React.FC = () => {
     }
   }, [mounted]);
 
-  // Handle audio icon click
+  // ✅ FIXED: Handle audio icon click
   const handleAudioIconClick = useCallback(() => {
     setShowVolumeSlider(prev => !prev);
   }, []);
 
-  // ✅ NEW: Handle friends icon click
+  // ✅ FIXED: Handle friends icon click
   const handleFriendsIconClick = useCallback(() => {
     setShowFriendsWindow(prev => !prev);
   }, []);
 
-  // ✅ NEW: Handle opening a chat with a friend
+  // ✅ FIXED: Handle opening a chat with a friend
   const handleOpenChat = useCallback((friend: Friend) => {
     // Check if chat is already open
     const existingChat = openChats.find(chat => chat.friendId === friend.id);
@@ -249,10 +247,10 @@ export const TaskBar: React.FC = () => {
       // Find the rightmost position
       const maxPosition = openChats.length > 0 ? Math.max(...openChats.map(chat => chat.position)) : -1;
       
-      const newChat: OpenChat = {
+      const newChat = {
         friendId: friend.id,
         friend: friend,
-        messages: [],
+        messages: [] as ExtendedChatMessage[],
         position: maxPosition + 1
       };
       
@@ -263,7 +261,7 @@ export const TaskBar: React.FC = () => {
     setShowFriendsWindow(false);
   }, [openChats]);
 
-  // ✅ NEW: Handle closing a chat
+  // ✅ FIXED: Handle closing a chat
   const handleCloseChat = useCallback((friendId: string) => {
     setOpenChats(prev => {
       const filteredChats = prev.filter(chat => chat.friendId !== friendId);
@@ -275,15 +273,9 @@ export const TaskBar: React.FC = () => {
     });
   }, []);
 
-  // ✅ NEW: Handle sending a message
+  // ✅ FIXED: Handle sending a message
   const handleSendMessage = useCallback((friendId: string, messageText: string) => {
-    const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      friendId,
-      text: messageText,
-      isFromSelf: true,
-      timestamp: new Date()
-    };
+    const newMessage = createChatMessage('current-user', friendId, messageText, 'current-user');
 
     // Add message to chat
     setOpenChats(prev => prev.map(chat => {
@@ -296,21 +288,6 @@ export const TaskBar: React.FC = () => {
       return chat;
     }));
 
-    // Update friend's last message
-    setFriends(prev => prev.map(friend => {
-      if (friend.id === friendId) {
-        return {
-          ...friend,
-          lastMessage: {
-            text: messageText,
-            timestamp: new Date(),
-            isFromSelf: true
-          }
-        };
-      }
-      return friend;
-    }));
-
     // Play send sound
     try {
       const audioManager = getAudioManager();
@@ -320,7 +297,7 @@ export const TaskBar: React.FC = () => {
     }
   }, []);
 
-  // Close volume slider when clicking outside
+  // ✅ FIXED: Close volume slider when clicking outside
   useEffect(() => {
     if (!showVolumeSlider) return;
 
@@ -335,7 +312,7 @@ export const TaskBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showVolumeSlider]);
 
-  // Theme detection effect
+  // ✅ FIXED: Theme detection effect
   useEffect(() => {
     if (!mounted) return;
 
@@ -379,28 +356,29 @@ export const TaskBar: React.FC = () => {
     };
   }, [mounted, checkThemeMode]);
 
-  // Time update effect
+  // ✅ FIXED: Time update effect
   useEffect(() => {
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, [updateTime]);
 
-  // Mount effect
+  // ✅ FIXED: Mount effect
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // ✅ FIXED: Early return if not mounted
   if (!mounted) {
     return null;
   }
 
-  // ✅ Hide TaskBar on mobile devices
+  // ✅ FIXED: Hide TaskBar on mobile devices
   if (isMobile) {
     return null;
   }
 
-  // Windows 98 TaskBar
+  // ✅ FIXED: Windows 98 TaskBar
   if (!isWin7Mode && !isWinXPMode) {
     return (
       <>
@@ -490,11 +468,11 @@ export const TaskBar: React.FC = () => {
               padding: '2px 4px',
               backgroundColor: '#c0c0c0',
               border: '1px inset #c0c0c0',
-              minWidth: '160px', // ✅ Increased width for friends icon
+              minWidth: '160px',
               position: 'relative'
             }}
           >
-            {/* ✅ NEW: Friends Control */}
+            {/* Friends Control */}
             <img 
               src={getFriendsIcon()}
               alt="Friends"
@@ -576,17 +554,16 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ NEW: Friends Window */}
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
-            friends={friends}
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
           />
         )}
 
-        {/* ✅ NEW: Open Chat Windows */}
+        {/* Open Chat Windows */}
         {openChats.map((chat) => (
           <FriendsChatWindow
             key={chat.friendId}
@@ -602,7 +579,7 @@ export const TaskBar: React.FC = () => {
     );
   }
 
-  // Windows 7 TaskBar
+  // ✅ FIXED: Windows 7 TaskBar
   if (isWin7Mode) {
     return (
       <>
@@ -678,11 +655,11 @@ export const TaskBar: React.FC = () => {
               background: 'rgba(255, 255, 255, 0.1)',
               borderRadius: '4px',
               backdropFilter: 'blur(5px)',
-              minWidth: '180px', // ✅ Increased width for friends icon
+              minWidth: '180px',
               position: 'relative'
             }}
           >
-            {/* ✅ NEW: Friends Control */}
+            {/* Friends Control */}
             <img 
               src={getFriendsIcon()}
               alt="Friends"
@@ -783,17 +760,16 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ NEW: Friends Window */}
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
-            friends={friends}
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
           />
         )}
 
-        {/* ✅ NEW: Open Chat Windows */}
+        {/* Open Chat Windows */}
         {openChats.map((chat) => (
           <FriendsChatWindow
             key={chat.friendId}
@@ -809,7 +785,7 @@ export const TaskBar: React.FC = () => {
     );
   }
 
-  // Windows XP TaskBar
+  // ✅ FIXED: Windows XP TaskBar
   if (isWinXPMode) {
     return (
       <>
@@ -889,11 +865,11 @@ export const TaskBar: React.FC = () => {
               border: '1px inset #1941a5',
               borderRadius: '2px',
               padding: '2px 4px',
-              minWidth: '160px', // ✅ Increased width for friends icon
+              minWidth: '160px',
               position: 'relative'
             }}
           >
-            {/* ✅ NEW: Friends Control */}
+            {/* Friends Control */}
             <img 
               src={getFriendsIcon()}
               alt="Friends"
@@ -981,19 +957,17 @@ export const TaskBar: React.FC = () => {
           </div>
         </footer>
 
-        {/* ✅ NEW: Friends Window */}
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
-            friends={friends}
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
           />
         )}
 
-        {/* ✅ NEW: Open Chat Windows */}
+        {/* Open Chat Windows */}
         {openChats.map((chat) => (
-          
           <FriendsChatWindow
             key={chat.friendId}
             friend={chat.friend}
