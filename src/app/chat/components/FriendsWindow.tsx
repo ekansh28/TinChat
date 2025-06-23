@@ -1,26 +1,24 @@
-// src/app/chat/components/FriendsWindow.tsx - ENHANCED WITH REDIS BACKEND INTEGRATION
+// src/app/chat/components/FriendsWindow.tsx - ENHANCED WITH PROPER API INTEGRATION
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-// ✅ Import unified types
-import { 
-  Friend
-} from '../../../types/friends';
-
+import { Friend } from '../../../types/friends';
 
 interface FriendsWindowProps {
   onOpenChat: (friend: Friend) => void;
   onClose: () => void;
   theme: 'win98' | 'win7' | 'winxp';
   currentUserId?: string; // For fetching user's friends
+  currentUserAuthId?: string; // For API calls
 }
 
 const FriendsWindow: React.FC<FriendsWindowProps> = ({
   onOpenChat,
   onClose,
   theme,
-  currentUserId
+  currentUserId,
+  currentUserAuthId
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -29,6 +27,9 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const windowRef = useRef<HTMLDivElement>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ✅ Enhanced user ID resolution
+  const effectiveUserId = currentUserAuthId || currentUserId;
 
   // Slide up animation
   useEffect(() => {
@@ -39,9 +40,9 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch friends from backend using Redis-cached data
+  // ✅ Enhanced fetch friends with better error handling and authentication
   const fetchFriends = useCallback(async () => {
-    if (!currentUserId) {
+    if (!effectiveUserId) {
       setError('No user ID provided');
       setLoading(false);
       return;
@@ -51,54 +52,76 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
       setLoading(true);
       setError(null);
 
-      // Call the backend API that uses ProfileManager's FriendsModule
-      const response = await fetch(`/api/friends/${currentUserId}`, {
+      console.log(`[FriendsWindow] Fetching friends for user: ${effectiveUserId}`);
+
+      // ✅ Call the friends API with proper authentication
+      const response = await fetch(`/api/friends/${effectiveUserId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          // Add authorization header if needed
+          ...(currentUserAuthId && {
+            'Authorization': `Bearer ${currentUserAuthId}`
+          })
         },
+        credentials: 'include' // Include cookies for authentication
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch friends: ${response.status}`);
+        // Handle different error status codes
+        if (response.status === 401) {
+          throw new Error('Not authenticated. Please log in.');
+        } else if (response.status === 403) {
+          throw new Error('Not authorized to view friends list.');
+        } else if (response.status === 404) {
+          throw new Error('User not found.');
+        } else {
+          throw new Error(`Failed to fetch friends: ${response.status} ${response.statusText}`);
+        }
       }
 
       const data = await response.json();
       
       if (data.success) {
-        // Transform backend friend data to match component interface
+        // ✅ Transform backend friend data to match component interface
         const transformedFriends: Friend[] = data.friends.map((friend: any) => ({
-          id: friend.id,
+          id: friend.id || friend.auth_id,
           username: friend.username,
           display_name: friend.display_name || friend.username,
           avatar_url: friend.avatar_url,
           status: friend.status || 'offline',
-          last_seen: friend.last_seen,
+          last_seen: friend.last_seen || new Date().toISOString(),
           is_online: friend.is_online || false,
           friends_since: friend.friends_since,
           // TODO: Integrate with chat history for last message
-          lastMessage: undefined
+          lastMessage: friend.lastMessage ? {
+            text: friend.lastMessage.text,
+            timestamp: new Date(friend.lastMessage.timestamp),
+            isFromSelf: friend.lastMessage.isFromSelf,
+            messageId: friend.lastMessage.messageId || `msg-${Date.now()}`
+          } : undefined,
+          unreadCount: friend.unreadCount || 0
         }));
 
         setFriends(transformedFriends);
         setLastUpdated(new Date());
-        console.log(`✅ Loaded ${transformedFriends.length} friends from Redis cache`);
+        console.log(`✅ [FriendsWindow] Loaded ${transformedFriends.length} friends from API`);
       } else {
         throw new Error(data.message || 'Failed to fetch friends');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      console.error('❌ Failed to fetch friends:', errorMessage);
+      console.error('❌ [FriendsWindow] Failed to fetch friends:', errorMessage);
       setError(errorMessage);
       setFriends([]);
     } finally {
       setLoading(false);
     }
-  }, [currentUserId]);
+  }, [effectiveUserId, currentUserAuthId]);
 
-  // Fetch online status updates for friends
+  // ✅ Fetch online status updates for friends
   const updateOnlineStatus = useCallback(async () => {
-    if (!currentUserId || friends.length === 0) return;
+    if (!effectiveUserId || friends.length === 0) return;
 
     try {
       const friendIds = friends.map(f => f.id);
@@ -108,11 +131,15 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(currentUserAuthId && {
+            'Authorization': `Bearer ${currentUserAuthId}`
+          })
         },
         body: JSON.stringify({
           userIds: friendIds,
-          requesterId: currentUserId
+          requesterId: effectiveUserId
         }),
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -129,33 +156,35 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
             }))
           );
           
-          console.log('🔄 Updated friend online statuses from Redis');
+          console.log('🔄 [FriendsWindow] Updated friend online statuses from Redis');
         }
       }
     } catch (err) {
-      console.warn('⚠️ Failed to update online status:', err);
+      console.warn('⚠️ [FriendsWindow] Failed to update online status:', err);
       // Don't show error to user for status updates
     }
-  }, [currentUserId, friends]);
+  }, [effectiveUserId, friends, currentUserAuthId]);
 
-  // Initial load effect
+  // ✅ Enhanced initial load and periodic refresh
   useEffect(() => {
-    fetchFriends();
-  }, [fetchFriends]);
+    if (effectiveUserId) {
+      fetchFriends();
 
-  // Periodic refresh effect
-  useEffect(() => {
-    // Set up periodic refresh every 30 seconds for online status
-    refreshIntervalRef.current = setInterval(() => {
-      updateOnlineStatus();
-    }, 30000);
+      // Set up periodic refresh every 30 seconds for online status
+      refreshIntervalRef.current = setInterval(() => {
+        updateOnlineStatus();
+      }, 30000);
+    } else {
+      setError('User authentication required');
+      setLoading(false);
+    }
 
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [updateOnlineStatus]);
+  }, [effectiveUserId, fetchFriends, updateOnlineStatus]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -166,7 +195,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
     };
   }, []);
 
-  // Sort friends by online status first, then by most recent activity
+  // ✅ Enhanced sorting with better logic
   const sortedFriends = React.useMemo(() => {
     return [...friends].sort((a, b) => {
       // First: Online friends first
@@ -174,7 +203,14 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
         return a.is_online ? -1 : 1;
       }
       
-      // Second: Sort by last message timestamp if available
+      // Second: Friends with unread messages
+      const aUnread = a.unreadCount || 0;
+      const bUnread = b.unreadCount || 0;
+      if (aUnread !== bUnread) {
+        return bUnread - aUnread;
+      }
+      
+      // Third: Sort by last message timestamp if available
       const aTime = a.lastMessage?.timestamp?.getTime() || 0;
       const bTime = b.lastMessage?.timestamp?.getTime() || 0;
       
@@ -182,7 +218,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
         return bTime - aTime; // Most recent first
       }
       
-      // Third: Sort by last seen for offline friends
+      // Fourth: Sort by last seen for offline friends
       if (!a.is_online && !b.is_online) {
         const aLastSeen = new Date(a.last_seen).getTime();
         const bLastSeen = new Date(b.last_seen).getTime();
@@ -199,6 +235,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
   // Get online and offline counts
   const onlineFriends = friends.filter(f => f.is_online);
   const offlineFriends = friends.filter(f => !f.is_online);
+  const totalUnreadCount = friends.reduce((sum, f) => sum + (f.unreadCount || 0), 0);
 
   // Format relative time for last seen
   const formatLastSeen = (lastSeenStr: string): string => {
@@ -224,7 +261,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
   // Handle friend click
   const handleFriendClick = (friend: Friend) => {
-    console.log(`💬 Opening chat with ${friend.display_name || friend.username}`);
+    console.log(`💬 [FriendsWindow] Opening chat with ${friend.display_name || friend.username}`);
     onOpenChat(friend);
   };
 
@@ -239,6 +276,12 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
   // Handle refresh button
   const handleRefresh = () => {
     fetchFriends();
+  };
+
+  // ✅ Enhanced authentication check
+  const handleAuthenticationError = () => {
+    console.warn('[FriendsWindow] Authentication required');
+    setError('Please log in to view your friends list');
   };
 
   // Get window styles based on theme
@@ -391,6 +434,11 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
           fontFamily: theme === 'winxp' ? 'Tahoma, sans-serif' : undefined,
         }}>
           Friends ({onlineFriends.length}/{friends.length})
+          {totalUnreadCount > 0 && (
+            <span className="ml-1 text-xs bg-red-500 text-white px-1 rounded">
+              {totalUnreadCount}
+            </span>
+          )}
         </div>
         
         <div className="title-bar-controls" style={{ display: 'flex', gap: '4px' }}>
@@ -469,9 +517,11 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
             alignItems: 'center',
           }}>
             <span>
-              {loading ? 'Loading friends...' : 'Click a friend to start chatting'}
+              {loading ? 'Loading friends...' : 
+               error ? 'Failed to load friends' : 
+               'Click a friend to start chatting'}
             </span>
-            {lastUpdated && (
+            {lastUpdated && !loading && !error && (
               <span style={{ fontSize: '9px', opacity: 0.7 }}>
                 {lastUpdated.toLocaleTimeString()}
               </span>
@@ -486,8 +536,44 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
               padding: '4px',
               background: 'rgba(255, 0, 0, 0.1)',
               borderRadius: theme === 'win98' ? '0' : '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}>
-              ⚠️ {error}
+              <span>⚠️ {error}</span>
+              {error.includes('authentication') && (
+                <button 
+                  onClick={() => window.location.href = '/login'}
+                  style={{
+                    fontSize: '9px',
+                    padding: '2px 4px',
+                    border: '1px solid #d32f2f',
+                    background: 'transparent',
+                    color: '#d32f2f',
+                    cursor: 'pointer',
+                    borderRadius: '2px',
+                  }}
+                >
+                  Login
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Quick stats */}
+          {!loading && !error && friends.length > 0 && (
+            <div style={{
+              fontSize: '9px',
+              color: theme === 'win7' ? '#888' : theme === 'winxp' ? '#666' : '#666',
+              marginTop: '4px',
+              display: 'flex',
+              gap: '8px',
+            }}>
+              <span>🟢 {onlineFriends.length} online</span>
+              <span>⚫ {offlineFriends.length} offline</span>
+              {totalUnreadCount > 0 && (
+                <span>💬 {totalUnreadCount} unread</span>
+              )}
             </div>
           )}
         </div>
@@ -505,7 +591,10 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
               color: theme === 'win7' ? '#666' : theme === 'winxp' ? '#333' : '#000',
               fontSize: '11px',
             }}>
-              <div>🔄 Loading friends from cache...</div>
+              <div>🔄 Loading friends...</div>
+              <div style={{ fontSize: '9px', marginTop: '4px', opacity: 0.7 }}>
+                {effectiveUserId ? 'Fetching from database...' : 'Authentication required'}
+              </div>
             </div>
           ) : error ? (
             <div style={{
@@ -514,7 +603,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
               color: '#d32f2f',
               fontSize: '11px',
             }}>
-              <div>❌ Failed to load friends</div>
+              <div>❌ {error}</div>
               <button 
                 onClick={handleRefresh}
                 style={{
@@ -524,6 +613,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
                   background: theme === 'win98' ? '#c0c0c0' : '#f0f0f0',
                   cursor: 'pointer',
                   fontSize: '10px',
+                  borderRadius: theme === 'win98' ? '0' : '2px',
                 }}
               >
                 Try Again
@@ -542,7 +632,9 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
                 No friends to display
               </div>
               <div>
-                Make sure to add friends to see them here!
+                {effectiveUserId ? 
+                  'Add friends to see them here!' : 
+                  'Please log in to view friends'}
               </div>
             </div>
           ) : (
@@ -561,6 +653,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
                     transition: 'background 0.2s ease',
                     background: 'transparent',
                     border: theme === 'win98' ? '1px solid transparent' : 'none',
+                    position: 'relative',
                   }}
                   onMouseEnter={(e) => {
                     if (theme === 'win98') {
@@ -673,6 +766,28 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Unread count badge */}
+                  {(friend.unreadCount || 0) > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      background: '#ff4444',
+                      color: 'white',
+                      borderRadius: '50%',
+                      minWidth: '16px',
+                      height: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '9px',
+                      fontWeight: 'bold',
+                      padding: '0 4px',
+                    }}>
+                      {friend.unreadCount! > 99 ? '99+' : friend.unreadCount}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -682,22 +797,31 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
       {/* Custom scrollbar styles */}
       <style jsx>{`
-        .friends-body::-webkit-scrollbar {
+        .friends-body > div:last-child::-webkit-scrollbar {
           width: 12px;
         }
         
-        .friends-body::-webkit-scrollbar-track {
+        .friends-body > div:last-child::-webkit-scrollbar-track {
           background: ${theme === 'win98' ? '#c0c0c0' : theme === 'win7' ? '#f0f0f0' : '#ece9d8'};
         }
         
-        .friends-body::-webkit-scrollbar-thumb {
+        .friends-body > div:last-child::-webkit-scrollbar-thumb {
           background: ${theme === 'win98' ? '#808080' : theme === 'win7' ? '#ccc' : '#0054e3'};
           border: ${theme === 'win98' ? '1px outset #808080' : '1px solid #999'};
           border-radius: ${theme === 'win98' ? '0' : '6px'};
         }
         
-        .friends-body::-webkit-scrollbar-thumb:hover {
+        .friends-body > div:last-child::-webkit-scrollbar-thumb:hover {
           background: ${theme === 'win98' ? '#606060' : theme === 'win7' ? '#bbb' : '#0040b3'};
+        }
+
+        /* Enhanced friend item animations */
+        .friends-list > div {
+          transform: translateX(0);
+        }
+        
+        .friends-list > div:hover {
+          transform: translateX(2px);
         }
       `}</style>
     </div>

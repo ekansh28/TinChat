@@ -1,7 +1,7 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - REMOVED CLOSE BUTTON
+// src/components/ProfilePopup/ProfilePopup.tsx - WITH ADD FRIEND AND BLOCK USER
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { UserProfile, Badge } from '../ProfileCustomizer/types';
 
@@ -11,6 +11,12 @@ interface ProfilePopupProps {
   badges: Badge[];
   customCSS: string;
   position: { x: number; y: number } | null;
+  currentUserAuthId?: string; // For friendship operations
+}
+
+interface FriendshipStatus {
+  status: 'none' | 'friends' | 'pending_sent' | 'pending_received' | 'blocked' | 'blocked_by';
+  since?: string;
 }
 
 function getDefaultAvatar() {
@@ -42,20 +48,62 @@ export function ProfilePopup({
   profile,
   badges,
   customCSS,
-  position
+  position,
+  currentUserAuthId
 }: ProfilePopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>({ status: 'none' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // ✅ FIXED: Ensure component is mounted before state updates
+  // ✅ Check if this is the current user's own profile
+  const isOwnProfile = currentUserAuthId && profile?.id === currentUserAuthId;
+
+  // ✅ Ensure component is mounted before state updates
   useEffect(() => {
     setIsMounted(true);
     return () => setIsMounted(false);
   }, []);
 
-  // ✅ FIXED: Calculate position only after mounting
+  // ✅ Load friendship status when profile changes
+  useEffect(() => {
+    if (!isMounted || !profile?.id || !currentUserAuthId || isOwnProfile) {
+      return;
+    }
+
+    const loadFriendshipStatus = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/friends/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user1AuthId: currentUserAuthId,
+            user2AuthId: profile.id
+          })
+        });
+
+        const data = await response.json();
+        if (data.success && isMounted) {
+          setFriendshipStatus(data.status);
+        }
+      } catch (error) {
+        console.error('Failed to load friendship status:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadFriendshipStatus();
+  }, [isMounted, profile?.id, currentUserAuthId, isOwnProfile]);
+
+  // ✅ Calculate position only after mounting
   useEffect(() => {
     if (!isMounted || !isVisible || !position) {
       if (isMounted) {
@@ -64,17 +112,14 @@ export function ProfilePopup({
       return;
     }
 
-    // Calculate position using viewport dimensions
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    // Popup dimensions (approximate)
     const popupWidth = 300;
-    const popupHeight = 400;
+    const popupHeight = 450; // Increased for new buttons
     
     let { x, y } = position;
     
-    // Adjust horizontal position
     if (x + popupWidth > viewportWidth) {
       x = Math.max(20, viewportWidth - popupWidth - 20);
     }
@@ -82,7 +127,6 @@ export function ProfilePopup({
       x = 20;
     }
     
-    // Adjust vertical position
     if (y + popupHeight > viewportHeight) {
       y = Math.max(20, position.y - popupHeight - 10);
     }
@@ -90,18 +134,12 @@ export function ProfilePopup({
       y = 20;
     }
     
-    console.log('[ProfilePopup] Position calculated:', { 
-      original: position, 
-      adjusted: { x, y },
-      viewport: { width: viewportWidth, height: viewportHeight }
-    });
-    
     if (isMounted) {
       setAdjustedPosition({ x, y });
     }
   }, [isMounted, isVisible, position]);
 
-  // ✅ FIXED: Handle animation only after mounting
+  // ✅ Handle animation only after mounting
   useEffect(() => {
     if (!isMounted) return;
     
@@ -116,18 +154,196 @@ export function ProfilePopup({
     }
   }, [isMounted, isVisible]);
 
+  // ✅ Close context menu when clicking outside
+  useEffect(() => {
+    if (!showContextMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.context-menu') && !target.closest('.context-menu-trigger')) {
+        setShowContextMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showContextMenu]);
+
+  // ✅ Friend action handlers
+  const handleSendFriendRequest = useCallback(async () => {
+    if (!profile?.id || !currentUserAuthId) return;
+
+    setActionLoading('add_friend');
+    try {
+      const response = await fetch('/api/friends/send-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderAuthId: currentUserAuthId,
+          receiverAuthId: profile.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ 
+          status: data.autoAccepted ? 'friends' : 'pending_sent' 
+        });
+        
+        // Show success message
+        console.log('Friend request sent successfully');
+      } else {
+        console.error('Failed to send friend request:', data.message);
+      }
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }, [profile?.id, currentUserAuthId]);
+
+  const handleRemoveFriend = useCallback(async () => {
+    if (!profile?.id || !currentUserAuthId) return;
+
+    setActionLoading('remove_friend');
+    try {
+      const response = await fetch('/api/friends/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user1AuthId: currentUserAuthId,
+          user2AuthId: profile.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'none' });
+        console.log('Friend removed successfully');
+      } else {
+        console.error('Failed to remove friend:', data.message);
+      }
+    } catch (error) {
+      console.error('Error removing friend:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }, [profile?.id, currentUserAuthId]);
+
+  const handleBlockUser = useCallback(async () => {
+    if (!profile?.id || !currentUserAuthId) return;
+
+    setActionLoading('block_user');
+    setShowContextMenu(false);
+    
+    try {
+      const response = await fetch('/api/friends/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blockerAuthId: currentUserAuthId,
+          blockedAuthId: profile.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'blocked' });
+        console.log('User blocked successfully');
+      } else {
+        console.error('Failed to block user:', data.message);
+      }
+    } catch (error) {
+      console.error('Error blocking user:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }, [profile?.id, currentUserAuthId]);
+
+  const handleUnblockUser = useCallback(async () => {
+    if (!profile?.id || !currentUserAuthId) return;
+
+    setActionLoading('unblock_user');
+    try {
+      const response = await fetch('/api/friends/unblock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blockerAuthId: currentUserAuthId,
+          blockedAuthId: profile.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'none' });
+        console.log('User unblocked successfully');
+      } else {
+        console.error('Failed to unblock user:', data.message);
+      }
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }, [profile?.id, currentUserAuthId]);
+
+  // ✅ Get button text and action based on friendship status
+  const getFriendButtonConfig = () => {
+    if (isLoading) return { text: 'Loading...', action: null, disabled: true };
+
+    switch (friendshipStatus.status) {
+      case 'friends':
+        return { 
+          text: '✓ Friends', 
+          action: handleRemoveFriend, 
+          disabled: false,
+          variant: 'success'
+        };
+      case 'pending_sent':
+        return { 
+          text: 'Request Sent', 
+          action: null, 
+          disabled: true,
+          variant: 'pending'
+        };
+      case 'pending_received':
+        return { 
+          text: 'Accept Request', 
+          action: () => {}, // TODO: Implement accept request
+          disabled: false,
+          variant: 'primary'
+        };
+      case 'blocked':
+        return { 
+          text: 'Unblock User', 
+          action: handleUnblockUser, 
+          disabled: false,
+          variant: 'danger'
+        };
+      case 'blocked_by':
+        return { 
+          text: 'Blocked by User', 
+          action: null, 
+          disabled: true,
+          variant: 'disabled'
+        };
+      default:
+        return { 
+          text: '+ Add Friend', 
+          action: handleSendFriendRequest, 
+          disabled: false,
+          variant: 'primary'
+        };
+    }
+  };
+
   if (!isMounted || !isVisible || !profile || !adjustedPosition) {
     return null;
   }
 
   const statusInfo = getStatusIndicator(profile.status || 'offline');
-
-  console.log('[ProfilePopup] Rendering popup for:', {
-    username: profile.username,
-    displayName: profile.display_name,
-    badgeCount: badges.length,
-    position: adjustedPosition
-  });
+  const buttonConfig = getFriendButtonConfig();
 
   return (
     <>
@@ -168,8 +384,33 @@ export function ProfilePopup({
               <div className="w-full h-full bg-gradient-to-r from-blue-400 to-purple-500" />
             )}
             
-            {/* Overlay for better text readability */}
             <div className="absolute inset-0 bg-black bg-opacity-20" />
+
+            {/* ✅ Context Menu Button (Top Right) */}
+            {!isOwnProfile && (
+              <div className="absolute top-2 right-2">
+                <button
+                  onClick={() => setShowContextMenu(!showContextMenu)}
+                  className="context-menu-trigger w-8 h-8 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 flex items-center justify-center text-white transition-all duration-200"
+                  title="More options"
+                >
+                  <span className="text-lg font-bold leading-none">⋯</span>
+                </button>
+
+                {/* Context Menu */}
+                {showContextMenu && (
+                  <div className="context-menu absolute top-10 right-0 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[120px] z-10">
+                    <button
+                      onClick={handleBlockUser}
+                      disabled={actionLoading === 'block_user'}
+                      className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900 dark:hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Main Content */}
@@ -238,6 +479,39 @@ export function ProfilePopup({
               </div>
             </div>
 
+            {/* ✅ Action Buttons Section (only for other users) */}
+            {!isOwnProfile && (
+              <div className="mb-3 space-y-2">
+                {/* Add Friend / Friend Status Button */}
+                <button
+                  onClick={buttonConfig.action || undefined}
+                  disabled={buttonConfig.disabled || actionLoading === 'add_friend' || actionLoading === 'remove_friend'}
+                  className={cn(
+                    "w-full py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    {
+                      'bg-blue-500 hover:bg-blue-600 text-white': buttonConfig.variant === 'primary',
+                      'bg-green-500 hover:bg-green-600 text-white': buttonConfig.variant === 'success',
+                      'bg-yellow-500 hover:bg-yellow-600 text-white': buttonConfig.variant === 'pending',
+                      'bg-red-500 hover:bg-red-600 text-white': buttonConfig.variant === 'danger',
+                      'bg-gray-300 text-gray-500 cursor-not-allowed': buttonConfig.variant === 'disabled',
+                    }
+                  )}
+                >
+                  {(actionLoading === 'add_friend' || actionLoading === 'remove_friend') ? 
+                    'Loading...' : buttonConfig.text}
+                </button>
+
+                {/* Message Button (placeholder for future implementation) */}
+                <button
+                  className="w-full py-2 px-4 rounded-lg font-medium text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
+                  disabled
+                >
+                  💬 Send Message
+                </button>
+              </div>
+            )}
+
             {/* Divider */}
             <div className="w-full h-px bg-gray-200 dark:bg-gray-600 mb-3" />
 
@@ -259,55 +533,36 @@ export function ProfilePopup({
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
                   Badges ({badges.length})
                 </h3>
-                
-                {/* ✅ FIXED: Horizontal scrollable badge container */}
-                <div className="relative">
-                  <div 
-                    className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 pb-1"
-                    style={{
-                      scrollbarWidth: 'thin',
-                      scrollbarColor: '#d1d5db transparent',
-                      maxWidth: '100%'
-                    }}
-                  >
-                    {badges.map((badge) => (
-                      <div
-                        key={badge.id}
-                        className="relative group flex-shrink-0"
-                        title={badge.name || 'Badge'}
-                      >
-                        <img
-                          src={badge.url}
-                          alt={badge.name || 'Badge'}
-                          className="object-contain hover:scale-110 transition-transform duration-200"
-                          style={{
-                            // ✅ FIXED: Preserve original badge dimensions, no forced size
-                            height: 'auto',
-                            width: 'auto',
-                            maxHeight: '32px', // Reasonable max height
-                            maxWidth: '64px',   // Allow wider badges
-                            minWidth: '24px',   // Minimum width for very small badges
-                            minHeight: '24px'   // Minimum height for very small badges
-                          }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                        
-                        {/* Tooltip */}
-                        {badge.name && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
-                            {badge.name}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {badges.slice(0, 8).map((badge) => (
+                    <div
+                      key={badge.id}
+                      className="relative group"
+                      title={badge.name || 'Badge'}
+                    >
+                      <img
+                        src={badge.url}
+                        alt={badge.name || 'Badge'}
+                        className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-gray-600 hover:scale-110 transition-transform duration-200"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                      
+                      {/* Tooltip */}
+                      {badge.name && (
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                          {badge.name}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                   
-                  {/* ✅ NEW: Scroll hint for many badges */}
-                  {badges.length > 4 && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
-                      ← Scroll to see more badges →
+                  {badges.length > 8 && (
+                    <div className="w-8 h-8 rounded border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 flex items-center justify-center">
+                      <span className="text-xs text-gray-600 dark:text-gray-400 font-semibold">
+                        +{badges.length - 8}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -326,8 +581,6 @@ export function ProfilePopup({
               </div>
             </div>
           </div>
-
-          {/* ✅ REMOVED: Close button completely removed as requested */}
         </div>
       </div>
 
@@ -394,58 +647,11 @@ export function ProfilePopup({
           animation: popup-enter 200ms ease-out;
         }
 
-        /* Custom scrollbar styling for badges */
-        .scrollbar-thin {
-          scrollbar-width: thin;
-        }
-        
-        .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
-          background-color: #d1d5db;
-          border-radius: 4px;
-        }
-        
-        .scrollbar-track-transparent::-webkit-scrollbar-track {
-          background-color: transparent;
-        }
-        
-        .hover\\:scrollbar-thumb-gray-400:hover::-webkit-scrollbar-thumb {
-          background-color: #9ca3af;
-        }
-        
-        /* Webkit scrollbar styling */
-        .flex.overflow-x-auto::-webkit-scrollbar {
-          height: 6px;
-        }
-        
-        .flex.overflow-x-auto::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        .flex.overflow-x-auto::-webkit-scrollbar-thumb {
-          background: #d1d5db;
-          border-radius: 3px;
-        }
-        
-        .flex.overflow-x-auto:hover::-webkit-scrollbar-thumb {
-          background: #9ca3af;
-        }
-        
-        /* Badge container specific styling */
-        .flex.overflow-x-auto {
-          scrollbar-width: thin;
-          scrollbar-color: #d1d5db transparent;
-        }
-
         /* Mobile responsive adjustments */
         @media (max-width: 768px) {
           .profile-popup-custom {
             width: calc(100vw - 40px) !important;
             max-width: 280px !important;
-          }
-          
-          /* Ensure badges are still scrollable on mobile */
-          .flex.overflow-x-auto::-webkit-scrollbar {
-            height: 4px;
           }
         }
 
