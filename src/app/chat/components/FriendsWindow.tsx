@@ -1,32 +1,16 @@
-// src/app/chat/components/FriendsWindow.tsx - ENHANCED WITH REDIS BACKEND INTEGRATION
+// src/app/chat/components/FriendsWindow.tsx - UPDATED WITH UNIFIED TYPES
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 
-interface Friend {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
-  last_seen: string;
-  is_online: boolean;
-  friends_since?: string;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-  };
-  
-}
-
-interface FriendsWindowProps {
-  onOpenChat: (friend: Friend) => void;
-  onClose: () => void;
-  theme: 'win98' | 'win7' | 'winxp';
-  currentUserId?: string; // For fetching user's friends
-}
+// ✅ Import unified types
+import { 
+  Friend, 
+  FriendsWindowProps,
+  FriendsApiResponse,
+  UserStatus
+} from '../../../types/friends';
 
 const FriendsWindow: React.FC<FriendsWindowProps> = ({
   onOpenChat,
@@ -75,28 +59,15 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
         throw new Error(`Failed to fetch friends: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data: FriendsApiResponse = await response.json();
       
       if (data.success) {
-        // Transform backend friend data to match component interface
-        const transformedFriends: Friend[] = data.friends.map((friend: any) => ({
-          id: friend.id,
-          username: friend.username,
-          display_name: friend.display_name || friend.username,
-          avatar_url: friend.avatar_url,
-          status: friend.status || 'offline',
-          last_seen: friend.last_seen,
-          is_online: friend.is_online || false,
-          friends_since: friend.friends_since,
-          // TODO: Integrate with chat history for last message
-          lastMessage: undefined
-        }));
-
-        setFriends(transformedFriends);
+        // ✅ Data is already in the correct Friend format from the API
+        setFriends(data.friends);
         setLastUpdated(new Date());
-        console.log(`✅ Loaded ${transformedFriends.length} friends from Redis cache`);
+        console.log(`✅ Loaded ${data.friends.length} friends from Redis cache`);
       } else {
-        throw new Error(data.message || 'Failed to fetch friends');
+        throw new Error('Failed to fetch friends');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -106,7 +77,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [currentUserId]);
+  }, []); // Remove currentUserId dependency to avoid re-creating the function
 
   // Fetch online status updates for friends
   const updateOnlineStatus = useCallback(async () => {
@@ -137,7 +108,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
               ...friend,
               is_online: statusData.statuses[friend.id]?.isOnline || false,
               last_seen: statusData.statuses[friend.id]?.lastSeen || friend.last_seen,
-              status: statusData.statuses[friend.id]?.isOnline ? 'online' : 'offline'
+              status: statusData.statuses[friend.id]?.isOnline ? 'online' : 'offline' as UserStatus
             }))
           );
           
@@ -163,17 +134,18 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
-    };
+    
+export default FriendsWindow;
   }, [fetchFriends, updateOnlineStatus]);
 
-  // Cleanup on unmount
+  // Separate useEffect for status updates to avoid dependency issues
   useEffect(() => {
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
-  }, []);
+    // Only update status if we have friends and currentUserId
+    if (friends.length > 0 && currentUserId) {
+      // Call updateOnlineStatus immediately when friends change
+      updateOnlineStatus();
+    }
+  }, [friends.length, currentUserId]); // Only trigger when friends are loaded or user changes
 
   // Sort friends by online status first, then by most recent activity
   const sortedFriends = React.useMemo(() => {
@@ -345,7 +317,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
   };
 
   // Get status indicator color
-  const getStatusColor = (status: string, isOnline: boolean) => {
+  const getStatusColor = (status: UserStatus, isOnline: boolean) => {
     if (!isOnline) return '#9E9E9E';
     
     switch (status) {
@@ -357,7 +329,7 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
   };
 
   // Get status text
-  const getStatusText = (status: string, isOnline: boolean) => {
+  const getStatusText = (status: UserStatus, isOnline: boolean) => {
     if (!isOnline) return 'Offline';
     
     switch (status) {
@@ -638,6 +610,28 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
                       border: '2px solid ' + (theme === 'win98' ? '#c0c0c0' : theme === 'win7' ? '#fff' : '#ece9d8'),
                       boxSizing: 'border-box',
                     }} />
+                    
+                    {/* Unread count badge */}
+                    {friend.unreadCount && friend.unreadCount > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-4px',
+                        right: '-4px',
+                        background: '#ff4444',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: '16px',
+                        height: '16px',
+                        fontSize: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold',
+                        border: '1px solid ' + (theme === 'win98' ? '#c0c0c0' : theme === 'win7' ? '#fff' : '#ece9d8'),
+                      }}>
+                        {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
+                      </div>
+                    )}
                   </div>
 
                   {/* Friend Info */}
@@ -712,5 +706,3 @@ const FriendsWindow: React.FC<FriendsWindowProps> = ({
     </div>
   );
 };
-
-export default FriendsWindow;

@@ -1,41 +1,18 @@
-// src/app/chat/components/ChatWindow.tsx - Friends Chat Window
+// src/app/chat/components/FriendsChatWindow.tsx - UPDATED WITH UNIFIED TYPES
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface Friend {
-  id: string;
-  username: string;
-  displayName: string;
-  avatar?: string;
-  isOnline: boolean;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-  };
-  
-}
+// ✅ Import unified types
+import { 
+  Friend, 
+  ChatMessage, 
+  FriendsChatWindowProps,
+  UserStatus
+} from '../../../types/friends';
 
-interface ChatMessage {
-  id: string;
-  friendId: string;
-  text: string;
-  isFromSelf: boolean;
-  timestamp: Date;
-}
-
-interface ChatWindowProps {
-  friend: Friend;
-  messages: ChatMessage[];
-  onSendMessage: (friendId: string, message: string) => void;
-  onClose: () => void;
-  position: number; // 0 = rightmost, 1 = second from right, etc.
-  theme: 'win98' | 'win7' | 'winxp';
-}
-
-const FriendsChatWindow: React.FC<ChatWindowProps> = ({
+const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
   friend,
   messages,
   onSendMessage,
@@ -227,13 +204,27 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   // Format message timestamp
-  const formatTime = (timestamp: Date): string => {
-    return timestamp.toLocaleTimeString('en-US', {
+  const formatTime = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     });
   };
+
+  // Convert ChatMessage to display format
+  const getDisplayMessages = () => {
+    return messages.map(msg => ({
+      id: msg.id,
+      text: msg.message,
+      isFromSelf: msg.senderId !== friend.id, // If sender is not the friend, it's from current user
+      timestamp: new Date(msg.timestamp),
+      senderName: msg.senderId === friend.id ? (friend.display_name || friend.username) : 'You'
+    }));
+  };
+
+  const displayMessages = getDisplayMessages();
 
   return (
     <div 
@@ -268,8 +259,8 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
           minWidth: 0,
         }}>
           <img
-            src={friend.avatar || '/default-avatar.png'}
-            alt={friend.displayName}
+            src={friend.avatar_url || '/default-avatar.png'}
+            alt={friend.display_name || friend.username}
             style={{
               width: '16px',
               height: '16px',
@@ -285,13 +276,13 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
               canvas.height = 16;
               const ctx = canvas.getContext('2d');
               if (ctx) {
-                ctx.fillStyle = friend.isOnline ? '#4CAF50' : '#9E9E9E';
+                ctx.fillStyle = friend.is_online ? '#4CAF50' : '#9E9E9E';
                 ctx.fillRect(0, 0, 16, 16);
                 ctx.fillStyle = 'white';
                 ctx.font = '8px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText(
-                  friend.displayName.charAt(0).toUpperCase(),
+                  (friend.display_name || friend.username).charAt(0).toUpperCase(),
                   8,
                   10
                 );
@@ -308,8 +299,8 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>
-            {friend.displayName}
-            {friend.isOnline && (
+            {friend.display_name || friend.username}
+            {friend.is_online && (
               <span style={{
                 fontSize: '10px',
                 opacity: 0.8,
@@ -368,7 +359,7 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
           flexDirection: 'column',
           gap: '4px',
         }}>
-          {messages.length === 0 ? (
+          {displayMessages.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '20px',
@@ -376,10 +367,10 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
               fontSize: '11px',
               fontStyle: 'italic',
             }}>
-              Start a conversation with {friend.displayName}
+              Start a conversation with {friend.display_name || friend.username}
             </div>
           ) : (
-            messages.map((message) => (
+            displayMessages.map((message) => (
               <div
                 key={message.id}
                 style={{
@@ -415,7 +406,7 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
                       color: theme === 'win7' ? '#666' : theme === 'winxp' ? '#0054e3' : '#666',
                       marginBottom: '2px',
                     }}>
-                      {friend.displayName}
+                      {message.senderName}
                     </div>
                   )}
                   
@@ -431,7 +422,7 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
                   marginLeft: message.isFromSelf ? '0' : '10px',
                   marginRight: message.isFromSelf ? '10px' : '0',
                 }}>
-                  {formatTime(message.timestamp)}
+                  {formatTime(message.timestamp.getTime())}
                 </div>
               </div>
             ))
@@ -484,12 +475,12 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
                 color: '#000',
                 outline: 'none',
               }}
-              disabled={!friend.isOnline}
+              disabled={!friend.is_online}
             />
             
             <button
               type="submit"
-              disabled={!currentMessage.trim() || !friend.isOnline}
+              disabled={!currentMessage.trim() || !friend.is_online}
               style={{
                 padding: '4px 8px',
                 fontSize: '10px',
@@ -497,8 +488,8 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
                 borderRadius: theme === 'win98' ? '0' : '4px',
                 background: theme === 'win98' ? '#c0c0c0' : theme === 'win7' ? '#0078d4' : '#0054e3',
                 color: theme === 'win98' ? '#000' : '#fff',
-                cursor: (!currentMessage.trim() || !friend.isOnline) ? 'not-allowed' : 'pointer',
-                opacity: (!currentMessage.trim() || !friend.isOnline) ? 0.5 : 1,
+                cursor: (!currentMessage.trim() || !friend.is_online) ? 'not-allowed' : 'pointer',
+                opacity: (!currentMessage.trim() || !friend.is_online) ? 0.5 : 1,
                 fontWeight: 'bold',
               }}
             >
@@ -506,7 +497,7 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
             </button>
           </form>
           
-          {!friend.isOnline && (
+          {!friend.is_online && (
             <div style={{
               fontSize: '9px',
               color: theme === 'win7' ? '#999' : theme === 'winxp' ? '#666' : '#666',
@@ -514,7 +505,7 @@ const FriendsChatWindow: React.FC<ChatWindowProps> = ({
               marginTop: '4px',
               fontStyle: 'italic',
             }}>
-              {friend.displayName} is offline
+              {friend.display_name || friend.username} is offline
             </div>
           )}
         </div>
