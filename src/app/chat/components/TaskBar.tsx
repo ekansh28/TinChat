@@ -1,20 +1,11 @@
-// src/app/chat/components/TaskBar.tsx - UPDATED WITH UNIFIED FRIENDS TYPES
+// src/app/chat/components/TaskBar.tsx - WITH FRIENDS TAB
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import FriendsWindow from './FriendsWindow';
 import FriendsChatWindow from './FriendsChatWindow';
-
-// ✅ Import unified types
-import { 
-  Friend, 
-  ChatMessage, 
-  OpenChat,
-  transformToModernFriend,
-  transformToChatMessage,
-  UserStatus
-} from '../../../types/friends';
+import { Friend, ChatMessage } from '@/types/friends';
 
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
@@ -25,6 +16,14 @@ interface AudioManager {
   playMessageSent: () => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
+}
+
+// ✅ Updated Friends data types to use global types from @/types/friends
+interface OpenChat {
+  friendId: string;
+  friend: Friend;
+  messages: ChatMessage[];
+  position: number;
 }
 
 // ✅ Create audio manager
@@ -88,59 +87,9 @@ export const TaskBar: React.FC = () => {
   const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // ✅ Friends system state with unified types
+  // ✅ NEW: Friends system state
   const [showFriendsWindow, setShowFriendsWindow] = useState(false);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
-  const [currentUserId] = useState('current-user-123'); // This should come from auth
-
-  // ✅ Mock friends data using unified Friend interface
-  const [friends, setFriends] = useState<Friend[]>([
-    {
-      id: 'friend1',
-      username: 'alice_dev',
-      display_name: 'Alice',
-      avatar_url: '/avatars/alice.png',
-      status: 'online' as UserStatus,
-      last_seen: new Date().toISOString(),
-      is_online: true,
-      friends_since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      unreadCount: 2,
-      lastMessage: {
-        text: 'Hey! How are you?',
-        timestamp: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
-        isFromSelf: false,
-        messageId: 'msg1'
-      }
-    },
-    {
-      id: 'friend2', 
-      username: 'bob_coder',
-      display_name: 'Bob',
-      avatar_url: '/avatars/bob.png',
-      status: 'offline' as UserStatus,
-      last_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-      is_online: false,
-      friends_since: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-      unreadCount: 0,
-      lastMessage: {
-        text: 'Thanks for the help!',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        isFromSelf: true,
-        messageId: 'msg2'
-      }
-    },
-    {
-      id: 'friend3',
-      username: 'charlie_design',
-      display_name: 'Charlie',
-      avatar_url: '/avatars/charlie.png',
-      status: 'idle' as UserStatus,
-      last_seen: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
-      is_online: true,
-      friends_since: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      unreadCount: 1
-    }
-  ]);
 
   // ✅ Mobile detection
   const checkIfMobile = useCallback(() => {
@@ -153,8 +102,9 @@ export const TaskBar: React.FC = () => {
   // ✅ Mobile detection effect
   useEffect(() => {
     checkIfMobile();
-    window.addEventListener('resize', checkIfMobile);
-    return () => window.removeEventListener('resize', checkIfMobile);
+    const handleResize = () => checkIfMobile();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [checkIfMobile]);
 
   // ✅ Initialize audio manager and sync volume
@@ -216,7 +166,7 @@ export const TaskBar: React.FC = () => {
     }
   }, [isWin7Mode, isWinXPMode, audioVolume]);
 
-  // ✅ Get friends icon based on theme
+  // ✅ NEW: Get friends icon based on theme
   const getFriendsIcon = useCallback(() => {
     if (isWin7Mode) {
       return '/icons/Taskbar/7/friends.ico';
@@ -251,12 +201,12 @@ export const TaskBar: React.FC = () => {
     setShowVolumeSlider(prev => !prev);
   }, []);
 
-  // ✅ Handle friends icon click
+  // ✅ NEW: Handle friends icon click
   const handleFriendsIconClick = useCallback(() => {
     setShowFriendsWindow(prev => !prev);
   }, []);
 
-  // ✅ Handle opening a chat with a friend (using unified Friend interface)
+  // ✅ NEW: Handle opening a chat with a friend
   const handleOpenChat = useCallback((friend: Friend) => {
     // Check if chat is already open
     const existingChat = openChats.find(chat => chat.friendId === friend.id);
@@ -279,7 +229,7 @@ export const TaskBar: React.FC = () => {
     setShowFriendsWindow(false);
   }, [openChats]);
 
-  // ✅ Handle closing a chat
+  // ✅ NEW: Handle closing a chat
   const handleCloseChat = useCallback((friendId: string) => {
     setOpenChats(prev => {
       const filteredChats = prev.filter(chat => chat.friendId !== friendId);
@@ -291,19 +241,15 @@ export const TaskBar: React.FC = () => {
     });
   }, []);
 
-  // ✅ Handle sending a message (creates ChatMessage with unified interface)
+  // ✅ NEW: Handle sending a message
   const handleSendMessage = useCallback((friendId: string, messageText: string) => {
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      senderId: currentUserId,
+      senderId: 'current-user-id', // Replace with actual current user ID
       receiverId: friendId,
       message: messageText,
-      timestamp: Date.now(),
-      read: false,
-      senderProfile: {
-        username: 'You',
-        displayName: 'You'
-      }
+      timestamp: new Date(),
+      read: false
     };
 
     // Add message to chat
@@ -317,22 +263,6 @@ export const TaskBar: React.FC = () => {
       return chat;
     }));
 
-    // Update friend's last message using unified interface
-    setFriends(prev => prev.map(friend => {
-      if (friend.id === friendId) {
-        return {
-          ...friend,
-          lastMessage: {
-            text: messageText,
-            timestamp: new Date(),
-            isFromSelf: true,
-            messageId: newMessage.id
-          }
-        };
-      }
-      return friend;
-    }));
-
     // Play send sound
     try {
       const audioManager = getAudioManager();
@@ -340,44 +270,7 @@ export const TaskBar: React.FC = () => {
     } catch (error) {
       console.warn('Failed to play send sound:', error);
     }
-  }, [currentUserId]);
-
-  // ✅ Load friends from API with proper transformation
-  const loadFriendsFromAPI = useCallback(async () => {
-    if (!currentUserId) return;
-
-    try {
-      const response = await fetch(`/api/friends/${currentUserId}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.success && Array.isArray(data.friends)) {
-          // Transform API response to unified Friend interface
-          const transformedFriends: Friend[] = data.friends.map((apiFriend: any) => ({
-            id: apiFriend.id,
-            username: apiFriend.username,
-            display_name: apiFriend.display_name || apiFriend.username,
-            avatar_url: apiFriend.avatar_url,
-            status: apiFriend.status || 'offline',
-            last_seen: apiFriend.last_seen,
-            is_online: apiFriend.is_online || false,
-            friends_since: apiFriend.friends_since,
-            unreadCount: 0 // Will be updated by chat system
-          }));
-
-          setFriends(transformedFriends);
-          console.log(`✅ Loaded ${transformedFriends.length} friends from API`);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load friends from API:', error);
-      // Keep using mock data
-    }
-  }, [currentUserId]);
+  }, []);
 
   // Close volume slider when clicking outside
   useEffect(() => {
@@ -445,13 +338,6 @@ export const TaskBar: React.FC = () => {
     return () => clearInterval(interval);
   }, [updateTime]);
 
-  // Load friends data on mount
-  useEffect(() => {
-    if (mounted && currentUserId) {
-      loadFriendsFromAPI();
-    }
-  }, [mounted, currentUserId, loadFriendsFromAPI]);
-
   // Mount effect
   useEffect(() => {
     setMounted(true);
@@ -465,9 +351,6 @@ export const TaskBar: React.FC = () => {
   if (isMobile) {
     return null;
   }
-
-  // Get unread count for friends icon badge
-  const totalUnreadCount = friends.reduce((sum, friend) => sum + (friend.unreadCount || 0), 0);
 
   // Windows 98 TaskBar
   if (!isWin7Mode && !isWinXPMode) {
@@ -559,44 +442,23 @@ export const TaskBar: React.FC = () => {
               padding: '2px 4px',
               backgroundColor: '#c0c0c0',
               border: '1px inset #c0c0c0',
-              minWidth: '160px',
+              minWidth: '160px', // ✅ Increased width for friends icon
               position: 'relative'
             }}
           >
-            {/* ✅ Friends Control with badge */}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <img 
-                src={getFriendsIcon()}
-                alt="Friends"
-                style={{ 
-                  width: '16px', 
-                  height: '16px', 
-                  cursor: 'pointer',
-                  marginRight: '4px'
-                }}
-                onClick={handleFriendsIconClick}
-                title={`Friends (${totalUnreadCount} unread)`}
-              />
-              {totalUnreadCount > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '0px',
-                  background: '#ff0000',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '12px',
-                  height: '12px',
-                  fontSize: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold'
-                }}>
-                  {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                </div>
-              )}
-            </div>
+            {/* ✅ NEW: Friends Control */}
+            <img 
+              src={getFriendsIcon()}
+              alt="Friends"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                marginRight: '4px'
+              }}
+              onClick={handleFriendsIconClick}
+              title="Friends"
+            />
 
             {/* Audio Control */}
             <div className="volume-control-container" style={{ position: 'relative' }}>
@@ -666,17 +528,17 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ Friends Window with unified types */}
+        {/* ✅ NEW: Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
-            currentUserId={currentUserId}
+            currentUserId="current-user-id" // You should pass actual user ID here
           />
         )}
 
-        {/* ✅ Open Chat Windows with unified types */}
+        {/* ✅ NEW: Open Chat Windows */}
         {openChats.map((chat) => (
           <FriendsChatWindow
             key={chat.friendId}
@@ -768,45 +630,23 @@ export const TaskBar: React.FC = () => {
               background: 'rgba(255, 255, 255, 0.1)',
               borderRadius: '4px',
               backdropFilter: 'blur(5px)',
-              minWidth: '180px',
+              minWidth: '180px', // ✅ Increased width for friends icon
               position: 'relative'
             }}
           >
-            {/* ✅ Friends Control with badge */}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <img 
-                src={getFriendsIcon()}
-                alt="Friends"
-                style={{ 
-                  width: '16px', 
-                  height: '16px', 
-                  cursor: 'pointer',
-                  filter: 'brightness(0) invert(1)'
-                }}
-                onClick={handleFriendsIconClick}
-                title={`Friends (${totalUnreadCount} unread)`}
-              />
-              {totalUnreadCount > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  background: '#ff4444',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '14px',
-                  height: '14px',
-                  fontSize: '9px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold',
-                  border: '1px solid rgba(255, 255, 255, 0.3)'
-                }}>
-                  {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                </div>
-              )}
-            </div>
+            {/* ✅ NEW: Friends Control */}
+            <img 
+              src={getFriendsIcon()}
+              alt="Friends"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                filter: 'brightness(0) invert(1)'
+              }}
+              onClick={handleFriendsIconClick}
+              title="Friends"
+            />
 
             {/* Audio Control */}
             <div className="volume-control-container" style={{ position: 'relative' }}>
@@ -895,17 +735,17 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ Friends Window with unified types */}
+        {/* ✅ NEW: Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
-            currentUserId={currentUserId}
+            currentUserId="current-user-id" // You should pass actual user ID here
           />
         )}
 
-        {/* ✅ Open Chat Windows with unified types */}
+        {/* ✅ NEW: Open Chat Windows */}
         {openChats.map((chat) => (
           <FriendsChatWindow
             key={chat.friendId}
@@ -1001,45 +841,23 @@ export const TaskBar: React.FC = () => {
               border: '1px inset #1941a5',
               borderRadius: '2px',
               padding: '2px 4px',
-              minWidth: '160px',
+              minWidth: '160px', // ✅ Increased width for friends icon
               position: 'relative'
             }}
           >
-            {/* ✅ Friends Control with badge */}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <img 
-                src={getFriendsIcon()}
-                alt="Friends"
-                style={{ 
-                  width: '16px', 
-                  height: '16px', 
-                  cursor: 'pointer',
-                  marginRight: '4px'
-                }}
-                onClick={handleFriendsIconClick}
-                title={`Friends (${totalUnreadCount} unread)`}
-              />
-              {totalUnreadCount > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '0px',
-                  background: '#ff3333',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '12px',
-                  height: '12px',
-                  fontSize: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold',
-                  border: '1px solid #1941a5'
-                }}>
-                  {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                </div>
-              )}
-            </div>
+            {/* ✅ NEW: Friends Control */}
+            <img 
+              src={getFriendsIcon()}
+              alt="Friends"
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                cursor: 'pointer',
+                marginRight: '4px'
+              }}
+              onClick={handleFriendsIconClick}
+              title="Friends"
+            />
 
             {/* Audio Control */}
             <div className="volume-control-container" style={{ position: 'relative' }}>
@@ -1115,17 +933,17 @@ export const TaskBar: React.FC = () => {
           </div>
         </footer>
 
-        {/* ✅ Friends Window with unified types */}
+        {/* ✅ NEW: Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             onOpenChat={handleOpenChat}
             onClose={() => setShowFriendsWindow(false)}
             theme={getCurrentTheme()}
-            currentUserId={currentUserId}
+            currentUserId="current-user-id" // You should pass actual user ID here
           />
         )}
 
-        {/* ✅ Open Chat Windows with unified types */}
+        {/* ✅ NEW: Open Chat Windows */}
         {openChats.map((chat) => (
           <FriendsChatWindow
             key={chat.friendId}
