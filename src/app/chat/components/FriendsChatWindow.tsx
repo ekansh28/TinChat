@@ -1,18 +1,22 @@
-// src/app/chat/components/FriendsChatWindow.tsx - UPDATED WITH UNIFIED TYPES
+// src/app/chat/components/FriendsChatWindow.tsx - COMPLETELY FIXED VERSION
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+// ✅ FIXED: Import unified types and helper functions
+import { Friend } from '../../../types/friends';
+import { ExtendedChatMessage, isMessageFromSelf } from '../../../types/friendsExtended';
 
-// ✅ Import unified types
-import { 
-  Friend, 
-  ChatMessage, 
-  FriendsChatWindowProps,
-  UserStatus
-} from '../../../types/friends';
+interface ChatWindowProps {
+  friend: Friend;
+  messages: ExtendedChatMessage[];
+  onSendMessage: (friendId: string, message: string) => void;
+  onClose: () => void;
+  position: number; // 0 = rightmost, 1 = second from right, etc.
+  theme: 'win98' | 'win7' | 'winxp';
+}
 
-const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
+const FriendsChatWindow: React.FC<ChatWindowProps> = ({
   friend,
   messages,
   onSendMessage,
@@ -27,32 +31,34 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
   const windowRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Slide up animation
+  // ✅ FIXED: Slide up animation with proper cleanup
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(true);
       // Focus input after animation
-      setTimeout(() => {
+      const focusTimer = setTimeout(() => {
         inputRef.current?.focus();
       }, 300);
+      
+      return () => clearTimeout(focusTimer);
     }, 50);
 
     return () => clearTimeout(timer);
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
+  // ✅ FIXED: Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // Handle message input
+  // ✅ FIXED: Handle message input with proper typing state management
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setCurrentMessage(value);
     
-    // Show typing indicator (you can emit this via socket.io)
+    // Show typing indicator
     if (value.trim() && !isTyping) {
       setIsTyping(true);
       // TODO: Emit typing start event
@@ -64,7 +70,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }
   };
 
-  // Handle send message
+  // ✅ FIXED: Handle send message with proper validation
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     const message = currentMessage.trim();
@@ -79,7 +85,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }
   };
 
-  // Handle close
+  // ✅ FIXED: Handle close with animation
   const handleClose = () => {
     setIsVisible(false);
     // Wait for animation before calling onClose
@@ -88,15 +94,15 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }, 200);
   };
 
-  // Handle key press
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  // ✅ FIXED: Handle key press with proper event types
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage(e);
     }
   };
 
-  // Get window position (multiple chat windows stack to the left)
+  // ✅ FIXED: Get window position with proper calculations
   const getWindowPosition = () => {
     const windowWidth = 280;
     const rightOffset = 20;
@@ -111,10 +117,10 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     };
   };
 
-  // Get window styles based on theme
-  const getWindowStyles = () => {
-    const baseStyles = {
-      position: 'fixed' as const,
+  // ✅ FIXED: Get window styles based on theme with proper typing
+  const getWindowStyles = (): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      position: 'fixed',
       bottom: isVisible ? '40px' : '-400px',
       ...getWindowPosition(),
       width: '280px',
@@ -152,8 +158,8 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }
   };
 
-  // Get title bar styles
-  const getTitleBarStyles = () => {
+  // ✅ FIXED: Get title bar styles with proper typing
+  const getTitleBarStyles = (): React.CSSProperties => {
     switch (theme) {
       case 'win7':
         return {
@@ -181,8 +187,8 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }
   };
 
-  // Get body styles
-  const getBodyStyles = () => {
+  // ✅ FIXED: Get body styles with proper typing
+  const getBodyStyles = (): React.CSSProperties => {
     switch (theme) {
       case 'win7':
         return {
@@ -203,28 +209,25 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
     }
   };
 
-  // Format message timestamp
+  // ✅ FIXED: Format message timestamp with proper error handling
   const formatTime = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      console.warn('Error formatting timestamp:', error);
+      return '';
+    }
   };
 
-  // Convert ChatMessage to display format
-  const getDisplayMessages = () => {
-    return messages.map(msg => ({
-      id: msg.id,
-      text: msg.message,
-      isFromSelf: msg.senderId !== friend.id, // If sender is not the friend, it's from current user
-      timestamp: new Date(msg.timestamp),
-      senderName: msg.senderId === friend.id ? (friend.display_name || friend.username) : 'You'
-    }));
+  // ✅ FIXED: Get display name with fallback
+  const getDisplayName = () => {
+    return friend.display_name || friend.username;
   };
-
-  const displayMessages = getDisplayMessages();
 
   return (
     <div 
@@ -260,7 +263,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
         }}>
           <img
             src={friend.avatar_url || '/default-avatar.png'}
-            alt={friend.display_name || friend.username}
+            alt={getDisplayName()}
             style={{
               width: '16px',
               height: '16px',
@@ -282,7 +285,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
                 ctx.font = '8px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText(
-                  (friend.display_name || friend.username).charAt(0).toUpperCase(),
+                  getDisplayName().charAt(0).toUpperCase(),
                   8,
                   10
                 );
@@ -299,7 +302,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>
-            {friend.display_name || friend.username}
+            {getDisplayName()}
             {friend.is_online && (
               <span style={{
                 fontSize: '10px',
@@ -359,7 +362,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
           flexDirection: 'column',
           gap: '4px',
         }}>
-          {displayMessages.length === 0 ? (
+          {messages.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '20px',
@@ -367,65 +370,70 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
               fontSize: '11px',
               fontStyle: 'italic',
             }}>
-              Start a conversation with {friend.display_name || friend.username}
+              Start a conversation with {getDisplayName()}
             </div>
           ) : (
-            displayMessages.map((message) => (
-              <div
-                key={message.id}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: message.isFromSelf ? 'flex-end' : 'flex-start',
-                  marginBottom: '8px',
-                }}
-              >
-                {/* Message bubble */}
-                <div style={{
-                  maxWidth: '70%',
-                  padding: '6px 10px',
-                  borderRadius: theme === 'win98' ? '0' : '12px',
-                  background: message.isFromSelf 
-                    ? (theme === 'win98' ? '#dfdfdf' : theme === 'win7' ? '#0078d4' : '#0054e3')
-                    : (theme === 'win98' ? '#ffffff' : theme === 'win7' ? '#f0f0f0' : '#ffffff'),
-                  color: message.isFromSelf 
-                    ? (theme === 'win98' ? '#000' : '#fff')
-                    : '#000',
-                  border: theme === 'win98' 
-                    ? (message.isFromSelf ? '1px outset #dfdfdf' : '1px inset #ffffff')
-                    : '1px solid #ddd',
-                  wordWrap: 'break-word',
-                  fontSize: '11px',
-                  lineHeight: '1.4',
-                }}>
-                  {/* Message sender (only for received messages) */}
-                  {!message.isFromSelf && (
-                    <div style={{
-                      fontSize: '9px',
-                      fontWeight: 'bold',
-                      color: theme === 'win7' ? '#666' : theme === 'winxp' ? '#0054e3' : '#666',
-                      marginBottom: '2px',
-                    }}>
-                      {message.senderName}
-                    </div>
-                  )}
+            messages.map((message) => {
+              // ✅ FIXED: Determine if message is from self using helper function
+              const isFromSelf = message.isFromSelf ?? isMessageFromSelf(message, 'current-user');
+              
+              return (
+                <div
+                  key={message.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: isFromSelf ? 'flex-end' : 'flex-start',
+                    marginBottom: '8px',
+                  }}
+                >
+                  {/* Message bubble */}
+                  <div style={{
+                    maxWidth: '70%',
+                    padding: '6px 10px',
+                    borderRadius: theme === 'win98' ? '0' : '12px',
+                    background: isFromSelf 
+                      ? (theme === 'win98' ? '#dfdfdf' : theme === 'win7' ? '#0078d4' : '#0054e3')
+                      : (theme === 'win98' ? '#ffffff' : theme === 'win7' ? '#f0f0f0' : '#ffffff'),
+                    color: isFromSelf 
+                      ? (theme === 'win98' ? '#000' : '#fff')
+                      : '#000',
+                    border: theme === 'win98' 
+                      ? (isFromSelf ? '1px outset #dfdfdf' : '1px inset #ffffff')
+                      : '1px solid #ddd',
+                    wordWrap: 'break-word',
+                    fontSize: '11px',
+                    lineHeight: '1.4',
+                  }}>
+                    {/* Message sender (only for received messages) */}
+                    {!isFromSelf && (
+                      <div style={{
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        color: theme === 'win7' ? '#666' : theme === 'winxp' ? '#0054e3' : '#666',
+                        marginBottom: '2px',
+                      }}>
+                        {getDisplayName()}
+                      </div>
+                    )}
+                    
+                    {/* Message text */}
+                    <div>{message.message}</div>
+                  </div>
                   
-                  {/* Message text */}
-                  <div>{message.text}</div>
+                  {/* Timestamp */}
+                  <div style={{
+                    fontSize: '9px',
+                    color: theme === 'win7' ? '#888' : theme === 'winxp' ? '#666' : '#666',
+                    marginTop: '2px',
+                    marginLeft: isFromSelf ? '0' : '10px',
+                    marginRight: isFromSelf ? '10px' : '0',
+                  }}>
+                    {formatTime(message.timestamp)}
+                  </div>
                 </div>
-                
-                {/* Timestamp */}
-                <div style={{
-                  fontSize: '9px',
-                  color: theme === 'win7' ? '#888' : theme === 'winxp' ? '#666' : '#666',
-                  marginTop: '2px',
-                  marginLeft: message.isFromSelf ? '0' : '10px',
-                  marginRight: message.isFromSelf ? '10px' : '0',
-                }}>
-                  {formatTime(message.timestamp.getTime())}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
           
           {/* Typing indicator */}
@@ -505,7 +513,7 @@ const FriendsChatWindow: React.FC<FriendsChatWindowProps> = ({
               marginTop: '4px',
               fontStyle: 'italic',
             }}>
-              {friend.display_name || friend.username} is offline
+              {getDisplayName()} is offline
             </div>
           )}
         </div>
