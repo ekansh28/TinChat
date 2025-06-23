@@ -1012,6 +1012,7 @@ export const TaskBar: React.FC = () => {
 
         {/* ✅ NEW: Open Chat Windows */}
         {openChats.map((chat) => (
+          
           <FriendsChatWindow
             key={chat.friendId}
             friend={chat.friend}

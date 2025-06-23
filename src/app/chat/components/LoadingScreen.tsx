@@ -15,6 +15,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ auth }) => (
         {auth.isLoading ? 'Loading authentication...' : 'Loading chat...'}
       </p>
     </div>
+    
   </div>
 );
 

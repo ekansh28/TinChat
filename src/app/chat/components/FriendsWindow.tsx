@@ -18,6 +18,7 @@ interface Friend {
     timestamp: Date;
     isFromSelf: boolean;
   };
+  
 }
 
 interface FriendsWindowProps {
