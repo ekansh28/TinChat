@@ -93,36 +93,7 @@ export const TaskBar: React.FC = () => {
     messages: ExtendedChatMessage[];
     position: number;
   }>>([]);
-  const [friends, setFriends] = useState<Friend[]>([
-    // Mock friends data for demonstration
-    {
-      id: 'friend1',
-      username: 'alice_dev',
-      display_name: 'Alice',
-      avatar_url: '/avatars/alice.png',
-      status: 'online',
-      is_online: true,
-      last_seen: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
-    },
-    {
-      id: 'friend2',
-      username: 'bob_coder',
-      display_name: 'Bob',
-      avatar_url: '/avatars/bob.png',
-      status: 'offline',
-      is_online: false,
-      last_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-    },
-    {
-      id: 'friend3',
-      username: 'charlie_design',
-      display_name: 'Charlie',
-      avatar_url: '/avatars/charlie.png',
-      status: 'online',
-      is_online: true,
-      last_seen: new Date().toISOString(),
-    }
-  ]);
+ 
 
   // ✅ FIXED: Mobile detection with proper cleanup
   const checkIfMobile = useCallback(() => {
