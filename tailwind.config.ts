@@ -46,3 +46,5 @@ export default {
   },
   plugins: [require("tailwindcss-animate")], // Keep if animations are used
 } satisfies Config;
+
+// hi
