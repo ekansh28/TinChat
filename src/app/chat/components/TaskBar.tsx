@@ -17,34 +17,15 @@ interface AudioManager {
   getVolume: () => number;
 }
 
-// ✅ Friends data types
-interface Friend {
-  id: string;
-  username: string;
-  displayName: string;
-  avatar?: string;
-  isOnline: boolean;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-  };
-}
-
-interface ChatMessage {
-  id: string;
-  friendId: string;
-  text: string;
-  isFromSelf: boolean;
-  timestamp: Date;
-}
-
-interface OpenChat {
-  friendId: string;
-  friend: Friend;
-  messages: ChatMessage[];
-  position: number;
-}
+// ✅ Import unified types
+import { 
+  Friend, 
+  ChatMessage, 
+  OpenChat,
+  transformToModernFriend,
+  transformToChatMessage,
+  UserStatus
+} from '../../../types/friends';
 
 // ✅ Create audio manager
 const createAudioManager = (): AudioManager => {
@@ -115,7 +96,7 @@ export const TaskBar: React.FC = () => {
     {
       id: 'friend1',
       username: 'alice_dev',
-      displayName: 'Alice',
+      display_name: 'Alice',
       avatar: '/avatars/alice.png',
       isOnline: true,
       lastMessage: {
@@ -127,7 +108,7 @@ export const TaskBar: React.FC = () => {
     {
       id: 'friend2',
       username: 'bob_coder',
-      displayName: 'Bob',
+      display_name: 'Bob',
       avatar: '/avatars/bob.png',
       isOnline: false,
       lastMessage: {
@@ -139,7 +120,7 @@ export const TaskBar: React.FC = () => {
     {
       id: 'friend3',
       username: 'charlie_design',
-      displayName: 'Charlie',
+      display_name: 'Charlie',
       avatar: '/avatars/charlie.png',
       isOnline: true
     }
