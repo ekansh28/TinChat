@@ -3,28 +3,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-
-interface Friend {
-  id: string;
-  username: string;
-  displayName: string;
-  avatar?: string;
-  isOnline: boolean;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-  };
-  
-}
-
-interface ChatMessage {
-  id: string;
-  friendId: string;
-  text: string;
-  isFromSelf: boolean;
-  timestamp: Date;
-}
+// ✅ Import unified types
+import { 
+  Friend, 
+  ChatMessage, 
+  OpenChat,
+  transformToModernFriend,
+  transformToChatMessage,
+  UserStatus
+} from '../../../types/friends';
 
 interface ChatWindowProps {
   friend: Friend;

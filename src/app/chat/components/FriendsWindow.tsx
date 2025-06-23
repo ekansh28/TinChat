@@ -3,23 +3,11 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+// ✅ Import unified types
+import { 
+  Friend
+} from '../../../types/friends';
 
-interface Friend {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
-  last_seen: string;
-  is_online: boolean;
-  friends_since?: string;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-  };
-  
-}
 
 interface FriendsWindowProps {
   onOpenChat: (friend: Friend) => void;
