@@ -110,7 +110,7 @@ const ChatPageClientContent: React.FC = () => {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: displayNameAnimationCSS }} />
-      <VistaBubbles />
+   
       <ProfilePopupProvider>
         <div className="fixed top-0 right-0 z-50">
           <TopBar />
