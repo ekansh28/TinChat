@@ -40,7 +40,7 @@ if (NODE_ENV === 'development') {
   );
 }
 
-/
+
 // Enhanced HTTP server with Friends API routes support
 const server = http.createServer(async (req, res) => {
   try {

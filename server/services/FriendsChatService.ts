@@ -1,4 +1,4 @@
-// server/services/FriendsChatService.ts - FRIENDS CHAT WITH 24H CACHING
+// server/services/FriendsChatService.ts - FIXED VERSION WITH PROPER TYPING AND METHODS
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RedisService } from './RedisService';
 import { ProfileManager } from '../managers/profile/ProfileManager';
@@ -49,6 +49,9 @@ export class FriendsChatService {
   private readonly LAST_MESSAGE_TTL = 7 * 24 * 60 * 60; // 7 days for last message cache
   private readonly MAX_MESSAGES_PER_CHAT = 1000; // Limit messages per chat
   private readonly MESSAGE_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+  // Add cleanup interval tracking
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(
     io: SocketIOServer, 
@@ -174,7 +177,7 @@ export class FriendsChatService {
     receiverId: string;
     message: string;
     authId: string;
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { senderId, receiverId, message, authId } = data;
       
@@ -250,7 +253,7 @@ export class FriendsChatService {
     userId: string;
     friendId: string;
     messageIds: string[];
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { userId, friendId, messageIds } = data;
       
@@ -285,7 +288,7 @@ export class FriendsChatService {
   private async handleTypingStart(socket: Socket, data: {
     userId: string;
     friendId: string;
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { userId, friendId } = data;
       
@@ -330,7 +333,7 @@ export class FriendsChatService {
   private async handleTypingStop(socket: Socket, data: {
     userId: string;
     friendId: string;
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { userId, friendId } = data;
       
@@ -365,7 +368,7 @@ export class FriendsChatService {
     friendId: string;
     limit?: number;
     offset?: number;
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { userId, friendId, limit = 50, offset = 0 } = data;
       
@@ -403,7 +406,7 @@ export class FriendsChatService {
   private async handleGetLastMessages(socket: Socket, data: {
     userId: string;
     friendIds: string[];
-  }): Promise<void> => {
+  }): Promise<void> {
     try {
       const { userId, friendIds } = data;
       
@@ -635,7 +638,7 @@ export class FriendsChatService {
   }
 
   // Send unread counts to user
-  private async sendUnreadCounts(socket: Socket, userId: string): Promise<void> => {
+  private async sendUnreadCounts(socket: Socket, userId: string): Promise<void> {
     try {
       const unreadCounts: Record<string, number> = {};
       
@@ -670,7 +673,7 @@ export class FriendsChatService {
 
   // Start message cleanup interval
   private startMessageCleanup(): void {
-    setInterval(async () => {
+    this.cleanupInterval = setInterval(async () => {
       await this.cleanupOldMessages();
     }, this.MESSAGE_CLEANUP_INTERVAL);
   }
@@ -724,29 +727,40 @@ export class FriendsChatService {
   // Get service statistics
   public getStats(): {
     activeRooms: number;
-    activeTying: number;
+    activeTyping: number;
     cacheSize: number;
     redisEnabled: boolean;
   } {
     return {
       activeRooms: this.activeChatRooms.size,
-      activeTying: this.typingStatuses.size,
+      activeTyping: this.typingStatuses.size,
       cacheSize: Array.from(this.activeChatRooms.values())
         .reduce((total, room) => total + room.messages.length, 0),
       redisEnabled: !!this.redisService
     };
   }
 
-  // Graceful shutdown
+  // ✅ FIXED: Added missing destroy method
   public async destroy(): Promise<void> {
     logger.info('💬 Shutting down FriendsChatService...');
     
-    // Clear all typing statuses
-    this.typingStatuses.clear();
-    
-    // Clear memory cache
-    this.activeChatRooms.clear();
-    
-    logger.info('✅ FriendsChatService shutdown complete');
+    try {
+      // Clear cleanup interval
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+      
+      // Clear all typing statuses
+      this.typingStatuses.clear();
+      
+      // Clear memory cache
+      this.activeChatRooms.clear();
+      
+      logger.info('✅ FriendsChatService shutdown complete');
+    } catch (error) {
+      logger.error('❌ Error during FriendsChatService shutdown:', error);
+      throw error;
+    }
   }
 }
