@@ -55,6 +55,7 @@ const MatchStatus: React.FC<MatchStatusProps> = ({
         onClick={handleButtonClick}
         disabled={disabled}
         size="sm"
+        
         variant={isConnected ? "destructive" : "primary"}
         className="text-xs px-2 py-1"
       >

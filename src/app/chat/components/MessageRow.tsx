@@ -416,6 +416,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
               {displayedUsername}:
             </UsernameComponent>
             <span className={cn(
+              
               theme === 'theme-7' && 'theme-7-text-shadow',
               "break-words hyphens-auto"
             )}>

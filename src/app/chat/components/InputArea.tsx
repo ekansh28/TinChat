@@ -19,6 +19,7 @@ interface InputAreaProps {
 
 // CDN URLs
 const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+
 const EMOJI_INDEX_URL = "/emote_index.json";
 
 // Static emoji for the button icon

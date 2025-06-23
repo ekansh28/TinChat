@@ -18,6 +18,7 @@ interface PartnerTypingIndicatorProps {
     senderDisplayNameColor?: string;
     senderDisplayNameAnimation?: string;
     senderRainbowSpeed?: number;
+    
   } | null;
   className?: string;
   isMobile?: boolean; // Keep prop but don't use for different layouts
