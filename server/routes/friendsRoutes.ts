@@ -1,638 +1,611 @@
-// server/routes/friendsRoutes.ts - FRIENDS API WITH REDIS CACHING
+// server/routes/friendsRoutes.ts - COMPLETE FRIENDS API ROUTES
 import { IncomingMessage, ServerResponse } from 'http';
 import { ProfileManager } from '../managers/profile/ProfileManager';
 import { logger } from '../utils/logger';
 import { URL } from 'url';
 
-// Global ProfileManager instance (will be set from server/index.ts)
-let globalProfileManager: ProfileManager | null = null;
+let profileManager: ProfileManager | null = null;
 
-export const setFriendsProfileManager = (profileManager: ProfileManager) => {
-  globalProfileManager = profileManager;
-  logger.info('✅ ProfileManager set for Friends API routes');
-};
-
-interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-  timestamp: string;
-  cached?: boolean;
-  fetchTime?: number;
+export function setFriendsProfileManager(manager: ProfileManager): void {
+  profileManager = manager;
+  logger.info('📡 Friends API routes configured with ProfileManager');
 }
 
-// Cache for API responses (5 seconds cache)
-const responseCache = new Map<string, { response: ApiResponse; timestamp: number }>();
-const RESPONSE_CACHE_TTL = 5000;
-
-// Helper function to create standardized API responses
-const createResponse = <T>(
-  success: boolean, 
-  data?: T, 
-  error?: string, 
-  message?: string,
-  cached = false,
-  fetchTime?: number
-): ApiResponse<T> => ({
-  success,
-  data,
-  error,
-  message,
-  timestamp: new Date().toISOString(),
-  cached,
-  fetchTime
-});
-
-// Helper function to parse request body
-const parseRequestBody = (req: IncomingMessage): Promise<any> => {
+// Helper function to parse JSON body
+async function parseRequestBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
     let body = '';
-    let timeout: NodeJS.Timeout;
-
-    timeout = setTimeout(() => {
-      reject(new Error('Request body parsing timeout'));
-    }, 10000);
-
     req.on('data', chunk => {
       body += chunk.toString();
-      if (body.length > 1024 * 1024) { // 1MB limit
-        clearTimeout(timeout);
-        reject(new Error('Request body too large'));
-        return;
-      }
     });
-
     req.on('end', () => {
-      clearTimeout(timeout);
       try {
-        if (body.trim()) {
-          resolve(JSON.parse(body));
-        } else {
-          resolve({});
-        }
+        resolve(body ? JSON.parse(body) : {});
       } catch (error) {
-        reject(new Error('Invalid JSON in request body'));
+        reject(new Error('Invalid JSON'));
       }
     });
-
-    req.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+    req.on('error', reject);
   });
-};
-
-// Helper function to set CORS headers
-const setFriendsApiCorsHeaders = (res: ServerResponse, requestOrigin?: string): void => {
-  const allowedOrigins = [
-    "https://studio--chitchatconnect-aqa0w.us-central1.hosted.app",
-    "https://delightful-pond-0cb3e0010.6.azurestaticapps.net",
-    "https://tinchat.online",
-    "https://www.tinchat.online",
-    "http://localhost:9002",
-    "http://localhost:3000",
-    "http://localhost:3001"
-  ];
-
-  if (process.env.NODE_ENV === 'development') {
-    allowedOrigins.push(
-      "http://localhost:8080",
-      "http://localhost:8000",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:9002"
-    );
-  }
-
-  let originToAllow = '*';
-  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
-    originToAllow = requestOrigin;
-  }
-
-  res.setHeader('Access-Control-Allow-Origin', originToAllow);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-};
+}
 
 // Helper function to send JSON response
-const sendJsonResponse = (res: ServerResponse, statusCode: number, data: ApiResponse): void => {
-  res.writeHead(statusCode);
-  res.end(JSON.stringify(data, null, 2));
-};
-
-// Extract userId from URL path
-const extractUserId = (url: string): string | null => {
-  const matches = url.match(/\/api\/friends\/([^\/\?]+)/);
-  return matches ? decodeURIComponent(matches[1]) : null;
-};
-
-// Validate userId format
-const isValidUserId = (userId: string): boolean => {
-  return !!(userId && userId.trim().length > 0 && userId.length <= 200);
-};
-
-// Get cached response if available and not expired
-const getCachedResponse = (cacheKey: string): ApiResponse | null => {
-  const cached = responseCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < RESPONSE_CACHE_TTL) {
-    return { ...cached.response, cached: true };
-  }
-  if (cached) {
-    responseCache.delete(cacheKey);
-  }
-  return null;
-};
-
-// Cache response for short term
-const cacheResponse = (cacheKey: string, response: ApiResponse): void => {
-  responseCache.set(cacheKey, {
-    response: { ...response, cached: false },
-    timestamp: Date.now()
+function sendJSON(res: ServerResponse, statusCode: number, data: any): void {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
   });
+  res.end(JSON.stringify(data));
+}
 
-  if (responseCache.size > 100) {
-    const oldestKeys = Array.from(responseCache.keys()).slice(0, 20);
-    oldestKeys.forEach(key => responseCache.delete(key));
-  }
-};
+// Helper function to send error response
+function sendError(res: ServerResponse, statusCode: number, message: string, details?: any): void {
+  logger.error(`Friends API Error ${statusCode}: ${message}`, details);
+  sendJSON(res, statusCode, {
+    success: false,
+    message,
+    ...(details && { details })
+  });
+}
 
-export const handleFriendsRoutes = async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-  const url = req.url || '';
-  const method = req.method || 'GET';
-  const requestOrigin = req.headers.origin;
-  const startTime = Date.now();
-
-  // Set CORS headers for all friends API requests
-  setFriendsApiCorsHeaders(res, requestOrigin);
-
-  // Handle preflight OPTIONS requests
-  if (method === 'OPTIONS') {
-    sendJsonResponse(res, 200, createResponse(true, null, undefined, 'CORS preflight successful'));
-    return true;
-  }
-
-  // Check if this is a friends API route
-  if (!url.startsWith('/api/friends')) {
+export async function handleFriendsRoutes(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  if (!req.url?.startsWith('/api/friends')) {
     return false;
   }
 
-  // Check if ProfileManager is available
-  if (!globalProfileManager) {
-    logger.error('❌ ProfileManager not initialized for Friends API routes');
-    sendJsonResponse(res, 503, createResponse(false, null, 'Friends service unavailable', 'ProfileManager not initialized'));
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathname = url.pathname;
+    const method = req.method;
+
+    logger.debug(`📡 Friends API: ${method} ${pathname}`);
+
+    // Health check endpoint
+    if (pathname === '/api/friends/health') {
+      if (method === 'GET') {
+        return await handleHealthCheck(req, res);
+      }
+    }
+
+    // Get user's friends list
+    if (pathname.match(/^\/api\/friends\/([^\/]+)$/)) {
+      if (method === 'GET') {
+        return await handleGetFriends(req, res, pathname);
+      }
+    }
+
+    // Batch get online status
+    if (pathname === '/api/friends/batch-status') {
+      if (method === 'POST') {
+        return await handleBatchStatus(req, res);
+      }
+    }
+
+    // Get last messages for friends
+    if (pathname === '/api/friends/last-messages') {
+      if (method === 'POST') {
+        return await handleLastMessages(req, res);
+      }
+    }
+
+    // Send friend request
+    if (pathname === '/api/friends/send-request') {
+      if (method === 'POST') {
+        return await handleSendFriendRequest(req, res);
+      }
+    }
+
+    // Accept friend request
+    if (pathname === '/api/friends/accept-request') {
+      if (method === 'POST') {
+        return await handleAcceptFriendRequest(req, res);
+      }
+    }
+
+    // Decline friend request
+    if (pathname === '/api/friends/decline-request') {
+      if (method === 'POST') {
+        return await handleDeclineFriendRequest(req, res);
+      }
+    }
+
+    // Remove friend
+    if (pathname === '/api/friends/remove') {
+      if (method === 'POST') {
+        return await handleRemoveFriend(req, res);
+      }
+    }
+
+    // Get pending friend requests
+    if (pathname.match(/^\/api\/friends\/([^\/]+)\/requests$/)) {
+      if (method === 'GET') {
+        return await handleGetFriendRequests(req, res, pathname);
+      }
+    }
+
+    // Get friendship status between two users
+    if (pathname === '/api/friends/status') {
+      if (method === 'POST') {
+        return await handleGetFriendshipStatus(req, res);
+      }
+    }
+
+    // Search users to add as friends
+    if (pathname === '/api/friends/search') {
+      if (method === 'POST') {
+        return await handleSearchUsers(req, res);
+      }
+    }
+
+    // Get friend statistics
+    if (pathname.match(/^\/api\/friends\/([^\/]+)\/stats$/)) {
+      if (method === 'GET') {
+        return await handleGetFriendStats(req, res, pathname);
+      }
+    }
+
+    // Route not found
+    sendError(res, 404, 'Friends API endpoint not found');
+    return true;
+
+  } catch (error) {
+    logger.error('❌ Friends API handler error:', error);
+    sendError(res, 500, 'Internal server error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return true;
   }
+}
 
+// ==================== ROUTE HANDLERS ====================
+
+async function handleHealthCheck(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   try {
-    // Route: GET /api/friends/health
-    if (url === '/api/friends/health' && method === 'GET') {
-      await handleFriendsHealthCheck(res, startTime);
+    if (!profileManager) {
+      sendJSON(res, 200, {
+        success: false,
+        message: 'ProfileManager not initialized',
+        timestamp: new Date().toISOString()
+      });
       return true;
     }
 
-    // Route: POST /api/friends/batch-status - Get online status for multiple users
-    if (url === '/api/friends/batch-status' && method === 'POST') {
-      await handleBatchStatusCheck(req, res, startTime);
-      return true;
-    }
-
-    // Extract userId for individual friend operations
-    const userId = extractUserId(url);
-    if (!userId) {
-      sendJsonResponse(res, 400, createResponse(false, null, 'Invalid user ID in URL', 'User ID is required'));
-      return true;
-    }
-
-    if (!isValidUserId(userId)) {
-      sendJsonResponse(res, 400, createResponse(false, null, 'Invalid user ID format', 'User ID must be non-empty and under 200 characters'));
-      return true;
-    }
-
-    // Route handlers based on method and URL patterns
-    switch (method) {
-      case 'GET':
-        if (url.endsWith('/friends')) {
-          // GET /api/friends/{userId}/friends - Get user's friends list
-          await handleGetFriendsList(userId, req, res, startTime);
-        } else if (url.includes('/status/')) {
-          // GET /api/friends/{userId}/status/{friendId} - Get friendship status
-          const friendId = url.split('/status/')[1];
-          await handleGetFriendshipStatus(userId, friendId, res, startTime);
-        } else if (url.endsWith('/online')) {
-          // GET /api/friends/{userId}/online - Get online friends count
-          await handleGetOnlineFriendsCount(userId, res, startTime);
-        } else {
-          // GET /api/friends/{userId} - Get user's friends list (alternative endpoint)
-          await handleGetFriendsList(userId, req, res, startTime);
-        }
-        break;
-      case 'POST':
-        if (url.includes('/request/')) {
-          // POST /api/friends/{userId}/request/{friendId} - Send friend request
-          const friendId = url.split('/request/')[1];
-          await handleSendFriendRequest(userId, friendId, req, res, startTime);
-        }
-        break;
-      case 'PUT':
-        if (url.includes('/accept/')) {
-          // PUT /api/friends/{userId}/accept/{requestId} - Accept friend request
-          const requestId = url.split('/accept/')[1];
-          await handleAcceptFriendRequest(userId, requestId, res, startTime);
-        }
-        break;
-      case 'DELETE':
-        if (url.includes('/remove/')) {
-          // DELETE /api/friends/{userId}/remove/{friendId} - Remove friend
-          const friendId = url.split('/remove/')[1];
-          await handleRemoveFriend(userId, friendId, res, startTime);
-        } else if (url.includes('/decline/')) {
-          // DELETE /api/friends/{userId}/decline/{requestId} - Decline friend request
-          const requestId = url.split('/decline/')[1];
-          await handleDeclineFriendRequest(userId, requestId, res, startTime);
-        }
-        break;
-      default:
-        sendJsonResponse(res, 405, createResponse(false, null, 'Method not allowed', `${method} not supported for friends routes`));
-        break;
-    }
+    const health = await profileManager.testConnection();
+    
+    sendJSON(res, 200, {
+      success: health.overall,
+      message: health.overall ? 'Friends API healthy' : 'Friends API degraded',
+      details: {
+        database: health.database,
+        redis: health.redis,
+        errors: health.errors
+      },
+      timestamp: new Date().toISOString()
+    });
 
     return true;
   } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error('❌ Friends API route error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Internal server error', false, fetchTime));
+    sendError(res, 500, 'Health check failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return true;
   }
-};
+}
 
-// GET /api/friends/{userId}/friends or /api/friends/{userId}
-const handleGetFriendsList = async (userId: string, req: IncomingMessage, res: ServerResponse, startTime: number): Promise<void> => {
+async function handleGetFriends(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
   try {
-    logger.debug(`📡 GET friends list request for user: ${userId}`);
-
-    // Check cache first
-    const cacheKey = `friends_list:${userId}`;
-    const cachedResponse = getCachedResponse(cacheKey);
-    if (cachedResponse) {
-      const fetchTime = Date.now() - startTime;
-      logger.debug(`✅ Friends list cache hit for user: ${userId} (${fetchTime}ms)`);
-      sendJsonResponse(res, 200, { ...cachedResponse, fetchTime });
-      return;
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
     }
 
-    // Get friends list using FriendsModule (with Redis caching)
-    const friends = await globalProfileManager!.fetchUserFriends(userId);
-    const fetchTime = Date.now() - startTime;
-
-    if (!friends) {
-      logger.debug(`❌ No friends found for user: ${userId}`);
-      const response = createResponse(false, null, 'Failed to fetch friends', `Could not retrieve friends for user ${userId}`, false, fetchTime);
-      sendJsonResponse(res, 404, response);
-      return;
+    const authId = pathname.split('/')[3];
+    if (!authId) {
+      sendError(res, 400, 'User ID is required');
+      return true;
     }
 
-    logger.debug(`✅ Friends list found for user: ${userId} (${friends.length} friends, ${fetchTime}ms)`);
-    
-    // Transform friends data for frontend compatibility
-    const transformedFriends = friends.map(friend => ({
-      id: friend.id,
-      username: friend.username,
-      display_name: friend.display_name || friend.username,
-      avatar_url: friend.avatar_url,
-      status: friend.status,
-      last_seen: friend.last_seen,
-      is_online: friend.is_online,
-      friends_since: friend.friends_since,
-      // TODO: Add last message from chat cache when implemented
-      lastMessage: undefined
-    }));
+    logger.debug(`👥 Fetching friends for user: ${authId}`);
 
-    const response = createResponse(true, { friends: transformedFriends, count: transformedFriends.length }, undefined, 'Friends retrieved successfully', false, fetchTime);
+    const friends = await profileManager.fetchUserFriends(authId);
     
-    // Cache successful responses
-    cacheResponse(cacheKey, response);
-    
-    sendJsonResponse(res, 200, response);
+    sendJSON(res, 200, {
+      success: true,
+      friends,
+      count: friends.length,
+      cached: true, // Indicates data came from Redis cache
+      timestamp: new Date().toISOString()
+    });
 
+    return true;
   } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error fetching friends list for ${userId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch friends list';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friends list fetch failed', false, fetchTime));
+    sendError(res, 500, 'Failed to fetch friends', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
   }
-};
+}
 
-// POST /api/friends/batch-status - Get online status for multiple users
-const handleBatchStatusCheck = async (req: IncomingMessage, res: ServerResponse, startTime: number): Promise<void> => {
+async function handleBatchStatus(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   try {
-    logger.debug(`📡 POST batch status check request`);
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
 
     const body = await parseRequestBody(req);
     const { userIds, requesterId } = body;
 
-    if (!Array.isArray(userIds) || userIds.length === 0) {
-      const fetchTime = Date.now() - startTime;
-      sendJsonResponse(res, 400, createResponse(false, null, 'userIds array is required', 'Provide an array of user IDs to check status', false, fetchTime));
-      return;
+    if (!Array.isArray(userIds) || !requesterId) {
+      sendError(res, 400, 'userIds array and requesterId are required');
+      return true;
     }
 
     if (userIds.length > 100) {
-      const fetchTime = Date.now() - startTime;
-      sendJsonResponse(res, 400, createResponse(false, null, 'Too many user IDs', 'Maximum 100 user IDs allowed per request', false, fetchTime));
-      return;
+      sendError(res, 400, 'Too many user IDs (max 100)');
+      return true;
     }
 
-    // Use StatusModule to get batch online status (with Redis caching)
-    const statusMap = await globalProfileManager!.batchGetOnlineStatus(userIds);
-    const fetchTime = Date.now() - startTime;
+    logger.debug(`📊 Batch status check for ${userIds.length} users by ${requesterId}`);
 
-    // Transform status data for frontend
-    const transformedStatuses: Record<string, { isOnline: boolean; lastSeen: string }> = {};
+    const statuses = await profileManager.batchGetOnlineStatus(userIds);
     
-    for (const [userId, isOnline] of Object.entries(statusMap)) {
-      // Get additional status info if needed
-      const statusInfo = await globalProfileManager!.getOnlineStatus(userId);
-      transformedStatuses[userId] = {
-        isOnline: isOnline,
-        lastSeen: statusInfo.lastSeen || new Date().toISOString()
-      };
+    // Convert boolean status to more detailed status objects
+    const detailedStatuses: Record<string, { isOnline: boolean; lastSeen?: string }> = {};
+    
+    for (const [userId, isOnline] of Object.entries(statuses)) {
+      try {
+        const statusDetails = await profileManager.getOnlineStatus(userId);
+        detailedStatuses[userId] = {
+          isOnline,
+          lastSeen: statusDetails.lastSeen
+        };
+      } catch (error) {
+        detailedStatuses[userId] = { isOnline };
+      }
     }
 
-    logger.debug(`✅ Batch status check completed for ${userIds.length} users (${fetchTime}ms)`);
-    
-    const response = createResponse(true, { 
-      statuses: transformedStatuses,
-      count: userIds.length,
-      requesterId: requesterId
-    }, undefined, 'Batch status check completed', false, fetchTime);
-    
-    sendJsonResponse(res, 200, response);
+    sendJSON(res, 200, {
+      success: true,
+      statuses: detailedStatuses,
+      count: Object.keys(detailedStatuses).length,
+      timestamp: new Date().toISOString()
+    });
 
+    return true;
   } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error in batch status check:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to check batch status';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Batch status check failed', false, fetchTime));
+    sendError(res, 500, 'Failed to get batch status', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
   }
-};
+}
 
-// GET /api/friends/{userId}/status/{friendId} - Get friendship status
-const handleGetFriendshipStatus = async (userId: string, friendId: string, res: ServerResponse, startTime: number): Promise<void> => {
+async function handleLastMessages(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   try {
-    logger.debug(`📡 GET friendship status: ${userId} <-> ${friendId}`);
-
-    if (!isValidUserId(friendId)) {
-      const fetchTime = Date.now() - startTime;
-      sendJsonResponse(res, 400, createResponse(false, null, 'Invalid friend ID format', 'Friend ID must be valid', false, fetchTime));
-      return;
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
     }
-
-    // Get friendship status using FriendsModule
-    const friendshipStatus = await globalProfileManager!.getFriendshipStatus(userId, friendId);
-    const fetchTime = Date.now() - startTime;
-
-    logger.debug(`✅ Friendship status retrieved: ${userId} <-> ${friendId} (${fetchTime}ms)`);
-    
-    const response = createResponse(true, friendshipStatus, undefined, 'Friendship status retrieved successfully', false, fetchTime);
-    sendJsonResponse(res, 200, response);
-
-  } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error getting friendship status ${userId} <-> ${friendId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to get friendship status';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friendship status check failed', false, fetchTime));
-  }
-};
-
-// GET /api/friends/{userId}/online - Get online friends count
-const handleGetOnlineFriendsCount = async (userId: string, res: ServerResponse, startTime: number): Promise<void> => {
-  try {
-    logger.debug(`📡 GET online friends count for user: ${userId}`);
-
-    // Get online friends count using FriendsModule (with Redis caching)
-    const onlineCount = await globalProfileManager!.getOnlineFriendsCount(userId);
-    const fetchTime = Date.now() - startTime;
-
-    logger.debug(`✅ Online friends count retrieved for ${userId}: ${onlineCount} (${fetchTime}ms)`);
-    
-    const response = createResponse(true, { 
-      onlineCount,
-      userId
-    }, undefined, 'Online friends count retrieved successfully', false, fetchTime);
-    
-    sendJsonResponse(res, 200, response);
-
-  } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error getting online friends count for ${userId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to get online friends count';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Online friends count check failed', false, fetchTime));
-  }
-};
-
-// POST /api/friends/{userId}/request/{friendId} - Send friend request
-const handleSendFriendRequest = async (userId: string, friendId: string, req: IncomingMessage, res: ServerResponse, startTime: number): Promise<void> => {
-  try {
-    logger.debug(`📡 POST friend request: ${userId} -> ${friendId}`);
 
     const body = await parseRequestBody(req);
-    const { message } = body;
+    const { userId, friendIds } = body;
 
-    if (!isValidUserId(friendId)) {
-      const fetchTime = Date.now() - startTime;
-      sendJsonResponse(res, 400, createResponse(false, null, 'Invalid friend ID format', 'Friend ID must be valid', false, fetchTime));
-      return;
+    if (!userId || !Array.isArray(friendIds)) {
+      sendError(res, 400, 'userId and friendIds array are required');
+      return true;
     }
 
-    // Send friend request using FriendsModule
-    const result = await globalProfileManager!.sendFriendRequest(userId, friendId, message);
-    const fetchTime = Date.now() - startTime;
-
-    if (result.success) {
-      logger.info(`✅ Friend request sent: ${userId} -> ${friendId} (${fetchTime}ms)`);
-      
-      // Invalidate friends cache for both users
-      responseCache.delete(`friends_list:${userId}`);
-      responseCache.delete(`friends_list:${friendId}`);
-      
-      const response = createResponse(true, result, undefined, result.message, false, fetchTime);
-      sendJsonResponse(res, result.autoAccepted ? 200 : 201, response);
-    } else {
-      logger.warn(`❌ Friend request failed: ${userId} -> ${friendId}: ${result.message}`);
-      const response = createResponse(false, null, result.message, 'Friend request failed', false, fetchTime);
-      sendJsonResponse(res, 400, response);
+    if (friendIds.length > 50) {
+      sendError(res, 400, 'Too many friend IDs (max 50)');
+      return true;
     }
 
+    logger.debug(`💬 Fetching last messages for ${friendIds.length} friends of ${userId}`);
+
+    // This would need to be implemented in a chat service
+    // For now, we'll return empty data structure
+    const lastMessages: Record<string, any> = {};
+    const unreadCounts: Record<string, number> = {};
+
+    // TODO: Integrate with FriendsChatService or Redis chat cache
+    // const chatService = getFriendsChatService();
+    // if (chatService) {
+    //   const results = await chatService.getLastMessages(userId, friendIds);
+    //   lastMessages = results.lastMessages;
+    //   unreadCounts = await chatService.getUnreadCounts(userId);
+    // }
+
+    sendJSON(res, 200, {
+      success: true,
+      lastMessages,
+      unreadCounts,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
   } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error sending friend request ${userId} -> ${friendId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send friend request';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friend request failed', false, fetchTime));
+    sendError(res, 500, 'Failed to get last messages', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
   }
-};
+}
 
-// PUT /api/friends/{userId}/accept/{requestId} - Accept friend request
-const handleAcceptFriendRequest = async (userId: string, requestId: string, res: ServerResponse, startTime: number): Promise<void> => {
+async function handleSendFriendRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   try {
-    logger.debug(`📡 PUT accept friend request: ${userId} accepting ${requestId}`);
-
-    // Accept friend request using FriendsModule
-    const result = await globalProfileManager!.acceptFriendRequest(requestId, userId);
-    const fetchTime = Date.now() - startTime;
-
-    if (result.success) {
-      logger.info(`✅ Friend request accepted: ${userId} accepted ${requestId} (${fetchTime}ms)`);
-      
-      // Invalidate friends cache (we don't know the other user ID here, so just clear requestor's cache)
-      responseCache.delete(`friends_list:${userId}`);
-      
-      const response = createResponse(true, result, undefined, result.message, false, fetchTime);
-      sendJsonResponse(res, 200, response);
-    } else {
-      logger.warn(`❌ Friend request accept failed: ${userId} accepting ${requestId}: ${result.message}`);
-      const response = createResponse(false, null, result.message, 'Failed to accept friend request', false, fetchTime);
-      sendJsonResponse(res, 400, response);
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
     }
 
-  } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error accepting friend request ${userId} accepting ${requestId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to accept friend request';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friend request accept failed', false, fetchTime));
-  }
-};
+    const body = await parseRequestBody(req);
+    const { senderAuthId, receiverAuthId, message } = body;
 
-// DELETE /api/friends/{userId}/decline/{requestId} - Decline friend request
-const handleDeclineFriendRequest = async (userId: string, requestId: string, res: ServerResponse, startTime: number): Promise<void> => {
-  try {
-    logger.debug(`📡 DELETE decline friend request: ${userId} declining ${requestId}`);
-
-    // Decline friend request using FriendsModule
-    const result = await globalProfileManager!.declineFriendRequest(requestId, userId);
-    const fetchTime = Date.now() - startTime;
-
-    if (result.success) {
-      logger.info(`✅ Friend request declined: ${userId} declined ${requestId} (${fetchTime}ms)`);
-      
-      const response = createResponse(true, result, undefined, result.message, false, fetchTime);
-      sendJsonResponse(res, 200, response);
-    } else {
-      logger.warn(`❌ Friend request decline failed: ${userId} declining ${requestId}: ${result.message}`);
-      const response = createResponse(false, null, result.message, 'Failed to decline friend request', false, fetchTime);
-      sendJsonResponse(res, 400, response);
+    if (!senderAuthId || !receiverAuthId) {
+      sendError(res, 400, 'senderAuthId and receiverAuthId are required');
+      return true;
     }
 
-  } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error declining friend request ${userId} declining ${requestId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to decline friend request';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friend request decline failed', false, fetchTime));
-  }
-};
-
-// DELETE /api/friends/{userId}/remove/{friendId} - Remove friend
-const handleRemoveFriend = async (userId: string, friendId: string, res: ServerResponse, startTime: number): Promise<void> => {
-  try {
-    logger.debug(`📡 DELETE remove friend: ${userId} removing ${friendId}`);
-
-    if (!isValidUserId(friendId)) {
-      const fetchTime = Date.now() - startTime;
-      sendJsonResponse(res, 400, createResponse(false, null, 'Invalid friend ID format', 'Friend ID must be valid', false, fetchTime));
-      return;
+    if (senderAuthId === receiverAuthId) {
+      sendError(res, 400, 'Cannot send friend request to yourself');
+      return true;
     }
 
-    // Remove friend using FriendsModule
-    const result = await globalProfileManager!.removeFriend(userId, friendId);
-    const fetchTime = Date.now() - startTime;
+    logger.debug(`👥 Sending friend request: ${senderAuthId} -> ${receiverAuthId}`);
 
-    if (result.success) {
-      logger.info(`✅ Friend removed: ${userId} removed ${friendId} (${fetchTime}ms)`);
-      
-      // Invalidate friends cache for both users
-      responseCache.delete(`friends_list:${userId}`);
-      responseCache.delete(`friends_list:${friendId}`);
-      
-      const response = createResponse(true, result, undefined, result.message, false, fetchTime);
-      sendJsonResponse(res, 200, response);
-    } else {
-      logger.warn(`❌ Friend removal failed: ${userId} removing ${friendId}: ${result.message}`);
-      const response = createResponse(false, null, result.message, 'Failed to remove friend', false, fetchTime);
-      sendJsonResponse(res, 400, response);
-    }
-
-  } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error(`❌ Error removing friend ${userId} removing ${friendId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to remove friend';
-    sendJsonResponse(res, 500, createResponse(false, null, errorMessage, 'Friend removal failed', false, fetchTime));
-  }
-};
-
-// GET /api/friends/health
-const handleFriendsHealthCheck = async (res: ServerResponse, startTime: number): Promise<void> => {
-  try {
-    const healthStatus = await globalProfileManager!.testConnection();
-    const fetchTime = Date.now() - startTime;
+    const result = await profileManager.sendFriendRequest(senderAuthId, receiverAuthId, message);
     
-    const status = {
-      friendsService: 'available',
-      database: healthStatus.database ? 'connected' : 'disconnected',
-      redis: healthStatus.redis ? 'connected' : 'not_configured',
-      overall: healthStatus.overall ? 'healthy' : 'degraded',
-      errors: healthStatus.errors || [],
-      performance: {
-        dbLatency: healthStatus.dbLatency,
-        redisLatency: healthStatus.redisLatency,
-        cachePerformance: healthStatus.cachePerformance
-      },
-      cache: {
-        responseCache: {
-          size: responseCache.size,
-          ttl: RESPONSE_CACHE_TTL
-        }
+    sendJSON(res, 200, {
+      success: result.success,
+      message: result.message,
+      autoAccepted: result.autoAccepted,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to send friend request', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleAcceptFriendRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const body = await parseRequestBody(req);
+    const { requestId, acceptingUserId } = body;
+
+    if (!requestId || !acceptingUserId) {
+      sendError(res, 400, 'requestId and acceptingUserId are required');
+      return true;
+    }
+
+    logger.debug(`✅ Accepting friend request: ${requestId} by ${acceptingUserId}`);
+
+    const result = await profileManager.acceptFriendRequest(requestId, acceptingUserId);
+    
+    sendJSON(res, 200, {
+      success: result.success,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to accept friend request', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleDeclineFriendRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const body = await parseRequestBody(req);
+    const { requestId, decliningUserId } = body;
+
+    if (!requestId || !decliningUserId) {
+      sendError(res, 400, 'requestId and decliningUserId are required');
+      return true;
+    }
+
+    logger.debug(`❌ Declining friend request: ${requestId} by ${decliningUserId}`);
+
+    const result = await profileManager.declineFriendRequest(requestId, decliningUserId);
+    
+    sendJSON(res, 200, {
+      success: result.success,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to decline friend request', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleRemoveFriend(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const body = await parseRequestBody(req);
+    const { user1AuthId, user2AuthId } = body;
+
+    if (!user1AuthId || !user2AuthId) {
+      sendError(res, 400, 'user1AuthId and user2AuthId are required');
+      return true;
+    }
+
+    if (user1AuthId === user2AuthId) {
+      sendError(res, 400, 'Cannot remove yourself as friend');
+      return true;
+    }
+
+    logger.debug(`💔 Removing friendship: ${user1AuthId} <-> ${user2AuthId}`);
+
+    const result = await profileManager.removeFriend(user1AuthId, user2AuthId);
+    
+    sendJSON(res, 200, {
+      success: result.success,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to remove friend', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleGetFriendRequests(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const authId = pathname.split('/')[3];
+    if (!authId) {
+      sendError(res, 400, 'User ID is required');
+      return true;
+    }
+
+    const url = new URL(pathname, `http://localhost`);
+    const type = url.searchParams.get('type') as 'received' | 'sent' || 'received';
+
+    if (!['received', 'sent'].includes(type)) {
+      sendError(res, 400, 'Invalid type parameter (must be "received" or "sent")');
+      return true;
+    }
+
+    logger.debug(`📥 Fetching ${type} friend requests for user: ${authId}`);
+
+    const requests = await profileManager.fetchPendingFriendRequests(authId, type);
+    
+    sendJSON(res, 200, {
+      success: true,
+      requests,
+      type,
+      count: requests.length,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to fetch friend requests', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleGetFriendshipStatus(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const body = await parseRequestBody(req);
+    const { user1AuthId, user2AuthId } = body;
+
+    if (!user1AuthId || !user2AuthId) {
+      sendError(res, 400, 'user1AuthId and user2AuthId are required');
+      return true;
+    }
+
+    logger.debug(`🔍 Checking friendship status: ${user1AuthId} <-> ${user2AuthId}`);
+
+    const status = await profileManager.getFriendshipStatus(user1AuthId, user2AuthId);
+    
+    sendJSON(res, 200, {
+      success: true,
+      status,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to get friendship status', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleSearchUsers(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const body = await parseRequestBody(req);
+    const { currentUserAuthId, searchTerm, limit = 20 } = body;
+
+    if (!currentUserAuthId || !searchTerm?.trim()) {
+      sendError(res, 400, 'currentUserAuthId and searchTerm are required');
+      return true;
+    }
+
+    if (searchTerm.length < 2) {
+      sendError(res, 400, 'Search term must be at least 2 characters');
+      return true;
+    }
+
+    if (limit > 50) {
+      sendError(res, 400, 'Limit cannot exceed 50');
+      return true;
+    }
+
+    logger.debug(`🔍 Searching users for: "${searchTerm}" by ${currentUserAuthId}`);
+
+    const users = await profileManager.searchUsersToAddAsFriends(currentUserAuthId, searchTerm, limit);
+    
+    sendJSON(res, 200, {
+      success: true,
+      users,
+      searchTerm,
+      count: users.length,
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    sendError(res, 500, 'Failed to search users', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
+  }
+}
+
+async function handleGetFriendStats(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+  try {
+    if (!profileManager) {
+      sendError(res, 503, 'ProfileManager not available');
+      return true;
+    }
+
+    const authId = pathname.split('/')[3];
+    if (!authId) {
+      sendError(res, 400, 'User ID is required');
+      return true;
+    }
+
+    logger.debug(`📊 Fetching friend stats for user: ${authId}`);
+
+    const stats = await profileManager.getFriendStats(authId);
+    const onlineFriendsCount = await profileManager.getOnlineFriendsCount(authId);
+    
+    sendJSON(res, 200, {
+      success: true,
+      stats: {
+        ...stats,
+        onlineFriendsCount
       },
       timestamp: new Date().toISOString()
-    };
+    });
 
-    const httpStatus = healthStatus.overall ? 200 : 503;
-    sendJsonResponse(res, httpStatus, createResponse(healthStatus.overall, status, undefined, 'Friends health check completed', false, fetchTime));
-    
+    return true;
   } catch (error) {
-    const fetchTime = Date.now() - startTime;
-    logger.error('❌ Friends health check error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Health check failed';
-    sendJsonResponse(res, 503, createResponse(false, null, errorMessage, 'Friends health check failed', false, fetchTime));
+    sendError(res, 500, 'Failed to fetch friend stats', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return true;
   }
-};
-
-// Cleanup function for response cache
-setInterval(() => {
-  const now = Date.now();
-  const keysToDelete: string[] = [];
-  
-  for (const [key, cached] of responseCache.entries()) {
-    if ((now - cached.timestamp) > RESPONSE_CACHE_TTL) {
-      keysToDelete.push(key);
-    }
-  }
-  
-  keysToDelete.forEach(key => responseCache.delete(key));
-  
-  if (keysToDelete.length > 0) {
-    logger.debug(`🧹 Cleaned ${keysToDelete.length} expired friends API cache entries`);
-  }
-}, 30000);
-
-// Utility functions for external use
-export const getFriendsProfileManagerInstance = (): ProfileManager | null => {
-  return globalProfileManager;
-};
-
-export const isFriendsManagerReady = (): boolean => {
-  return globalProfileManager !== null;
-};
+}
