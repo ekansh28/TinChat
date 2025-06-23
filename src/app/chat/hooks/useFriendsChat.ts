@@ -1,10 +1,12 @@
-// src/hooks/useFriendsChat.ts - COMPLETE FRIENDS CHAT INTEGRATION
+// src/app/chat/hooks/useFriendsChat.ts - COMPLETE FRIENDS CHAT INTEGRATION
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-export interface Friend {
+// ===== CORE INTERFACES =====
+
+interface Friend {
   id: string;
   username: string;
   display_name?: string;
@@ -22,7 +24,7 @@ export interface Friend {
   unreadCount?: number;
 }
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   senderId: string;
   receiverId: string;
@@ -37,10 +39,11 @@ export interface ChatMessage {
   };
 }
 
-export interface TypingStatus {
+interface TypingStatus {
   userId: string;
   friendId: string;
   isTyping: boolean;
+  timestamp?: number;
 }
 
 interface FriendsChatState {
@@ -53,7 +56,10 @@ interface FriendsChatState {
     messages: Record<string, boolean>;
   };
   error: string | null;
+  connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'reconnecting';
 }
+
+// ===== MAIN HOOK =====
 
 export function useFriendsChat(userId: string, authId: string) {
   const [state, setState] = useState<FriendsChatState>({
@@ -65,7 +71,8 @@ export function useFriendsChat(userId: string, authId: string) {
       friends: true,
       messages: {}
     },
-    error: null
+    error: null,
+    connectionStatus: 'disconnected'
   });
 
   const socketRef = useRef<Socket | null>(null);
@@ -82,6 +89,8 @@ export function useFriendsChat(userId: string, authId: string) {
     try {
       console.log('🔌 Connecting to friends chat service...');
       
+      setState(prev => ({ ...prev, connectionStatus: 'connecting' }));
+      
       const socket = io({
         path: '/socket.io/',
         transports: ['websocket', 'polling'],
@@ -95,17 +104,26 @@ export function useFriendsChat(userId: string, authId: string) {
       socket.on('connect', () => {
         console.log('✅ Connected to friends chat service');
         
+        setState(prev => ({ 
+          ...prev, 
+          connectionStatus: 'connected',
+          error: null 
+        }));
+        
         // Join user's personal room for receiving messages
         socket.emit('friends_chat_join', {
           userId,
           authId
         });
-
-        setState(prev => ({ ...prev, error: null }));
       });
 
       socket.on('disconnect', (reason) => {
         console.log('❌ Disconnected from friends chat:', reason);
+        
+        setState(prev => ({ 
+          ...prev, 
+          connectionStatus: 'disconnected'
+        }));
         
         if (reason === 'io server disconnect') {
           // Server initiated disconnect, try to reconnect
@@ -115,7 +133,11 @@ export function useFriendsChat(userId: string, authId: string) {
 
       socket.on('connect_error', (error) => {
         console.error('❌ Friends chat connection error:', error);
-        setState(prev => ({ ...prev, error: 'Connection failed' }));
+        setState(prev => ({ 
+          ...prev, 
+          error: 'Connection failed',
+          connectionStatus: 'disconnected'
+        }));
         scheduleReconnect();
       });
 
@@ -148,6 +170,14 @@ export function useFriendsChat(userId: string, authId: string) {
         handleUnreadCounts(data);
       });
 
+      socket.on('friends_chat_history', (data) => {
+        handleChatHistory(data);
+      });
+
+      socket.on('friends_chat_last_messages', (data) => {
+        handleLastMessages(data);
+      });
+
       socket.on('friends_chat_error', (data) => {
         console.error('❌ Friends chat error:', data);
         setState(prev => ({ ...prev, error: data.message }));
@@ -156,7 +186,11 @@ export function useFriendsChat(userId: string, authId: string) {
       socketRef.current = socket;
     } catch (error) {
       console.error('❌ Failed to create socket connection:', error);
-      setState(prev => ({ ...prev, error: 'Failed to connect' }));
+      setState(prev => ({ 
+        ...prev, 
+        error: 'Failed to connect',
+        connectionStatus: 'disconnected'
+      }));
       scheduleReconnect();
     }
   }, [userId, authId]);
@@ -166,11 +200,70 @@ export function useFriendsChat(userId: string, authId: string) {
       clearTimeout(reconnectTimeoutRef.current);
     }
 
+    setState(prev => ({ ...prev, connectionStatus: 'reconnecting' }));
+
     reconnectTimeoutRef.current = setTimeout(() => {
       console.log('🔄 Attempting to reconnect to friends chat...');
       connectSocket();
     }, 3000);
   }, [connectSocket]);
+
+  // ===== LOAD FRIENDS DATA =====
+
+  const loadFriends = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      setState(prev => ({ 
+        ...prev, 
+        loading: { ...prev.loading, friends: true },
+        error: null 
+      }));
+
+      const response = await fetch(`/api/friends/${userId}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch friends: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const transformedFriends: Friend[] = data.friends.map((friend: any) => ({
+          id: friend.id,
+          username: friend.username,
+          display_name: friend.display_name || friend.username,
+          avatar_url: friend.avatar_url,
+          status: friend.status || 'offline',
+          last_seen: friend.last_seen,
+          is_online: friend.is_online || false,
+          friends_since: friend.friends_since,
+          unreadCount: 0
+        }));
+
+        setState(prev => ({
+          ...prev,
+          friends: transformedFriends,
+          loading: { ...prev.loading, friends: false }
+        }));
+
+        console.log(`✅ Loaded ${transformedFriends.length} friends`);
+      } else {
+        throw new Error(data.message || 'Failed to fetch friends');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      console.error('❌ Failed to fetch friends:', errorMessage);
+      setState(prev => ({
+        ...prev,
+        error: errorMessage,
+        loading: { ...prev.loading, friends: false }
+      }));
+    }
+  }, [userId]);
 
   // ===== MESSAGE HANDLERS =====
 
@@ -184,35 +277,330 @@ export function useFriendsChat(userId: string, authId: string) {
         ...prev.messages,
         [friendId]: [...(prev.messages[friendId] || []), message]
       },
-      messages: {
-        ...prev.messages,
-        [friendId]: (prev.messages[friendId] || []).map(msg =>
-          messageIds.includes(msg.id) ? { ...msg, read: true } : msg
-        )
+      unreadCounts: {
+        ...prev.unreadCounts,
+        [friendId]: (prev.unreadCounts[friendId] || 0) + 1
       }
     }));
+
+    // Update friend's last message
+    setState(prev => ({
+      ...prev,
+      friends: prev.friends.map(friend =>
+        friend.id === friendId
+          ? {
+              ...friend,
+              lastMessage: {
+                text: message.message,
+                timestamp: new Date(message.timestamp),
+                isFromSelf: false,
+                messageId: message.id
+              },
+              unreadCount: (prev.unreadCounts[friendId] || 0) + 1
+            }
+          : friend
+      )
+    }));
+
+    console.log('📨 Received message from friend:', friendId);
+  }, []);
+
+  const handleMessageSent = useCallback((data: { message: ChatMessage; chatId: string }) => {
+    const { message } = data;
+    const friendId = message.receiverId;
+
+    setState(prev => ({
+      ...prev,
+      messages: {
+        ...prev.messages,
+        [friendId]: [...(prev.messages[friendId] || []), message]
+      }
+    }));
+
+    // Update friend's last message
+    setState(prev => ({
+      ...prev,
+      friends: prev.friends.map(friend =>
+        friend.id === friendId
+          ? {
+              ...friend,
+              lastMessage: {
+                text: message.message,
+                timestamp: new Date(message.timestamp),
+                isFromSelf: true,
+                messageId: message.id
+              }
+            }
+          : friend
+      )
+    }));
+
+    console.log('📤 Message sent to friend:', friendId);
+  }, []);
+
+  const handleMessagesRead = useCallback((data: {
+    readerId: string;
+    messageIds: string[];
+    chatId: string;
+  }) => {
+    const { readerId, messageIds } = data;
+
+    setState(prev => ({
+      ...prev,
+      messages: {
+        ...prev.messages,
+        [readerId]: (prev.messages[readerId] || []).map(msg =>
+          messageIds.includes(msg.id) ? { ...msg, read: true } : msg
+        )
+      },
+      unreadCounts: {
+        ...prev.unreadCounts,
+        [readerId]: 0
+      }
+    }));
+
+    console.log('📖 Messages marked as read by:', readerId);
+  }, []);
+
+  const handleTypingStart = useCallback((data: { userId: string; friendId: string }) => {
+    const { userId: typingUserId } = data;
+
+    setState(prev => ({
+      ...prev,
+      typingUsers: {
+        ...prev.typingUsers,
+        [typingUserId]: true
+      }
+    }));
+
+    // Auto-clear typing after 5 seconds
+    if (typingTimeoutRef.current[typingUserId]) {
+      clearTimeout(typingTimeoutRef.current[typingUserId]);
+    }
+
+    typingTimeoutRef.current[typingUserId] = setTimeout(() => {
+      setState(prev => ({
+        ...prev,
+        typingUsers: {
+          ...prev.typingUsers,
+          [typingUserId]: false
+        }
+      }));
+      delete typingTimeoutRef.current[typingUserId];
+    }, 5000);
+
+    console.log('⌨️ Friend started typing:', typingUserId);
+  }, []);
+
+  const handleTypingStop = useCallback((data: { userId: string; friendId: string }) => {
+    const { userId: typingUserId } = data;
+
+    setState(prev => ({
+      ...prev,
+      typingUsers: {
+        ...prev.typingUsers,
+        [typingUserId]: false
+      }
+    }));
+
+    if (typingTimeoutRef.current[typingUserId]) {
+      clearTimeout(typingTimeoutRef.current[typingUserId]);
+      delete typingTimeoutRef.current[typingUserId];
+    }
+
+    console.log('⌨️ Friend stopped typing:', typingUserId);
+  }, []);
+
+  const handleUnreadCounts = useCallback((data: {
+    userId: string;
+    unreadCounts: Record<string, number>;
+  }) => {
+    const { unreadCounts } = data;
+
+    setState(prev => ({
+      ...prev,
+      unreadCounts,
+      friends: prev.friends.map(friend => ({
+        ...friend,
+        unreadCount: unreadCounts[friend.id] || 0
+      }))
+    }));
+
+    console.log('📊 Updated unread counts:', unreadCounts);
+  }, []);
+
+  const handleChatHistory = useCallback((data: {
+    chatId: string;
+    messages: ChatMessage[];
+    hasMore: boolean;
+    offset: number;
+  }) => {
+    const { messages } = data;
+    
+    if (messages.length > 0) {
+      const friendId = messages[0].senderId === userId ? messages[0].receiverId : messages[0].senderId;
+      
+      setState(prev => ({
+        ...prev,
+        messages: {
+          ...prev.messages,
+          [friendId]: messages.sort((a, b) => a.timestamp - b.timestamp)
+        },
+        loading: {
+          ...prev.loading,
+          messages: {
+            ...prev.loading.messages,
+            [friendId]: false
+          }
+        }
+      }));
+      
+      console.log(`📚 Loaded ${messages.length} messages for friend:`, friendId);
+    }
+  }, [userId]);
+
+  const handleLastMessages = useCallback((data: {
+    userId: string;
+    lastMessages: Record<string, ChatMessage | null>;
+  }) => {
+    const { lastMessages } = data;
+
+    setState(prev => ({
+      ...prev,
+      friends: prev.friends.map(friend => {
+        const lastMessage = lastMessages[friend.id];
+        return lastMessage ? {
+          ...friend,
+          lastMessage: {
+            text: lastMessage.message,
+            timestamp: new Date(lastMessage.timestamp),
+            isFromSelf: lastMessage.senderId === userId,
+            messageId: lastMessage.id
+          }
+        } : friend;
+      })
+    }));
+
+    console.log('📬 Updated last messages for friends');
+  }, [userId]);
+
+  // ===== ACTION FUNCTIONS =====
+
+  const sendMessage = useCallback((friendId: string, message: string): boolean => {
+    if (!socketRef.current?.connected || !message.trim()) {
+      console.warn('Cannot send message - socket not connected or empty message');
+      return false;
+    }
+
+    try {
+      socketRef.current.emit('friends_chat_send', {
+        senderId: userId,
+        receiverId: friendId,
+        message: message.trim(),
+        authId
+      });
+
+      console.log('📤 Sending message to:', friendId);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to send message:', error);
+      return false;
+    }
+  }, [userId, authId]);
+
+  const markMessagesAsRead = useCallback((friendId: string, messageIds: string[]) => {
+    if (!socketRef.current?.connected) {
+      console.warn('Cannot mark messages as read - socket not connected');
+      return;
+    }
+
+    try {
+      socketRef.current.emit('friends_chat_mark_read', {
+        userId,
+        friendId,
+        messageIds
+      });
+
+      console.log('📖 Marking messages as read for:', friendId);
+    } catch (error) {
+      console.error('❌ Failed to mark messages as read:', error);
+    }
   }, [userId]);
 
   const startTyping = useCallback((friendId: string) => {
-    if (!socketRef.current?.connected || !userId) {
+    if (!socketRef.current?.connected) {
       return;
     }
 
-    socketRef.current.emit('friends_chat_typing_start', {
-      userId,
-      friendId
-    });
+    try {
+      socketRef.current.emit('friends_chat_typing_start', {
+        userId,
+        friendId
+      });
+
+      console.log('⌨️ Started typing to:', friendId);
+    } catch (error) {
+      console.error('❌ Failed to start typing:', error);
+    }
   }, [userId]);
 
   const stopTyping = useCallback((friendId: string) => {
-    if (!socketRef.current?.connected || !userId) {
+    if (!socketRef.current?.connected) {
       return;
     }
 
-    socketRef.current.emit('friends_chat_typing_stop', {
-      userId,
-      friendId
-    });
+    try {
+      socketRef.current.emit('friends_chat_typing_stop', {
+        userId,
+        friendId
+      });
+
+      console.log('⌨️ Stopped typing to:', friendId);
+    } catch (error) {
+      console.error('❌ Failed to stop typing:', error);
+    }
+  }, [userId]);
+
+  const loadChatHistory = useCallback(async (friendId: string, limit: number = 50, offset: number = 0) => {
+    if (!socketRef.current?.connected) {
+      console.warn('Cannot load chat history - socket not connected');
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      loading: {
+        ...prev.loading,
+        messages: {
+          ...prev.loading.messages,
+          [friendId]: true
+        }
+      }
+    }));
+
+    try {
+      socketRef.current.emit('friends_chat_get_history', {
+        userId,
+        friendId,
+        limit,
+        offset
+      });
+
+      console.log('📚 Loading chat history for:', friendId);
+    } catch (error) {
+      console.error('❌ Failed to load chat history:', error);
+      
+      setState(prev => ({
+        ...prev,
+        loading: {
+          ...prev.loading,
+          messages: {
+            ...prev.loading.messages,
+            [friendId]: false
+          }
+        }
+      }));
+    }
   }, [userId]);
 
   const updateFriendStatus = useCallback((friendId: string, isOnline: boolean, status?: string) => {
@@ -223,12 +611,14 @@ export function useFriendsChat(userId: string, authId: string) {
           ? {
               ...friend,
               is_online: isOnline,
-              status: status as any || friend.status,
+              status: (status as any) || friend.status,
               last_seen: isOnline ? friend.last_seen : new Date().toISOString()
             }
           : friend
       )
     }));
+
+    console.log(`👤 Updated friend status: ${friendId} - ${isOnline ? 'online' : 'offline'}`);
   }, []);
 
   // ===== EFFECTS =====
@@ -306,6 +696,7 @@ export function useFriendsChat(userId: string, authId: string) {
     typingUsers: state.typingUsers,
     loading: state.loading,
     error: state.error,
+    connectionStatus: state.connectionStatus,
     
     // Computed
     totalUnreadCount,
@@ -463,6 +854,229 @@ export function useFriendsChatWindows() {
     setActiveChat
   };
 }
+
+/**
+ * Hook for managing chat message formatting and utilities
+ */
+export function useChatMessageUtils() {
+  const formatMessageTime = useCallback((timestamp: Date): string => {
+    const now = new Date();
+    const diff = now.getTime() - timestamp.getTime();
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    
+    return timestamp.toLocaleDateString();
+  }, []);
+
+  const formatLastSeen = useCallback((lastSeenStr: string): string => {
+    try {
+      const lastSeen = new Date(lastSeenStr);
+      const now = new Date();
+      const diff = now.getTime() - lastSeen.getTime();
+      
+      const minutes = Math.floor(diff / (1000 * 60));
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (minutes < 5) return 'Just now';
+      if (minutes < 60) return `${minutes}m ago`;
+      if (hours < 24) return `${hours}h ago`;
+      if (days < 7) return `${days}d ago`;
+      
+      return lastSeen.toLocaleDateString();
+    } catch {
+      return 'Unknown';
+    }
+  }, []);
+
+  const getStatusColor = useCallback((status: string, isOnline: boolean): string => {
+    if (!isOnline) return '#9E9E9E';
+    
+    switch (status) {
+      case 'online': return '#4CAF50';
+      case 'idle': return '#FFC107';
+      case 'dnd': return '#F44336';
+      default: return '#9E9E9E';
+    }
+  }, []);
+
+  const getStatusText = useCallback((status: string, isOnline: boolean): string => {
+    if (!isOnline) return 'Offline';
+    
+    switch (status) {
+      case 'online': return 'Online';
+      case 'idle': return 'Away';
+      case 'dnd': return 'Busy';
+      default: return 'Offline';
+    }
+  }, []);
+
+  const validateMessage = useCallback((text: string): { 
+    isValid: boolean; 
+    error?: string; 
+    trimmed: string;
+  } => {
+    const trimmed = text.trim();
+    
+    if (!trimmed) {
+      return { isValid: false, error: 'Message cannot be empty', trimmed };
+    }
+    
+    if (trimmed.length > 2000) {
+      return { isValid: false, error: 'Message too long (max 2000 characters)', trimmed };
+    }
+    
+    return { isValid: true, trimmed };
+  }, []);
+
+  return {
+    formatMessageTime,
+    formatLastSeen,
+    getStatusColor,
+    getStatusText,
+    validateMessage
+  };
+}
+
+// ===== EXPORT TYPES FOR EXTERNAL USE =====
+
+export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
+export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'reconnecting';
+
+export type { Friend, ChatMessage, TypingStatus };
+
+export interface UseFriendsChatReturn {
+  // State
+  friends: Friend[];
+  messages: Record<string, ChatMessage[]>;
+  unreadCounts: Record<string, number>;
+  typingUsers: Record<string, boolean>;
+  loading: FriendsChatState['loading'];
+  error: string | null;
+  connectionStatus: FriendsChatState['connectionStatus'];
+  
+  // Computed
+  totalUnreadCount: number;
+  onlineFriendsCount: number;
+  isConnected: boolean;
+  
+  // Actions
+  sendMessage: (friendId: string, message: string) => boolean;
+  markMessagesAsRead: (friendId: string, messageIds: string[]) => void;
+  startTyping: (friendId: string) => void;
+  stopTyping: (friendId: string) => void;
+  loadChatHistory: (friendId: string, limit?: number, offset?: number) => Promise<void>;
+  updateFriendStatus: (friendId: string, isOnline: boolean, status?: string) => void;
+  
+  // Utilities
+  refresh: () => Promise<void>;
+  reconnect: () => void;
+}
+
+export interface UseFriendChatReturn {
+  friend?: Friend;
+  messages: ChatMessage[];
+  unreadCount: number;
+  isTyping: boolean;
+  isLoading: boolean;
+  sendMessage: (text: string) => boolean;
+  handleTyping: (text: string) => void;
+  loadMore: (offset: number) => Promise<void>;
+}
+
+export interface UseFriendsChatWindowsReturn {
+  openChats: string[];
+  activeChat: string | null;
+  openChat: (friendId: string) => void;
+  closeChat: (friendId: string) => void;
+  closeAllChats: () => void;
+  setActiveChat: (friendId: string | null) => void;
+}
+
+export interface UseChatMessageUtilsReturn {
+  formatMessageTime: (timestamp: Date) => string;
+  formatLastSeen: (lastSeenStr: string) => string;
+  getStatusColor: (status: string, isOnline: boolean) => string;
+  getStatusText: (status: string, isOnline: boolean) => string;
+  validateMessage: (text: string) => {
+    isValid: boolean;
+    error?: string;
+    trimmed: string;
+  };
+}
+
+// ===== CONSTANTS =====
+
+export const CHAT_CONSTANTS = {
+  MAX_MESSAGE_LENGTH: 2000,
+  MAX_OPEN_CHATS: 3,
+  MESSAGE_RETENTION_HOURS: 24,
+  TYPING_TIMEOUT_MS: 5000,
+  RECONNECT_DELAY_MS: 3000,
+  HEARTBEAT_INTERVAL_MS: 30000,
+  MAX_SEARCH_RESULTS: 50,
+  MAX_CHAT_HISTORY_LOAD: 100,
+  NOTIFICATION_DURATION_MS: 5000,
+} as const;
+
+export const STATUS_COLORS = {
+  online: '#4CAF50',
+  idle: '#FFC107',
+  dnd: '#F44336',
+  offline: '#9E9E9E',
+} as const;
+
+// ===== UTILITY FUNCTIONS =====
+
+function formatUptime(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+// ===== ERROR HANDLING =====
+
+export class FriendsChatError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'FriendsChatError';
+  }
+}
+
+export class ConnectionError extends FriendsChatError {
+  constructor(message: string, details?: any) {
+    super(message, 'CONNECTION_ERROR', details);
+    this.name = 'ConnectionError';
+  }
+}
+
+export class ValidationError extends FriendsChatError {
+  constructor(message: string, details?: any) {
+    super(message, 'VALIDATION_ERROR', details);
+    this.name = 'ValidationError';
+  }
+}
+
+// ===== ADDITIONAL UTILITY HOOKS =====
 
 /**
  * Hook for managing friend search and adding new friends
@@ -785,125 +1399,6 @@ export function useFriendshipStatus(user1AuthId: string, user2AuthId: string) {
 }
 
 /**
- * Hook for managing chat message formatting and utilities
- */
-export function useChatMessageUtils() {
-  const formatMessageTime = useCallback((timestamp: Date): string => {
-    const now = new Date();
-    const diff = now.getTime() - timestamp.getTime();
-    
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    
-    return timestamp.toLocaleDateString();
-  }, []);
-
-  const formatLastSeen = useCallback((lastSeenStr: string): string => {
-    try {
-      const lastSeen = new Date(lastSeenStr);
-      const now = new Date();
-      const diff = now.getTime() - lastSeen.getTime();
-      
-      const minutes = Math.floor(diff / (1000 * 60));
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      
-      if (minutes < 5) return 'Just now';
-      if (minutes < 60) return `${minutes}m ago`;
-      if (hours < 24) return `${hours}h ago`;
-      if (days < 7) return `${days}d ago`;
-      
-      return lastSeen.toLocaleDateString();
-    } catch {
-      return 'Unknown';
-    }
-  }, []);
-
-  const truncateMessage = useCallback((text: string, maxLength: number = 50): string => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength - 3) + '...';
-  }, []);
-
-  const getStatusColor = useCallback((status: string, isOnline: boolean): string => {
-    if (!isOnline) return '#9E9E9E';
-    
-    switch (status) {
-      case 'online': return '#4CAF50';
-      case 'idle': return '#FFC107';
-      case 'dnd': return '#F44336';
-      default: return '#9E9E9E';
-    }
-  }, []);
-
-  const getStatusText = useCallback((status: string, isOnline: boolean): string => {
-    if (!isOnline) return 'Offline';
-    
-    switch (status) {
-      case 'online': return 'Online';
-      case 'idle': return 'Away';
-      case 'dnd': return 'Busy';
-      default: return 'Offline';
-    }
-  }, []);
-
-  const parseMessageMentions = useCallback((text: string, userId: string): { 
-    text: string; 
-    mentions: string[]; 
-    hasMention: boolean;
-  } => {
-    const mentionRegex = /@(\w+)/g;
-    const mentions: string[] = [];
-    let match;
-    
-    while ((match = mentionRegex.exec(text)) !== null) {
-      mentions.push(match[1]);
-    }
-    
-    const hasMention = mentions.length > 0;
-    
-    return {
-      text,
-      mentions,
-      hasMention
-    };
-  }, []);
-
-  const validateMessage = useCallback((text: string): { 
-    isValid: boolean; 
-    error?: string; 
-    trimmed: string;
-  } => {
-    const trimmed = text.trim();
-    
-    if (!trimmed) {
-      return { isValid: false, error: 'Message cannot be empty', trimmed };
-    }
-    
-    if (trimmed.length > 2000) {
-      return { isValid: false, error: 'Message too long (max 2000 characters)', trimmed };
-    }
-    
-    return { isValid: true, trimmed };
-  }, []);
-
-  return {
-    formatMessageTime,
-    formatLastSeen,
-    truncateMessage,
-    getStatusColor,
-    getStatusText,
-    parseMessageMentions,
-    validateMessage
-  };
-}
-
-/**
  * Hook for managing chat sound notifications
  */
 export function useChatNotifications(enabled: boolean = true) {
@@ -995,750 +1490,3 @@ export function useChatNotifications(enabled: boolean = true) {
     notifyFriendOnline
   };
 }
-
-/**
- * Hook for managing chat performance and analytics
- */
-export function useChatPerformance() {
-  const [metrics, setMetrics] = useState({
-    messagesSent: 0,
-    messagesReceived: 0,
-    averageResponseTime: 0,
-    connectionUptime: 0,
-    reconnectCount: 0,
-    lastActivity: Date.now()
-  });
-
-  const trackMessageSent = useCallback(() => {
-    setMetrics(prev => ({
-      ...prev,
-      messagesSent: prev.messagesSent + 1,
-      lastActivity: Date.now()
-    }));
-  }, []);
-
-  const trackMessageReceived = useCallback((responseTime?: number) => {
-    setMetrics(prev => ({
-      ...prev,
-      messagesReceived: prev.messagesReceived + 1,
-      averageResponseTime: responseTime ? 
-        (prev.averageResponseTime + responseTime) / 2 : 
-        prev.averageResponseTime,
-      lastActivity: Date.now()
-    }));
-  }, []);
-
-  const trackReconnect = useCallback(() => {
-    setMetrics(prev => ({
-      ...prev,
-      reconnectCount: prev.reconnectCount + 1
-    }));
-  }, []);
-
-  const getPerformanceReport = useCallback(() => {
-    const uptime = Date.now() - (metrics.lastActivity - metrics.connectionUptime);
-    
-    return {
-      ...metrics,
-      uptimeFormatted: formatUptime(uptime),
-      reliability: metrics.reconnectCount > 0 ? 
-        (metrics.connectionUptime / (metrics.connectionUptime + metrics.reconnectCount * 5000)) * 100 : 
-        100
-    };
-  }, [metrics]);
-
-  const resetMetrics = useCallback(() => {
-    setMetrics({
-      messagesSent: 0,
-      messagesReceived: 0,
-      averageResponseTime: 0,
-      connectionUptime: 0,
-      reconnectCount: 0,
-      lastActivity: Date.now()
-    });
-  }, []);
-
-  return {
-    metrics,
-    trackMessageSent,
-    trackMessageReceived,
-    trackReconnect,
-    getPerformanceReport,
-    resetMetrics
-  };
-}
-
-// ===== UTILITY FUNCTIONS =====
-
-function formatUptime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  } else {
-    return `${seconds}s`;
-  }
-}
-
-// ===== TYPES EXPORT =====
-
-export interface Friend {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
-  last_seen: string;
-  is_online: boolean;
-  friends_since?: string;
-  lastMessage?: {
-    text: string;
-    timestamp: Date;
-    isFromSelf: boolean;
-    messageId: string;
-  };
-  unreadCount?: number;
-}
-
-export interface ChatMessage {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  message: string;
-  timestamp: number;
-  read: boolean;
-  senderProfile?: {
-    username: string;
-    displayName?: string;
-    avatarUrl?: string;
-    displayNameColor?: string;
-  };
-}
-
-export interface TypingStatus {
-  userId: string;
-  friendId: string;
-  isTyping: boolean;
-  timestamp?: number;
-}
-
-export interface FriendRequest {
-  id: string;
-  sender_id?: string;
-  receiver_id?: string;
-  message?: string;
-  status: 'pending' | 'accepted' | 'declined';
-  created_at: string;
-  updated_at?: string;
-  sender?: {
-    id: string;
-    username: string;
-    display_name?: string;
-    avatar_url?: string;
-    is_online?: boolean;
-  };
-  receiver?: {
-    id: string;
-    username: string;
-    display_name?: string;
-    avatar_url?: string;
-    is_online?: boolean;
-  };
-}
-
-export interface FriendshipStatus {
-  status: 'none' | 'friends' | 'pending_sent' | 'pending_received' | 'blocked' | 'blocked_by';
-  since?: string;
-}
-
-export interface FriendStats {
-  friendCount: number;
-  onlineFriendsCount: number;
-  pendingSentCount: number;
-  pendingReceivedCount: number;
-  mutualFriendsWithRecent?: number;
-}
-
-export interface SearchResult {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  is_online?: boolean;
-  status?: string;
-  mutual_friends_count?: number;
-}
-
-export interface FriendsChatState {
-  friends: Friend[];
-  messages: Record<string, ChatMessage[]>; // friendId -> messages
-  unreadCounts: Record<string, number>;
-  typingUsers: Record<string, boolean>; // friendId -> isTyping
-  loading: {
-    friends: boolean;
-    messages: Record<string, boolean>;
-  };
-  error: string | null;
-  lastUpdated?: Date;
-  connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'reconnecting';
-}
-
-export interface ChatPerformanceMetrics {
-  messagesSent: number;
-  messagesReceived: number;
-  averageResponseTime: number;
-  connectionUptime: number;
-  reconnectCount: number;
-  lastActivity: number;
-  uptimeFormatted?: string;
-  reliability?: number;
-}
-
-export interface NotificationSettings {
-  soundEnabled: boolean;
-  browserNotifications: boolean;
-  friendOnlineNotifications: boolean;
-  messagePreview: boolean;
-  quietHours?: {
-    enabled: boolean;
-    start: string; // HH:MM format
-    end: string;   // HH:MM format
-  };
-}
-
-export interface ChatWindowState {
-  friendId: string;
-  isOpen: boolean;
-  isMinimized: boolean;
-  position: number;
-  lastActivity: number;
-  unreadCount: number;
-  isTyping: boolean;
-  draft?: string; // Unsent message draft
-}
-
-export interface MessageValidation {
-  isValid: boolean;
-  error?: string;
-  trimmed: string;
-  wordCount?: number;
-  containsMentions?: boolean;
-  mentions?: string[];
-}
-
-export interface FriendSearchState {
-  results: SearchResult[];
-  loading: boolean;
-  error: string | null;
-  query: string;
-  hasSearched: boolean;
-}
-
-export interface FriendRequestsState {
-  received: FriendRequest[];
-  sent: FriendRequest[];
-  loading: boolean;
-  error: string | null;
-}
-
-export interface ChatHistoryResponse {
-  messages: ChatMessage[];
-  hasMore: boolean;
-  totalCount: number;
-  offset: number;
-}
-
-export interface UnreadCounts {
-  [friendId: string]: number;
-}
-
-export interface LastMessages {
-  [friendId: string]: ChatMessage | null;
-}
-
-export interface OnlineStatuses {
-  [userId: string]: {
-    isOnline: boolean;
-    lastSeen?: string;
-    status?: string;
-  };
-}
-
-// ===== API RESPONSE TYPES =====
-
-export interface ApiResponse<T = any> {
-  success: boolean;
-  message?: string;
-  data?: T;
-  timestamp?: string;
-  errors?: string[];
-}
-
-export interface FriendsApiResponse extends ApiResponse {
-  friends: Friend[];
-  count: number;
-  cached?: boolean;
-}
-
-export interface BatchStatusApiResponse extends ApiResponse {
-  statuses: OnlineStatuses;
-  count: number;
-}
-
-export interface LastMessagesApiResponse extends ApiResponse {
-  lastMessages: LastMessages;
-  unreadCounts: UnreadCounts;
-}
-
-export interface SearchApiResponse extends ApiResponse {
-  users: SearchResult[];
-  searchTerm: string;
-  count: number;
-}
-
-export interface FriendRequestApiResponse extends ApiResponse {
-  requests: FriendRequest[];
-  type: 'received' | 'sent';
-  count: number;
-}
-
-export interface FriendStatsApiResponse extends ApiResponse {
-  stats: FriendStats;
-}
-
-export interface FriendshipStatusApiResponse extends ApiResponse {
-  status: FriendshipStatus;
-}
-
-// ===== SOCKET EVENT TYPES =====
-
-export interface SocketEvents {
-  // Connection events
-  'friends_chat_join': {
-    userId: string;
-    authId: string;
-  };
-  'friends_chat_joined': {
-    userId: string;
-    userRoom: string;
-    timestamp: number;
-  };
-  
-  // Message events
-  'friends_chat_send': {
-    senderId: string;
-    receiverId: string;
-    message: string;
-    authId: string;
-  };
-  'friends_chat_message_sent': {
-    message: ChatMessage;
-    chatId: string;
-  };
-  'friends_chat_message_received': {
-    message: ChatMessage;
-    chatId: string;
-  };
-  
-  // Read receipts
-  'friends_chat_mark_read': {
-    userId: string;
-    friendId: string;
-    messageIds: string[];
-  };
-  'friends_chat_messages_read': {
-    readerId: string;
-    messageIds: string[];
-    chatId: string;
-  };
-  
-  // Typing indicators
-  'friends_chat_typing_start': {
-    userId: string;
-    friendId: string;
-  };
-  'friends_chat_typing_stop': {
-    userId: string;
-    friendId: string;
-  };
-  
-  // Chat history
-  'friends_chat_get_history': {
-    userId: string;
-    friendId: string;
-    limit?: number;
-    offset?: number;
-  };
-  'friends_chat_history': {
-    chatId: string;
-    messages: ChatMessage[];
-    hasMore: boolean;
-    offset: number;
-  };
-  
-  // Last messages
-  'friends_chat_get_last_messages': {
-    userId: string;
-    friendIds: string[];
-  };
-  'friends_chat_last_messages': {
-    userId: string;
-    lastMessages: LastMessages;
-  };
-  
-  // Unread counts
-  'friends_chat_unread_counts': {
-    userId: string;
-    unreadCounts: UnreadCounts;
-  };
-  
-  // Error handling
-  'friends_chat_error': {
-    message: string;
-    code?: string;
-    details?: any;
-  };
-}
-
-// ===== HOOK RETURN TYPES =====
-
-export interface UseFriendsChatReturn {
-  // State
-  friends: Friend[];
-  messages: Record<string, ChatMessage[]>;
-  unreadCounts: Record<string, number>;
-  typingUsers: Record<string, boolean>;
-  loading: FriendsChatState['loading'];
-  error: string | null;
-  
-  // Computed
-  totalUnreadCount: number;
-  onlineFriendsCount: number;
-  isConnected: boolean;
-  
-  // Actions
-  sendMessage: (friendId: string, message: string) => boolean;
-  markMessagesAsRead: (friendId: string, messageIds: string[]) => void;
-  startTyping: (friendId: string) => void;
-  stopTyping: (friendId: string) => void;
-  loadChatHistory: (friendId: string, limit?: number, offset?: number) => Promise<void>;
-  updateFriendStatus: (friendId: string, isOnline: boolean, status?: string) => void;
-  
-  // Utilities
-  refresh: () => Promise<void>;
-  reconnect: () => void;
-}
-
-export interface UseFriendChatReturn {
-  friend?: Friend;
-  messages: ChatMessage[];
-  unreadCount: number;
-  isTyping: boolean;
-  isLoading: boolean;
-  sendMessage: (text: string) => boolean;
-  handleTyping: (text: string) => void;
-  loadMore: (offset: number) => Promise<void>;
-}
-
-export interface UseFriendsChatWindowsReturn {
-  openChats: string[];
-  activeChat: string | null;
-  openChat: (friendId: string) => void;
-  closeChat: (friendId: string) => void;
-  closeAllChats: () => void;
-  setActiveChat: (friendId: string | null) => void;
-}
-
-export interface UseFriendSearchReturn {
-  // Search state
-  searchResults: SearchResult[];
-  searchLoading: boolean;
-  searchError: string | null;
-  
-  // Requests state
-  pendingRequests: FriendRequest[];
-  requestsLoading: boolean;
-  
-  // Actions
-  searchUsers: (searchTerm: string) => Promise<void>;
-  sendFriendRequest: (receiverAuthId: string, message?: string) => Promise<{
-    success: boolean;
-    message: string;
-    autoAccepted?: boolean;
-  }>;
-  loadPendingRequests: (type?: 'received' | 'sent') => Promise<void>;
-  acceptFriendRequest: (requestId: string) => Promise<{
-    success: boolean;
-    message: string;
-  }>;
-  declineFriendRequest: (requestId: string) => Promise<{
-    success: boolean;
-    message: string;
-  }>;
-  
-  // Utilities
-  clearSearch: () => void;
-  clearError: () => void;
-}
-
-export interface UseFriendStatsReturn {
-  stats: FriendStats;
-  loading: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
-}
-
-export interface UseFriendshipStatusReturn {
-  status: FriendshipStatus;
-  loading: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
-  removeFriend: () => Promise<{
-    success: boolean;
-    message: string;
-  }>;
-}
-
-export interface UseChatMessageUtilsReturn {
-  formatMessageTime: (timestamp: Date) => string;
-  formatLastSeen: (lastSeenStr: string) => string;
-  truncateMessage: (text: string, maxLength?: number) => string;
-  getStatusColor: (status: string, isOnline: boolean) => string;
-  getStatusText: (status: string, isOnline: boolean) => string;
-  parseMessageMentions: (text: string, userId: string) => {
-    text: string;
-    mentions: string[];
-    hasMention: boolean;
-  };
-  validateMessage: (text: string) => MessageValidation;
-}
-
-export interface UseChatNotificationsReturn {
-  soundEnabled: boolean;
-  setSoundEnabled: (enabled: boolean) => void;
-  notificationPermission: NotificationPermission;
-  requestNotificationPermission: () => Promise<boolean>;
-  playMessageSound: () => void;
-  showNotification: (title: string, options?: NotificationOptions) => void;
-  notifyNewMessage: (friendName: string, message: string) => void;
-  notifyFriendOnline: (friendName: string) => void;
-}
-
-export interface UseChatPerformanceReturn {
-  metrics: ChatPerformanceMetrics;
-  trackMessageSent: () => void;
-  trackMessageReceived: (responseTime?: number) => void;
-  trackReconnect: () => void;
-  getPerformanceReport: () => ChatPerformanceMetrics & {
-    uptimeFormatted: string;
-    reliability: number;
-  };
-  resetMetrics: () => void;
-}
-
-// ===== UTILITY TYPES =====
-
-export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
-
-export type ChatTheme = 'win98' | 'win7' | 'winxp';
-
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-
-export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'reconnecting' | 'error';
-
-export type NotificationType = 'message' | 'friend_request' | 'friend_online' | 'friend_offline';
-
-export type SortBy = 'name' | 'status' | 'lastMessage' | 'unread' | 'friendsSince';
-
-export type FilterBy = 'all' | 'online' | 'offline' | 'unread' | 'recent';
-
-// ===== CONSTANTS =====
-
-export const CHAT_CONSTANTS = {
-  MAX_MESSAGE_LENGTH: 2000,
-  MAX_OPEN_CHATS: 3,
-  MESSAGE_RETENTION_HOURS: 24,
-  TYPING_TIMEOUT_MS: 5000,
-  RECONNECT_DELAY_MS: 3000,
-  HEARTBEAT_INTERVAL_MS: 30000,
-  MAX_SEARCH_RESULTS: 50,
-  MAX_CHAT_HISTORY_LOAD: 100,
-  NOTIFICATION_DURATION_MS: 5000,
-} as const;
-
-export const STATUS_COLORS = {
-  online: '#4CAF50',
-  idle: '#FFC107',
-  dnd: '#F44336',
-  offline: '#9E9E9E',
-} as const;
-
-export const THEME_COLORS = {
-  win98: {
-    background: '#c0c0c0',
-    border: '#808080',
-    text: '#000000',
-    accent: '#0000ff',
-  },
-  win7: {
-    background: '#f0f0f0',
-    border: '#cccccc',
-    text: '#333333',
-    accent: '#0078d4',
-  },
-  winxp: {
-    background: '#ece9d8',
-    border: '#0054e3',
-    text: '#000000',
-    accent: '#0054e3',
-  },
-} as const;
-
-// ===== ERROR TYPES =====
-
-export class FriendsChatError extends Error {
-  constructor(
-    message: string,
-    public code?: string,
-    public details?: any
-  ) {
-    super(message);
-    this.name = 'FriendsChatError';
-  }
-}
-
-export class ConnectionError extends FriendsChatError {
-  constructor(message: string, details?: any) {
-    super(message, 'CONNECTION_ERROR', details);
-    this.name = 'ConnectionError';
-  }
-}
-
-export class ValidationError extends FriendsChatError {
-  constructor(message: string, details?: any) {
-    super(message, 'VALIDATION_ERROR', details);
-    this.name = 'ValidationError';
-  }
-}
-
-export class ApiError extends FriendsChatError {
-  constructor(
-    message: string,
-    public statusCode?: number,
-    details?: any
-  ) {
-    super(message, 'API_ERROR', details);
-    this.name = 'ApiError';
-  }
-}
-
-// ===== EVENT EMITTER TYPES =====
-
-export interface ChatEventMap {
-  'message:sent': { friendId: string; message: ChatMessage };
-  'message:received': { friendId: string; message: ChatMessage };
-  'message:read': { friendId: string; messageIds: string[] };
-  'typing:start': { friendId: string };
-  'typing:stop': { friendId: string };
-  'friend:online': { friend: Friend };
-  'friend:offline': { friend: Friend };
-  'friend:status_change': { friend: Friend; oldStatus: UserStatus };
-  'connection:connected': void;
-  'connection:disconnected': { reason: string };
-  'connection:error': { error: Error };
-  'error': { error: FriendsChatError };
-}
-
-// ===== CONFIGURATION TYPES =====
-
-export interface FriendsChatConfig {
-  socketUrl?: string;
-  socketOptions?: any;
-  apiBaseUrl?: string;
-  enableNotifications?: boolean;
-  enableSounds?: boolean;
-  messageRetentionHours?: number;
-  maxOpenChats?: number;
-  autoReconnect?: boolean;
-  reconnectDelay?: number;
-  heartbeatInterval?: number;
-  theme?: ChatTheme;
-  debug?: boolean;
-}
-
-export interface FriendsChatProviderProps {
-  children: React.ReactNode;
-  config?: FriendsChatConfig;
-  userId: string;
-  authId: string;
-}
-
-// ===== CONTEXT TYPES =====
-
-export interface FriendsChatContextValue extends UseFriendsChatReturn {
-  config: Required<FriendsChatConfig>;
-  userId: string;
-  authId: string;
-}
-
-export default {
-  // Re-export all types for convenient importing
-  Friend,
-  ChatMessage,
-  TypingStatus,
-  FriendRequest,
-  FriendshipStatus,
-  FriendStats,
-  SearchResult,
-  FriendsChatState,
-  ChatPerformanceMetrics,
-  NotificationSettings,
-  ChatWindowState,
-  MessageValidation,
-  FriendSearchState,
-  FriendRequestsState,
-  ChatHistoryResponse,
-  UnreadCounts,
-  LastMessages,
-  OnlineStatuses,
-  ApiResponse,
-  FriendsApiResponse,
-  BatchStatusApiResponse,
-  LastMessagesApiResponse,
-  SearchApiResponse,
-  FriendRequestApiResponse,
-  FriendStatsApiResponse,
-  FriendshipStatusApiResponse,
-  SocketEvents,
-  UseFriendsChatReturn,
-  UseFriendChatReturn,
-  UseFriendsChatWindowsReturn,
-  UseFriendSearchReturn,
-  UseFriendStatsReturn,
-  UseFriendshipStatusReturn,
-  UseChatMessageUtilsReturn,
-  UseChatNotificationsReturn,
-  UseChatPerformanceReturn,
-  UserStatus,
-  ChatTheme,
-  MessageStatus,
-  ConnectionStatus,
-  NotificationType,
-  SortBy,
-  FilterBy,
-  CHAT_CONSTANTS,
-  STATUS_COLORS,
-  THEME_COLORS,
-  FriendsChatError,
-  ConnectionError,
-  ValidationError,
-  ApiError,
-  ChatEventMap,
-  FriendsChatConfig,
-  FriendsChatProviderProps,
-  FriendsChatContextValue,
-};

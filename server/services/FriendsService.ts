@@ -307,7 +307,7 @@ class FriendsService {
     }
 
     const searchTerm = query.toLowerCase().trim();
-    return friendsList.filter(friend => 
+    return friendsList.filter((friend: Friend) => 
       friend.displayName.toLowerCase().includes(searchTerm) ||
       friend.username.toLowerCase().includes(searchTerm)
     );
