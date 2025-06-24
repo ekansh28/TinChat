@@ -13,7 +13,7 @@ export interface ToastProps {
 interface Toast extends ToastProps {
   id: string;
   timestamp: number;
-  duration: number; // Make duration required in Toast interface
+  duration: number; // Make duration required in Toast interface theek hai
 }
 
 let toastCount = 0;
