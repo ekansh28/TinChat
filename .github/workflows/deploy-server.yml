@@ -39,15 +39,19 @@ jobs:
           SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
         run: |
           echo "🔍 Running pre-deployment checks..."
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST bash <<EOF
+          
+          ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" bash -s <<EOF
             set -e
-            echo "📊 System Resources:"
-            echo "Memory: $(free -h | grep '^Mem:' | awk '{print \$3 \"/\" \$2}')"
-            echo "Disk: $(df -h / | tail -1 | awk '{print \$3 \"/\" \$2}')"
-            echo "Load: $(uptime | awk -F'load average:' '{print \$2}')"
 
-            echo "📂 Changing to server directory: ${SERVER_PROJECT_PATH}"
-            cd "${SERVER_PROJECT_PATH}"
+            SERVER_PROJECT_PATH="${SERVER_PROJECT_PATH}"
+
+            echo "📊 System Resources:"
+            echo "Memory: \$(free -h | grep '^Mem:' | awk '{print \$3 \"/\" \$2}')"
+            echo "Disk: \$(df -h / | tail -1 | awk '{print \$3 \"/\" \$2}')"
+            echo "Load: \$(uptime | awk -F'load average:' '{print \$2}')"
+
+            echo "📂 Changing to server directory: \$SERVER_PROJECT_PATH"
+            cd "\$SERVER_PROJECT_PATH"
 
             echo "🔄 Stashing any local changes..."
             if [ -d .git ]; then
@@ -57,7 +61,8 @@ jobs:
             fi
 
             echo "✅ Pre-deployment checks completed"
-          EOF
+      EOF
+
 
 
 
