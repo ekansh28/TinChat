@@ -5,8 +5,8 @@
   "main": "server/index.ts",
   "scripts": {
     "dev": "tsx watch /index.ts",
-    "start": "tsx index.ts",
-    "build": "tsc",
+    "start": "node dist/index.js",
+    "build": "tsc --project tsconfig.server.json",
     "test": "echo \"Error: no test specified\" && exit 1",
     "fix-network": "tsx server/scripts/fix-network.ts",
     "test-connection": "tsx server/scripts/test-connection.ts"
