@@ -1,17 +1,10 @@
-// src/app/chat/components/TaskBar.tsx - COMPLETELY FIXED VERSION
+// src/app/chat/components/TaskBar.tsx - FIXED TO WORK WITH CORRECT FRIENDSWINDOW
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import FriendsWindow from './FriendsWindow';
-import FriendsChatWindow from './FriendsChatWindow';
-
-// ✅ FIXED: Import unified types from friends.ts and extended types
-import { 
-  Friend, 
-  OpenChat
-} from '../../../types/friends';
-import { ExtendedChatMessage, createChatMessage } from '../../../types/friendsExtended';
+import { FriendsWindow } from './FriendsWindow'; // ✅ FIXED: Use the correct FriendsWindow
 
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
@@ -85,15 +78,8 @@ export const TaskBar: React.FC = () => {
   const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // ✅ FIXED: Friends system state with proper typing
+  // ✅ FIXED: Friends system state - simplified since FriendsWindow handles its own state
   const [showFriendsWindow, setShowFriendsWindow] = useState(false);
-  const [openChats, setOpenChats] = useState<Array<{
-    friendId: string;
-    friend: Friend;
-    messages: ExtendedChatMessage[];
-    position: number;
-  }>>([]);
- 
 
   // ✅ FIXED: Mobile detection with proper cleanup
   const checkIfMobile = useCallback(() => {
@@ -207,65 +193,6 @@ export const TaskBar: React.FC = () => {
   // ✅ FIXED: Handle friends icon click
   const handleFriendsIconClick = useCallback(() => {
     setShowFriendsWindow(prev => !prev);
-  }, []);
-
-  // ✅ FIXED: Handle opening a chat with a friend
-  const handleOpenChat = useCallback((friend: Friend) => {
-    // Check if chat is already open
-    const existingChat = openChats.find(chat => chat.friendId === friend.id);
-    
-    if (!existingChat) {
-      // Find the rightmost position
-      const maxPosition = openChats.length > 0 ? Math.max(...openChats.map(chat => chat.position)) : -1;
-      
-      const newChat = {
-        friendId: friend.id,
-        friend: friend,
-        messages: [] as ExtendedChatMessage[],
-        position: maxPosition + 1
-      };
-      
-      setOpenChats(prev => [...prev, newChat]);
-    }
-    
-    // Close friends window when opening a chat
-    setShowFriendsWindow(false);
-  }, [openChats]);
-
-  // ✅ FIXED: Handle closing a chat
-  const handleCloseChat = useCallback((friendId: string) => {
-    setOpenChats(prev => {
-      const filteredChats = prev.filter(chat => chat.friendId !== friendId);
-      // Reposition remaining chats
-      return filteredChats.map((chat, index) => ({
-        ...chat,
-        position: index
-      }));
-    });
-  }, []);
-
-  // ✅ FIXED: Handle sending a message
-  const handleSendMessage = useCallback((friendId: string, messageText: string) => {
-    const newMessage = createChatMessage('current-user', friendId, messageText, 'current-user');
-
-    // Add message to chat
-    setOpenChats(prev => prev.map(chat => {
-      if (chat.friendId === friendId) {
-        return {
-          ...chat,
-          messages: [...chat.messages, newMessage]
-        };
-      }
-      return chat;
-    }));
-
-    // Play send sound
-    try {
-      const audioManager = getAudioManager();
-      audioManager.playMessageSent();
-    } catch (error) {
-      console.warn('Failed to play send sound:', error);
-    }
   }, []);
 
   // ✅ FIXED: Close volume slider when clicking outside
@@ -525,27 +452,25 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* Friends Window */}
+        {/* ✅ FIXED: Friends Window with correct props */}
         {showFriendsWindow && (
           <FriendsWindow
-            onOpenChat={handleOpenChat}
+            isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-            theme={getCurrentTheme()}
           />
         )}
+      </>
+    );
+  }
 
-        {/* Open Chat Windows */}
-        {openChats.map((chat) => (
-          <FriendsChatWindow
-            key={chat.friendId}
-            friend={chat.friend}
-            messages={chat.messages}
-            onSendMessage={handleSendMessage}
-            onClose={() => handleCloseChat(chat.friendId)}
-            position={chat.position}
-            theme={getCurrentTheme()}
+  return null;
+};
+        {showFriendsWindow && (
+          <FriendsWindow
+            isOpen={showFriendsWindow}
+            onClose={() => setShowFriendsWindow(false)}
           />
-        ))}
+        )}
       </>
     );
   }
@@ -731,27 +656,13 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* Friends Window */}
+        {/* ✅ FIXED: Friends Window with correct props */}
         {showFriendsWindow && (
           <FriendsWindow
-            onOpenChat={handleOpenChat}
+            isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-            theme={getCurrentTheme()}
           />
         )}
-
-        {/* Open Chat Windows */}
-        {openChats.map((chat) => (
-          <FriendsChatWindow
-            key={chat.friendId}
-            friend={chat.friend}
-            messages={chat.messages}
-            onSendMessage={handleSendMessage}
-            onClose={() => handleCloseChat(chat.friendId)}
-            position={chat.position}
-            theme={getCurrentTheme()}
-          />
-        ))}
       </>
     );
   }
@@ -928,27 +839,14 @@ export const TaskBar: React.FC = () => {
           </div>
         </footer>
 
-        {/* Friends Window */}
+        
+{/* ✅ FIXED: Friends Window with correct props */}
         {showFriendsWindow && (
           <FriendsWindow
-            onOpenChat={handleOpenChat}
+            isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-            theme={getCurrentTheme()}
           />
         )}
-
-        {/* Open Chat Windows */}
-        {openChats.map((chat) => (
-          <FriendsChatWindow
-            key={chat.friendId}
-            friend={chat.friend}
-            messages={chat.messages}
-            onSendMessage={handleSendMessage}
-            onClose={() => handleCloseChat(chat.friendId)}
-            position={chat.position}
-            theme={getCurrentTheme()}
-          />
-        ))}
       </>
     );
   }
