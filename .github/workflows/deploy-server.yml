@@ -1,0 +1,305 @@
+name: 🚀 Deploy TinChat Server to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:  # Allow manual deployment
+
+jobs:
+  deploy:
+    name: 🔧 Deploy Server to EC2
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: production
+      url: https://tinchat.online
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_DEPLOY_KEY }}
+
+      - name: 🧠 Add VPS Host to Known Hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🔍 Pre-deployment Checks
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          echo "🔍 Running pre-deployment checks..."
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF'
+            set -e
+            echo "📊 System Resources:"
+            echo "Memory: $(free -h | grep '^Mem:' | awk '{print $3 "/" $2}')"
+            echo "Disk: $(df -h / | tail -1 | awk '{print $3 "/" $2}')"
+            echo "Load: $(uptime | awk -F'load average:' '{print $2}')"
+            
+            echo "🔍 Checking if project directory exists..."
+            if [ ! -d "$VPS_PROJECT_PATH" ]; then
+              echo "❌ Project directory not found: $VPS_PROJECT_PATH"
+              exit 1
+            fi
+            
+            echo "🔍 Checking PM2 status..."
+            pm2 status || echo "⚠️ PM2 not running or no processes"
+            
+            echo "✅ Pre-deployment checks completed"
+          EOF
+
+      - name: 🚀 Deploy & Update Server
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF'
+            set -e
+            echo "📂 Changing to server directory: $SERVER_PROJECT_PATH"
+            cd $SERVER_PROJECT_PATH
+            
+            echo "🔄 Stashing any local changes..."
+            git stash push -m "Auto-stash before deployment $(date)"
+            
+            echo "🔄 Pulling latest changes from GitHub..."
+            cd .. # Go to root project folder
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "📂 Navigating back to server directory..."
+            cd server
+            
+            echo "📦 Installing/updating dependencies (EC2 optimized)..."
+            npm ci --only=production
+            npm install --only=dev
+            
+            echo "🔧 Updating environment variables..."
+            # Backup existing .env
+            if [ -f .env ]; then
+              cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+            fi
+            
+            # Update .env with new values (preserving existing ones)
+            echo "# Updated on $(date)" > .env.new
+            echo "# TinChat Server Environment Variables" >> .env.new
+            echo "" >> .env.new
+            
+            # Frontend Configuration (EC2)
+            echo "NEXT_PUBLIC_SOCKET_SERVER_URL=http://13.230.12.126:3001/" >> .env.new
+            echo "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" >> .env.new
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRteG95bGd0YWV4cGxkc3Z2cWh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3MDcxNjksImV4cCI6MjA2NjI4MzE2OX0.qY8aAKJ-rOJ2ileG0VMuv_5yw0nc0l7xhwO-QbyeYn8" >> .env.new
+            echo "NEXT_PUBLIC_USE_BACKEND_API=true" >> .env.new
+            echo "NEXT_PUBLIC_ENABLE_SUPABASE_FALLBACK=true" >> .env.new
+            echo "" >> .env.new
+            
+            # Backend Configuration
+            echo "PORT=3001" >> .env.new
+            echo "LOG_LEVEL=info" >> .env.new
+            echo "NODE_ENV=production" >> .env.new
+            echo "" >> .env.new
+            
+            # Supabase Configuration
+            echo "SUPABASE_URL=$SUPABASE_URL" >> .env.new
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> .env.new
+            echo "" >> .env.new
+            
+            # Redis Configuration
+            echo "UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL" >> .env.new
+            echo "UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN" >> .env.new
+            echo "" >> .env.new
+            
+            # Performance Monitoring
+            echo "PERFORMANCE_MONITORING=true" >> .env.new
+            echo "NEXT_PUBLIC_API_URL=http://13.230.12.126:3001" >> .env.new
+            
+            # Replace old .env with new one
+            mv .env.new .env
+            
+            echo "🏗️ Building TypeScript..."
+            npx tsc --build
+            
+            echo "🔍 Checking build output..."
+            if [ ! -d "dist" ]; then
+              echo "❌ Build failed - dist directory not found"
+              exit 1
+            fi
+            
+            echo "🔁 Restarting PM2 processes..."
+            # Try to restart, if that fails, start fresh
+            if pm2 restart ecosystem.config.js; then
+              echo "✅ PM2 restart successful"
+            elif pm2 start ecosystem.config.js; then
+              echo "✅ PM2 start successful"
+            else
+              echo "⚠️ PM2 restart/start failed, trying alternative..."
+              pm2 delete all || true
+              pm2 start npm --name "tinchat-server" -- start
+            fi
+            
+            echo "⏳ Waiting for server to stabilize..."
+            sleep 10
+            
+            echo "🏥 Health check..."
+            if curl -f http://localhost:3001/health > /dev/null 2>&1; then
+              echo "✅ Server health check passed"
+            else
+              echo "⚠️ Server health check failed, but deployment completed"
+            fi
+            
+            echo "📊 Final PM2 status:"
+            pm2 status
+            
+            echo "✅ Deployment completed successfully!"
+          EOF
+
+      - name: 🧪 Post-deployment Tests
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          echo "🧪 Running post-deployment tests..."
+          
+          # Test health endpoint (EC2)
+          if curl -f http://13.230.12.126:3001/health; then
+            echo "✅ Public health check passed"
+          else
+            echo "❌ Public health check failed"
+            exit 1
+          fi
+          
+          # Test API endpoints (EC2)
+          if curl -f http://13.230.12.126:3001/api/profiles/health; then
+            echo "✅ Profile API health check passed"
+          else
+            echo "⚠️ Profile API health check failed"
+          fi
+          
+          if curl -f http://13.230.12.126:3001/api/friends/health; then
+            echo "✅ Friends API health check passed"
+          else
+            echo "⚠️ Friends API health check failed"
+          fi
+          
+          echo "✅ Post-deployment tests completed"
+
+      - name: 📊 Deployment Summary
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+            cd $SERVER_PROJECT_PATH/server
+            echo "📊 Deployment Summary:"
+            echo "Time: $(date)"
+            echo "Git Commit: $(git rev-parse --short HEAD)"
+            echo "Git Branch: $(git branch --show-current)"
+            echo "Node Version: $(node --version)"
+            echo "NPM Version: $(npm --version)"
+            echo "PM2 Processes:"
+            pm2 jlist | jq -r '.[] | "  - \(.name): \(.pm2_env.status) (PID: \(.pid), CPU: \(.monit.cpu)%, Memory: \(.monit.memory / 1024 / 1024 | floor)MB)"' || pm2 status
+            echo "Server Resources:"
+            echo "  Memory: $(free -h | grep '^Mem:' | awk '{print $3 "/" $2}')"
+            echo "  Disk: $(df -h / | tail -1 | awk '{print $3 "/" $2}')"
+            echo "  Load: $(uptime | awk -F'load average:' '{print $2}')"
+          EOF
+
+      - name: 📣 Notify Discord of Deployment Success
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_URL: "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: "http://13.230.12.126:3001"
+        run: |
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" $COMMIT_SHA)
+          
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"username\": \"TinChat Server\",
+            \"avatar_url\": \"https://cdn.discordapp.com/emojis/✅.png\",
+            \"embeds\": [{
+              \"title\": \"🚀 Server Deployed Successfully\",
+              \"color\": 3066993,
+              \"description\": \"TinChat server has been successfully deployed and is running!\",
+              \"fields\": [
+                { \"name\": \"📝 Commit\", \"value\": \"[\`${SHORT_SHA}\`](${COMMIT_URL})\", \"inline\": true },
+                { \"name\": \"👤 Deployed by\", \"value\": \"${ACTOR}\", \"inline\": true },
+                { \"name\": \"🌐 Status\", \"value\": \"[Live Server](${SERVER_URL})\", \"inline\": true },
+                { \"name\": \"💬 Message\", \"value\": \"\`\`\`${COMMIT_MESSAGE}\`\`\`\", \"inline\": false },
+                { \"name\": \"🔗 Health Checks\", \"value\": \"[Health](${SERVER_URL}/health) • [Profile API](${SERVER_URL}/api/profiles/health) • [Friends API](${SERVER_URL}/api/friends/health)\", \"inline\": false }
+              ],
+              \"footer\": { \"text\": \"TinChat Server Deployment • Production\" },
+              \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+              \"thumbnail\": { \"url\": \"https://cdn.discordapp.com/emojis/🚀.png\" }
+            }]
+          }" $DISCORD_WEBHOOK_URL
+
+      - name: ❌ Notify Discord of Deployment Failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_URL: "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: "http://13.230.12.126:3001"
+        run: |
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" $COMMIT_SHA)
+          
+          curl -H "Content-Type: application/json" -X POST -d "{
+            \"username\": \"TinChat Server\",
+            \"avatar_url\": \"https://cdn.discordapp.com/emojis/❌.png\",
+            \"embeds\": [{
+              \"title\": \"🚨 Server Deployment Failed\",
+              \"color\": 15158332,
+              \"description\": \"TinChat server deployment encountered an error and may not be running properly.\",
+              \"fields\": [
+                { \"name\": \"📝 Commit\", \"value\": \"[\`${SHORT_SHA}\`](${COMMIT_URL})\", \"inline\": true },
+                { \"name\": \"👤 Triggered by\", \"value\": \"${ACTOR}\", \"inline\": true },
+                { \"name\": \"🔍 Action\", \"value\": \"[View Logs](https://github.com/${{ github.repository }}/actions)\", \"inline\": true },
+                { \"name\": \"💬 Message\", \"value\": \"\`\`\`${COMMIT_MESSAGE}\`\`\`\", \"inline\": false },
+                { \"name\": \"⚠️ Next Steps\", \"value\": \"Check server logs and verify configuration\", \"inline\": false }
+              ],
+              \"footer\": { \"text\": \"TinChat Server Deployment • Production\" },
+              \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+              \"thumbnail\": { \"url\": \"https://cdn.discordapp.com/emojis/🚨.png\" }
+            }]
+          }" $DISCORD_WEBHOOK_URL
+
+      - name: 🧹 Cleanup on Failure
+        if: failure()
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          echo "🧹 Attempting to rollback or restart services..."
+          ssh $VPS_USER@$VPS_HOST << 'EOF' || true
+            cd $SERVER_PROJECT_PATH/server
+            
+            echo "🔄 Attempting to restart PM2 processes..."
+            pm2 restart all || pm2 start ecosystem.config.js || echo "⚠️ PM2 restart failed"
+            
+            echo "📋 Current PM2 status:"
+            pm2 status || echo "❌ PM2 not responding"
+            
+            echo "🔍 Recent server logs:"
+            pm2 logs --lines 20 || echo "❌ Could not retrieve logs"
+          EOF
