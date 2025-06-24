@@ -1,4 +1,4 @@
-// server/managers/profile/ProfileManager.ts - FIXED VERSION WITH COMPREHENSIVE ERROR HANDLING
+// server/managers/profile/ProfileManager.ts - FIXED VERSION WITH PROPER AUTH AND HEALTH CHECKS
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../utils/logger';
@@ -338,92 +338,93 @@ export class ProfileManager {
     }
   }
 
-    /**
- * Create a new user profile with basic required fields
- */
-async createUserProfile(authId: string, username: string, displayName?: string): Promise<boolean> {
-  if (!this.supabase || !authId || this.isShuttingDown) {
-    logger.debug(`Profile creation skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-    return false;
-  }
+  /**
+   * Create a new user profile with basic required fields
+   */
+  async createUserProfile(authId: string, username: string, displayName?: string): Promise<boolean> {
+    if (!this.supabase || !authId || this.isShuttingDown) {
+      logger.debug(`Profile creation skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
+      return false;
+    }
 
-  // Validate username
-  if (!username || username.length < 3 || username.length > 20) {
-    logger.error(`Invalid username for ${authId}: ${username}`);
-    return false;
-  }
+    // Validate username
+    if (!username || username.length < 3 || username.length > 20) {
+      logger.error(`Invalid username for ${authId}: ${username}`);
+      return false;
+    }
 
-  try {
-    const profileData: Partial<UserProfile> = {
-      id: authId,
-      username,
-      display_name: displayName || username,
-      status: 'offline',
-      is_online: false,
-      last_seen: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      profile_complete: false,
-      display_name_color: this.DEFAULT_PROFILE_COLOR,
-      display_name_animation: 'none',
-      rainbow_speed: 3
-    };
+    try {
+      const profileData: Partial<UserProfile> = {
+        id: authId,
+        username,
+        display_name: displayName || username,
+        status: 'offline',
+        is_online: false,
+        last_seen: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        profile_complete: false,
+        display_name_color: this.DEFAULT_PROFILE_COLOR,
+        display_name_animation: 'none',
+        rainbow_speed: 3
+      };
 
-    const success = await this.databaseModule.createProfile(authId, profileData);
+      const success = await this.databaseModule.createProfile(authId, profileData);
 
-    if (success) {
-      logger.info(`✅ Created new profile for ${authId} with username ${username}`);
-      
-      // Invalidate caches
-      this.profileCache.delete(authId);
-      if (this.redisService) {
-        await this.redisService.invalidateUserProfile(authId);
+      if (success) {
+        logger.info(`✅ Created new profile for ${authId} with username ${username}`);
+        
+        // Invalidate caches
+        this.profileCache.delete(authId);
+        if (this.redisService) {
+          await this.redisService.invalidateUserProfile(authId);
+        }
+        
+        return true;
       }
       
-      return true;
+      return false;
+    } catch (error) {
+      logger.error(`Exception creating profile for ${authId}:`, error);
+      return false;
     }
-    
-    return false;
-  } catch (error) {
-    logger.error(`Exception creating profile for ${authId}:`, error);
-    return false;
-  }
-}
-
-/**
- * Delete a user profile and clean up related data
- */
-async deleteUserProfile(authId: string): Promise<boolean> {
-  if (!this.supabase || !authId || this.isShuttingDown) {
-    logger.debug(`Profile deletion skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-    return false;
   }
 
-  try {
-    const success = await this.databaseModule.deleteProfile(authId);
+  /**
+   * Delete a user profile and clean up related data
+   */
+  async deleteUserProfile(authId: string): Promise<boolean> {
+    if (!this.supabase || !authId || this.isShuttingDown) {
+      logger.debug(`Profile deletion skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
+      return false;
+    }
 
-    if (success) {
-      logger.info(`✅ Deleted profile for ${authId}`);
-      
-      // Clean up caches
-      this.profileCache.delete(authId);
-      if (this.redisService) {
-        await Promise.all([
-          this.redisService.invalidateUserProfile(authId),
-          this.redisService.invalidateFriendsList(authId),
-          this.redisService.cacheUserOnlineStatus(authId, false, new Date())
-        ]);
+    try {
+      const success = await this.databaseModule.deleteProfile(authId);
+
+      if (success) {
+        logger.info(`✅ Deleted profile for ${authId}`);
+        
+        // Clean up caches
+        this.profileCache.delete(authId);
+        if (this.redisService) {
+          await Promise.all([
+            this.redisService.invalidateUserProfile(authId),
+            this.redisService.invalidateFriendsList(authId),
+            this.redisService.cacheUserOnlineStatus(authId, false, new Date())
+          ]);
+        }
+        
+        return true;
       }
       
-      return true;
+      return false;
+    } catch (error) {
+      logger.error(`Exception deleting profile for ${authId}:`, error);
+      return false;
     }
-    
-    return false;
-  } catch (error) {
-    logger.error(`Exception deleting profile for ${authId}:`, error);
-    return false;
   }
-}
+
   /**
    * ✅ ENHANCED: Status update with better error handling
    */
@@ -636,12 +637,10 @@ async deleteUserProfile(authId: string): Promise<boolean> {
     }
   }
 
-  // ... (rest of the methods remain the same but with enhanced error handling)
-
   /**
-   * Enhanced health check with comprehensive validation
+   * ✅ FIXED: Enhanced health check with proper error handling and no 401 errors
    */
-   async testConnection(): Promise<{ 
+  async testConnection(): Promise<{ 
     database: boolean; 
     redis?: boolean;
     overall: boolean;
@@ -652,40 +651,36 @@ async deleteUserProfile(authId: string): Promise<boolean> {
   }> {
     const result: any = { overall: false, errors: [] };
 
-    // ✅ WORKING: Simple database test
+    // ✅ FIXED: Test database connection using the database module
     if (!this.supabase) {
       result.database = false;
       result.errors.push('Supabase client not initialized');
     } else {
       try {
-        logger.debug('🔍 ProfileManager: Testing database...');
+        logger.debug('🔍 ProfileManager: Testing database connection...');
         const startTime = Date.now();
         
-        // ✅ WORKING: Use the SAME pattern as the working curl command
-        const { data, error } = await this.supabase
-          .from('user_profiles')
-          .select('id')
-          .limit(1);
-        
+        // ✅ FIXED: Use the database module's test method which uses proper auth
+        const dbTest = await this.databaseModule.testConnection();
         const dbLatency = Date.now() - startTime;
         
-        if (error) {
-          logger.error('❌ ProfileManager DB test failed:', error.message);
-          result.database = false;
-          result.errors.push(`Database error: ${error.message}`);
-        } else {
-          logger.debug(`✅ ProfileManager DB test passed (${dbLatency}ms)`);
+        if (dbTest.success) {
+          logger.debug(`✅ ProfileManager database test passed (${dbLatency}ms)`);
           result.database = true;
           result.dbLatency = dbLatency;
+        } else {
+          logger.error('❌ ProfileManager database test failed:', dbTest.error);
+          result.database = false;
+          result.errors.push(`Database error: ${dbTest.error}`);
         }
       } catch (error: any) {
-        logger.error('❌ ProfileManager DB exception:', error.message);
+        logger.error('❌ ProfileManager database exception:', error.message);
         result.database = false;
         result.errors.push(`Database exception: ${error.message}`);
       }
     }
 
-    // ✅ WORKING: Simple Redis test (optional)
+    // ✅ FIXED: Test Redis connection (optional)
     if (this.redisService) {
       try {
         const startTime = Date.now();
@@ -701,50 +696,94 @@ async deleteUserProfile(authId: string): Promise<boolean> {
       }
     }
 
-    // Overall health
+    // ✅ FIXED: Test friends module connection
+    let friendsModuleHealthy = false;
+    try {
+      const friendsTest = await this.friendsModule.testConnection();
+      friendsModuleHealthy = friendsTest.success;
+      if (!friendsModuleHealthy) {
+        result.errors.push(`Friends module error: ${friendsTest.error}`);
+      }
+    } catch (error: any) {
+      result.errors.push(`Friends module exception: ${error.message}`);
+    }
+
+    // Overall health - require database to be working
     result.overall = result.database && (!this.redisService || result.redis);
     
-    logger.info(`📊 ProfileManager health: ${result.overall ? 'HEALTHY' : 'DEGRADED'}`, {
+    logger.info(`📊 ProfileManager health check completed:`, {
       database: result.database,
       redis: result.redis,
+      friendsModule: friendsModuleHealthy,
+      overall: result.overall,
       errors: result.errors.length
     });
     
     return result;
   }
+
   // ==================== BATCH AND MONITORING METHODS ====================
 
   /**
    * Enhanced batch status updates with Redis coordination
    */
   private startBatchUpdates(): void {
-    // ✅ TEMPORARILY DISABLED: Skip batch database updates that cause 401 errors
-    logger.info('⚠️ Database batch updates temporarily disabled to prevent 401 errors');
-    logger.info('💡 Status updates will be processed individually when needed');
+    // ✅ SAFE: Only process status updates in memory, no database batch operations
+    logger.info('📦 Starting safe batch status processing (memory only)');
     
-    // Clear the queue periodically instead of processing it
     this.batchUpdateInterval = setInterval(() => {
-      if (this.statusUpdateQueue.length > 100) {
-        logger.warn(`📦 Clearing large status update queue: ${this.statusUpdateQueue.length} items`);
-        this.statusUpdateQueue = [];
+      if (this.isShuttingDown) return;
+      
+      try {
+        // ✅ SAFE: Only clear large queues to prevent memory issues
+        if (this.statusUpdateQueue.length > 100) {
+          logger.warn(`📦 Clearing large status update queue: ${this.statusUpdateQueue.length} items`);
+          this.statusUpdateQueue = this.statusUpdateQueue.slice(-50); // Keep last 50
+        }
+        
+        // ✅ SAFE: Process individual status updates to Redis only (no database)
+        if (this.redisService && this.statusUpdateQueue.length > 0) {
+          const batchSize = Math.min(this.statusUpdateQueue.length, 10);
+          const batch = this.statusUpdateQueue.splice(0, batchSize);
+          
+          // Process batch to Redis only (safe operation)
+          Promise.allSettled(
+            batch.map(update => 
+              this.redisService!.cacheUserOnlineStatus(
+                update.authId, 
+                update.status === 'online', 
+                new Date()
+              )
+            )
+          ).then(results => {
+            const successful = results.filter(r => r.status === 'fulfilled').length;
+            if (successful > 0) {
+              logger.debug(`📦 Processed ${successful}/${batch.length} status updates to Redis`);
+            }
+          }).catch(err => {
+            logger.debug('📦 Batch Redis status update failed (non-critical):', err);
+          });
+        }
+      } catch (error) {
+        logger.debug('📦 Batch processing error (non-critical):', error);
       }
-    }, 30000); // Every 30 seconds
+    }, this.BATCH_UPDATE_INTERVAL);
 
-    logger.info('📦 Safe batch management started (queue clearing only)');
+    logger.info('📦 Safe batch status processing started');
   }
 
   /**
    * Enhanced periodic cleanup with Redis maintenance
    */
   private startPeriodicCleanup(): void {
-    // ✅ TEMPORARILY DISABLED: Skip database cleanup that causes 401 errors
-    logger.info('⚠️ Database periodic cleanup temporarily disabled to prevent 401 errors');
+    // ✅ SAFE: Only local cache cleanup, no database operations
+    logger.info('🧹 Starting safe periodic cleanup (cache only)');
     
-    // ✅ KEEP: Local cache cleanup only (safe)
     this.cacheCleanupInterval = setInterval(() => {
       if (this.isShuttingDown) return;
       
       try {
+        // ✅ SAFE: Local cache cleanup only
         const sizeBefore = this.profileCache.size();
         this.profileCache.cleanup(this.CACHE_DURATION);
         const sizeAfter = this.profileCache.size();
@@ -752,12 +791,19 @@ async deleteUserProfile(authId: string): Promise<boolean> {
         if (sizeBefore !== sizeAfter) {
           logger.debug(`🗄️ Profile cache cleanup: ${sizeBefore} → ${sizeAfter} entries`);
         }
+        
+        // ✅ SAFE: Redis cleanup (optional, safe operation)
+        if (this.redisService) {
+          this.redisService.cleanup().catch(err => {
+            logger.debug('🗄️ Redis cleanup failed (non-critical):', err);
+          });
+        }
       } catch (error) {
-        logger.error('❌ Cache cleanup error:', error);
+        logger.debug('🧹 Cache cleanup error (non-critical):', error);
       }
     }, 2 * 60 * 1000); // Every 2 minutes
 
-    logger.info('🧹 Safe periodic cleanup started (cache only)');
+    logger.info('🧹 Safe periodic cleanup started');
   }
 
   // ==================== STATUS METHODS (using StatusModule) ====================
@@ -773,6 +819,7 @@ async deleteUserProfile(authId: string): Promise<boolean> {
   async batchGetOnlineStatus(authIds: string[]): Promise<Record<string, boolean>> {
     return this.statusModule.batchGetOnlineStatus(authIds);
   }
+
   async batchSetOnlineStatus(updates: { authId: string; isOnline: boolean }[]): Promise<void> {
     if (!this.redisService || updates.length === 0) return;
 
@@ -996,32 +1043,10 @@ async deleteUserProfile(authId: string): Promise<boolean> {
         this.cacheCleanupInterval = null;
       }
       
-      // Process remaining status updates
+      // ✅ SAFE: Only clear memory queues, no database operations during shutdown
       if (this.statusUpdateQueue.length > 0) {
-        logger.info(`📦 Processing ${this.statusUpdateQueue.length} final status updates...`);
-        
-        const finalUpdates = [...this.statusUpdateQueue];
+        logger.info(`📦 Clearing ${this.statusUpdateQueue.length} pending status updates from memory`);
         this.statusUpdateQueue = [];
-        
-        if (this.supabase) {
-          try {
-            // Set all remaining users offline
-            const authIds = finalUpdates.map(u => u.authId);
-            await this.supabase
-              .from('user_profiles')
-              .update({
-                status: 'offline',
-                is_online: false,
-                last_seen: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .in('id', authIds);
-            
-            logger.info(`✅ Set ${authIds.length} users offline during shutdown`);
-          } catch (error) {
-            logger.error('Failed to process final status updates:', error);
-          }
-        }
       }
       
       // Clear local cache
@@ -1095,9 +1120,7 @@ async deleteUserProfile(authId: string): Promise<boolean> {
    */
 
   async fetchPendingFriendRequests(authId: string, type: 'received' | 'sent' = 'received'): Promise<any[]> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('fetchPendingFriendRequests not yet implemented in modular version');
-    return [];
+    return this.friendsModule.getPendingFriendRequests(authId, type);
   }
 
   async sendFriendRequest(senderAuthId: string, receiverAuthId: string, message?: string): Promise<{
@@ -1105,42 +1128,32 @@ async deleteUserProfile(authId: string): Promise<boolean> {
     message: string;
     autoAccepted?: boolean;
   }> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('sendFriendRequest not yet implemented in modular version');
-    return { success: false, message: 'Not implemented in modular version' };
+    return this.friendsModule.sendFriendRequest(senderAuthId, receiverAuthId, message);
   }
 
   async acceptFriendRequest(requestId: string, acceptingUserId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('acceptFriendRequest not yet implemented in modular version');
-    return { success: false, message: 'Not implemented in modular version' };
+    return this.friendsModule.acceptFriendRequest(requestId, acceptingUserId);
   }
 
   async declineFriendRequest(requestId: string, decliningUserId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('declineFriendRequest not yet implemented in modular version');
-    return { success: false, message: 'Not implemented in modular version' };
+    return this.friendsModule.declineFriendRequest(requestId, decliningUserId);
   }
 
   async removeFriend(user1AuthId: string, user2AuthId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('removeFriend not yet implemented in modular version');
-    return { success: false, message: 'Not implemented in modular version' };
+    return this.friendsModule.removeFriend(user1AuthId, user2AuthId);
   }
 
   async getMutualFriends(user1AuthId: string, user2AuthId: string): Promise<any[]> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('getMutualFriends not yet implemented in modular version');
-    return [];
+    return this.friendsModule.getMutualFriends(user1AuthId, user2AuthId);
   }
 
   async getFriendStats(authId: string): Promise<{
@@ -1149,18 +1162,10 @@ async deleteUserProfile(authId: string): Promise<boolean> {
     pendingReceivedCount: number;
     mutualFriendsWithRecent?: number;
   }> {
-    // This would need to be implemented in the FriendsModule
-    logger.warn('getFriendStats not yet implemented in modular version');
-    return {
-      friendCount: 0,
-      pendingSentCount: 0,
-      pendingReceivedCount: 0
-    };
+    return this.friendsModule.getFriendStats(authId);
   }
 
   async getOnlineFriendsCount(authId: string): Promise<number> {
-    // This would need to be implemented in the FriendsModule or StatusModule
-    logger.warn('getOnlineFriendsCount not yet implemented in modular version');
-    return 0;
+    return this.friendsModule.getOnlineFriendsCount(authId);
   }
 }

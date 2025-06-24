@@ -1,4 +1,4 @@
-// server/index.ts - FIXED VERSION WITH PROPER FRIENDS INTEGRATION
+// server/index.ts - FIXED VERSION WITH PROPER SUPABASE AUTHENTICATION
 import 'dotenv/config';
 import http from 'http';
 import { setCorsHeaders } from './config/cors';
@@ -7,7 +7,7 @@ import { setupDebugRoutes, setSocketManager, handleDebugDashboard } from './rout
 import { handleProfileRoutes, setProfileManager } from './routes/profileRoutes';
 import { handleFriendsRoutes, setFriendsProfileManager } from './routes/friendsRoutes';
 import { configureSocketIO } from './config/socketIO';
-import { initializeSupabase, testDatabaseConnection } from './config/supabase';
+import { initializeSupabase, testDatabaseConnection, getSupabaseConfig, healthCheckSupabase } from './config/supabase';
 import { SocketManager } from './managers/SocketManager';
 import { ProfileManager } from './managers/profile/ProfileManager';
 import { MessageBatcher } from './utils/MessageBatcher';
@@ -137,7 +137,25 @@ async function initializeServer() {
   try {
     logger.info('🚀 Starting TinChat server initialization...');
 
-    // ✅ STEP 1: Initialize Redis service first
+    // ✅ STEP 1: Check environment variables first
+    logger.info('🔍 Checking environment variables...');
+    const supabaseConfig = getSupabaseConfig();
+    logger.info('📋 Supabase configuration:', {
+      hasUrl: supabaseConfig.hasUrl,
+      hasServiceKey: supabaseConfig.hasServiceKey,
+      url: supabaseConfig.url,
+      keyPreview: supabaseConfig.keyPreview
+    });
+
+    if (!supabaseConfig.hasUrl || !supabaseConfig.hasServiceKey) {
+      logger.error('❌ Missing required Supabase environment variables');
+      logger.error('📋 Required variables:');
+      logger.error('   - NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL');
+      logger.error('   - SUPABASE_SERVICE_ROLE_KEY');
+      process.exit(1);
+    }
+
+    // ✅ STEP 2: Initialize Redis service first
     const redisService = initializeRedis();
     
     if (redisService) {
@@ -149,36 +167,73 @@ async function initializeServer() {
       }
     }
 
-    // ✅ STEP 2: Initialize Supabase
+    // ✅ STEP 3: Initialize Supabase with proper server-side configuration
+    logger.info('🔍 Initializing Supabase client...');
     const supabase = initializeSupabase();
-    if (supabase) {
-      const dbHealthy = await testDatabaseConnection(supabase);
-      if (!dbHealthy) {
-        logger.warn('⚠️ Database connection issues detected, continuing with limited functionality');
-      } else {
-        logger.info('✅ Database connection verified');
-      }
+    
+    if (!supabase) {
+      logger.error('❌ Failed to initialize Supabase client');
+      process.exit(1);
     }
 
-    // ✅ STEP 3: Initialize core services
+    // ✅ STEP 4: Test database connection with proper error handling
+    logger.info('🔍 Testing database connection...');
+    const dbHealthy = await testDatabaseConnection(supabase);
+    
+    if (!dbHealthy) {
+      logger.error('❌ Database connection test failed');
+      logger.error('📋 Please check:');
+      logger.error('   - SUPABASE_SERVICE_ROLE_KEY is correct');
+      logger.error('   - Database is accessible');
+      logger.error('   - Network connectivity');
+      process.exit(1);
+    } else {
+      logger.info('✅ Database connection verified successfully');
+    }
+
+    // ✅ STEP 5: Initialize core services
     const performanceMonitor = new PerformanceMonitor();
     const io = configureSocketIO(server, allowedOrigins);
     const messageBatcher = new MessageBatcher();
     messageBatcher.setSocketIOInstance(io);
     
-    // ✅ STEP 4: Initialize ProfileManager with modular architecture
+    // ✅ STEP 6: Initialize ProfileManager with modular architecture
+    logger.info('👤 Initializing ProfileManager...');
     const profileManager = new ProfileManager(supabase, redisService);
     
     // Set ProfileManager for both Profile and Friends API routes
     setProfileManager(profileManager);
     setFriendsProfileManager(profileManager);
-    logger.info('📡 Profile and Friends API routes configured');
+    logger.info('📡 Profile and Friends API routes configured with ProfileManager');
     
-    // ✅ STEP 5: Initialize FriendsChatService for real-time messaging
+    // ✅ STEP 7: Test ProfileManager health immediately after initialization
+    logger.info('🔍 Testing ProfileManager health...');
+    try {
+      const profileHealth = await profileManager.testConnection();
+      if (profileHealth.overall) {
+        logger.info('✅ ProfileManager health check passed', {
+          database: profileHealth.database,
+          redis: profileHealth.redis,
+          latency: profileHealth.dbLatency
+        });
+      } else {
+        logger.warn('⚠️ ProfileManager health check failed', {
+          database: profileHealth.database,
+          redis: profileHealth.redis,
+          errors: profileHealth.errors
+        });
+        // Don't exit - continue with degraded functionality
+      }
+    } catch (error) {
+      logger.error('❌ ProfileManager health check exception:', error);
+      // Don't exit - continue with degraded functionality
+    }
+    
+    // ✅ STEP 8: Initialize FriendsChatService for real-time messaging
     const friendsChatService = new FriendsChatService(io, profileManager, redisService);
     logger.info('💬 Friends chat service initialized with 24h Redis caching');
     
-    // ✅ STEP 6: Initialize SocketManager with friends chat support
+    // ✅ STEP 9: Initialize SocketManager with friends chat support
     const socketManager = new SocketManager(
       io,
       profileManager,
@@ -190,24 +245,33 @@ async function initializeServer() {
     setSocketManager(socketManager);
     logger.info('🔌 Socket manager initialized with friends support');
 
-    // ✅ STEP 7: Enhanced health monitoring with friends stats
+    // ✅ STEP 10: Enhanced health monitoring with safe error handling
     setInterval(async () => {
       try {
         const health = socketManager.healthCheck();
         const stats = socketManager.getStats();
         
-        // ✅ EMERGENCY: Get basic stats without triggering 401 errors
+        // ✅ SAFE: Get basic stats without triggering errors
         let friendsChatStats = { activeRooms: 0, activeTyping: 0, redisEnabled: false };
         if (friendsChatService) {
           try {
             friendsChatStats = friendsChatService.getStats();
           } catch (err) {
-            logger.debug('Failed to get friends chat stats (non-critical):', err);
+            logger.debug('Friends chat stats failed (non-critical):', err);
           }
         }
         
-        // ✅ EMERGENCY: Skip ProfileManager health checks that cause 401 errors
+        // ✅ SAFE: Simple health check for ProfileManager
         let profileApiHealth = { database: false, overall: false };
+        try {
+          const simpleHealth = await healthCheckSupabase();
+          profileApiHealth = {
+            database: simpleHealth.connected,
+            overall: simpleHealth.connected
+          };
+        } catch (err) {
+          logger.debug('Simple health check failed (non-critical):', err);
+        }
         
         updateGlobalStats({
           onlineUserCount: stats.onlineUsers,
@@ -224,7 +288,7 @@ async function initializeServer() {
           },
           redisEnabled: !!redisService,
           profileApiEnabled: !!profileManager,
-          profileApiHealth: profileApiHealth, // ✅ Use safe defaults
+          profileApiHealth: profileApiHealth,
           friendsChat: {
             ...friendsChatStats,
             cacheEnabled: !!redisService,
@@ -232,11 +296,11 @@ async function initializeServer() {
           }
         } as any);
 
-        // ✅ EMERGENCY: Simplified health logging
+        // ✅ SAFE: Simplified health logging
         if (health.status === 'degraded') {
           logger.warn('🚨 Server health degraded (but continuing)');
         } else {
-          logger.debug('💚 Server health check passed (basic stats only)');
+          logger.debug('💚 Server health check passed');
         }
 
       } catch (error) {
@@ -244,7 +308,7 @@ async function initializeServer() {
       }
     }, 60000); // Every minute
 
-    // ✅ STEP 8: Enhanced graceful shutdown
+    // ✅ STEP 11: Enhanced graceful shutdown
     const gracefulShutdown = async (signal: string) => {
       logger.info(`🛑 ${signal} received, starting graceful shutdown...`);
       
@@ -308,7 +372,7 @@ async function initializeServer() {
       gracefulShutdown('unhandledRejection');
     });
 
-    // ✅ STEP 9: Start the server with comprehensive logging
+    // ✅ STEP 12: Start the server with comprehensive logging
     server.listen(PORT, async () => {
       logger.info(`🚀 TinChat Server Successfully Started!`);
       logger.info(`📊 Environment: ${NODE_ENV}`);
@@ -349,7 +413,7 @@ async function initializeServer() {
       const initialHealth = socketManager.healthCheck();
       logger.info(`💚 Initial Health Status: ${initialHealth.status}`);
 
-      // ✅ STEP 10: Run startup tests
+      // ✅ STEP 13: Run startup tests with proper error handling
       try {
         await testProfileApiEndpoints();
         await testFriendsApiEndpoints();
@@ -360,7 +424,7 @@ async function initializeServer() {
         
         logger.info('🧪 All startup tests completed successfully');
       } catch (error) {
-        logger.error('❌ Startup tests failed:', error);
+        logger.warn('⚠️ Some startup tests failed (non-critical):', error);
       }
     });
 
@@ -384,29 +448,44 @@ async function initializeServer() {
 
 async function testProfileApiEndpoints(): Promise<void> {
   try {
-    logger.info('🧪 Testing Profile API endpoints (simplified)...');
+    logger.info('🧪 Testing Profile API endpoints...');
     
-    // ✅ EMERGENCY: Skip complex health checks that cause 401 errors
-    logger.info('⚠️ Skipping detailed Profile API health check to prevent 401 errors');
+    // ✅ SAFE: Simple health check that doesn't trigger 401 errors
+    const supabaseHealth = await healthCheckSupabase();
+    
+    if (supabaseHealth.connected) {
+      logger.info('✅ Profile API database connection working');
+    } else {
+      logger.warn('⚠️ Profile API database connection issues:', supabaseHealth.error);
+    }
+    
     logger.info('✅ Profile API routes are configured and available');
     
   } catch (error: any) {
-    logger.warn('⚠️ Profile API test skipped due to potential 401 issues:', error.message);
+    logger.warn('⚠️ Profile API test failed (non-critical):', error.message);
   }
 }
 
 async function testFriendsApiEndpoints(): Promise<void> {
   try {
-    logger.info('🧪 Testing Friends API endpoints (simplified)...');
+    logger.info('🧪 Testing Friends API endpoints...');
     
-    // ✅ EMERGENCY: Skip complex health checks that cause 401 errors
-    logger.info('⚠️ Skipping detailed Friends API health check to prevent 401 errors');
+    // ✅ SAFE: Simple health check that doesn't trigger 401 errors
+    const supabaseHealth = await healthCheckSupabase();
+    
+    if (supabaseHealth.connected) {
+      logger.info('✅ Friends API database connection working');
+    } else {
+      logger.warn('⚠️ Friends API database connection issues:', supabaseHealth.error);
+    }
+    
     logger.info('✅ Friends API routes are configured and available');
     
   } catch (error: any) {
-    logger.warn('⚠️ Friends API test skipped due to potential 401 issues:', error.message);
+    logger.warn('⚠️ Friends API test failed (non-critical):', error.message);
   }
 }   
+
 async function testRedisOperations(redisService: RedisService): Promise<void> {
   try {
     logger.info('🧪 Testing Redis operations...');
