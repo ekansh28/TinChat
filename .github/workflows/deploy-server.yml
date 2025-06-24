@@ -39,26 +39,27 @@ jobs:
           SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
         run: |
           echo "🔍 Running pre-deployment checks..."
-          ssh $SERVER_USER@$SERVER_HOST << EOF
+          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST bash <<EOF
             set -e
-            SERVER_PROJECT_PATH="${SERVER_PROJECT_PATH}"
-
             echo "📊 System Resources:"
             echo "Memory: \$(free -h | grep '^Mem:' | awk '{print \$3 \"/\" \$2}')"
             echo "Disk: \$(df -h / | tail -1 | awk '{print \$3 \"/\" \$2}')"
             echo "Load: \$(uptime | awk -F'load average:' '{print \$2}')"
 
-            echo "🔍 Checking if project directory exists..."
-            if [ ! -d "\$SERVER_PROJECT_PATH" ]; then
-              echo "❌ Project directory not found: \$SERVER_PROJECT_PATH"
+            echo "📂 Changing to server directory: ${SERVER_PROJECT_PATH}"
+            cd "${SERVER_PROJECT_PATH}"
+
+            echo "🔄 Stashing any local changes..."
+            if [ -d .git ]; then
+              git stash || echo "⚠️ Nothing to stash"
+            else
+              echo "❌ Not a git repository: \$(pwd)"
               exit 1
             fi
 
-            echo "🔍 Checking PM2 status..."
-            pm2 status || echo "⚠️ PM2 not running or no processes"
-
             echo "✅ Pre-deployment checks completed"
           EOF
+
 
 
       - name: 🚀 Deploy & Update Server
