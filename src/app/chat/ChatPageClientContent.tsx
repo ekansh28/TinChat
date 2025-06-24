@@ -1,4 +1,4 @@
-// src/app/chat/ChatPageClientContent.tsx - WITH AUDIO INITIALIZATION
+// src/app/chat/ChatPageClientContent.tsx - FIXED TO WORK WITH UPDATED HOOKS
 
 'use client';
 
@@ -13,8 +13,8 @@ import { useChat } from './hooks/useChat';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ConnectionErrorScreen } from './components/ConnectionErrorScreen';
 import { ConnectionStatus } from './components/ConnectionStatus';
-import { initializeAudioSystem } from './utils/ChatHelpers'; // ✅ NEW: Import audio initializer
-import VistaBubbles from "@/components/screensaver/bubbles/VistaBubbles";
+import { initializeAudioSystem } from './utils/ChatHelpers';
+
 // ✅ FIXED: Styles moved to separate component/file to avoid re-creating
 const displayNameAnimationCSS = `
   .display-name-rainbow {
@@ -63,7 +63,7 @@ const ChatPageClientContent: React.FC = () => {
   // ✅ FIXED: Single hook call with consistent order, no conditional hooks
   const chat = useChat();
 
-  // ✅ NEW: Initialize audio system on mount
+  // ✅ Initialize audio system on mount
   useEffect(() => {
     if (chat.isMounted) {
       try {
@@ -75,37 +75,59 @@ const ChatPageClientContent: React.FC = () => {
     }
   }, [chat.isMounted]);
 
-  // ✅ CRITICAL FIX: Better loading state detection
-  const isActuallyLoading = !chat.isMounted || 
-                           chat.auth.isLoading || 
-                           (chat.socket.isConnecting && !chat.socket.isConnected);
-
-  // ✅ CRITICAL FIX: Better connection error detection
-  const hasActualConnectionError = !!chat.socket.connectionError && 
-                                  !chat.socket.isConnected && 
-                                  !chat.socket.isConnecting;
-
   console.log('[ChatPageClientContent] Render state:', {
     isMounted: chat.isMounted,
     authLoading: chat.auth.isLoading,
     socketConnected: chat.socket.isConnected,
     socketConnecting: chat.socket.isConnecting,
     socketError: chat.socket.connectionError,
-    isActuallyLoading,
-    hasActualConnectionError
+    isLoading: chat.isLoading,
+    hasConnectionError: chat.hasConnectionError
   });
 
-  // ✅ FIXED: Early returns AFTER all hooks are called
-  if (isActuallyLoading) {
+  // ✅ FIXED: Use the computed loading and error states from useChat
+  if (chat.isLoading) {
     return <LoadingScreen auth={chat.auth} />;
   }
 
-  if (hasActualConnectionError) {
+  if (chat.hasConnectionError) {
     return <ConnectionErrorScreen 
       error={chat.socket.connectionError} 
-      onRetry={() => window.location.reload()} 
+      onRetry={chat.socket.reconnect}
     />;
   }
+
+  // ✅ FIXED: Create proper button handler functions
+  const handleFindOrDisconnect = () => {
+    if (chat.chatState.isPartnerConnected) {
+      // Skip current partner
+      chat.chatActions.skipPartner();
+    } else if (chat.chatState.isFindingPartner) {
+      // Stop searching
+      chat.chatActions.stopSearching();
+    } else {
+      // Start new chat
+      chat.chatActions.startNewChat();
+    }
+  };
+
+  const handleSendMessage = (message: string) => {
+    chat.chatActions.sendMessage(message);
+  };
+
+  // ✅ FIXED: Calculate button text based on current state
+  const getButtonText = () => {
+    if (chat.chatState.isPartnerConnected) {
+      return chat.isMobile ? 'Skip' : 'Skip Partner';
+    } else if (chat.chatState.isFindingPartner) {
+      return chat.isMobile ? 'Stop' : 'Stop Search';
+    } else {
+      return chat.isMobile ? 'Find' : 'New Chat';
+    }
+  };
+
+  // ✅ FIXED: Better button disabled state
+  const isButtonDisabled = !chat.socket.isConnected || !!chat.socket.connectionError;
 
   return (
     <>
@@ -122,8 +144,7 @@ const ChatPageClientContent: React.FC = () => {
           "chat-page-container flex flex-col items-center justify-center",
           chat.isMobile ? "h-screen w-screen p-0 overflow-hidden" : "h-full p-4"
         )} style={{
-          // ✅ UPDATED: Only add taskbar padding on desktop (mobile has no taskbar)
-          paddingBottom: chat.isMobile ? '0px' : '50px' // No taskbar on mobile
+          paddingBottom: chat.isMobile ? '0px' : '50px'
         }}>
           <div className={cn(
             'window flex flex-col relative',
@@ -131,9 +152,8 @@ const ChatPageClientContent: React.FC = () => {
             chat.isMobile ? 'h-full w-full overflow-hidden' : ''
           )} style={{
             ...chat.chatWindowStyle,
-            // ✅ UPDATED: No height adjustment needed on mobile (no taskbar)
             ...(chat.isMobile && {
-              height: '100vh', // Full height on mobile
+              height: '100vh',
               maxHeight: '100vh'
             })
           }}>
@@ -157,48 +177,71 @@ const ChatPageClientContent: React.FC = () => {
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ChatWindow
-                messages={chat.mappedMessages || []} // ✅ SAFETY: Ensure messages is always an array
-                onSendMessage={chat.chatActions.handleSendMessage}
-                inputValue={chat.chatState.currentMessage || ''} // ✅ SAFETY: Ensure string
+                messages={chat.mappedMessages || []}
+                onSendMessage={handleSendMessage}
+                inputValue={chat.chatState.currentMessage || ''}
                 onInputChange={chat.chatActions.handleInputChange}
-                isPartnerTyping={chat.chatState.isPartnerTyping || false} // ✅ SAFETY: Ensure boolean
+                isPartnerTyping={chat.chatState.isPartnerTyping || false}
                 partnerStatus={chat.chatState.partnerInfo?.status || 'offline'}
                 partnerInfo={chat.memoizedPartnerInfo}
                 ownInfo={chat.memoizedOwnInfo}
-                isConnected={chat.socket.isConnected || false} // ✅ SAFETY: Ensure boolean
-                isPartnerConnected={chat.chatState.isPartnerConnected || false} // ✅ SAFETY: Ensure boolean
+                isConnected={chat.socket.isConnected || false}
+                isPartnerConnected={chat.chatState.isPartnerConnected || false}
                 theme={chat.effectivePageTheme}
                 onUsernameClick={chat.handleUsernameClick}
                 isMobile={chat.isMobile}
                 isScrollEnabled={chat.isScrollEnabled}
-                onFindOrDisconnect={chat.chatActions.handleFindOrDisconnect}
-                findOrDisconnectDisabled={!chat.socket.isConnected || !!chat.socket.connectionError}
-                findOrDisconnectText={
-                  chat.chatState.isPartnerConnected 
-                    ? (chat.isMobile ? 'Skip' : 'Skip') 
-                    : chat.chatState.isFindingPartner 
-                      ? (chat.isMobile ? 'Stop' : 'Stop') 
-                      : (chat.isMobile ? 'Find' : 'Find')
-                }
+                onFindOrDisconnect={handleFindOrDisconnect}
+                findOrDisconnectDisabled={isButtonDisabled}
+                findOrDisconnectText={getButtonText()}
               />
             </div>
 
-            {/* ✅ Enhanced connection error display */}
+            {/* ✅ FIXED: Enhanced connection error display */}
             {chat.socket.connectionError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+              <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
                 <span>Connection Error: {chat.socket.connectionError}</span>
                 <button 
-                  onClick={() => chat.socket.forceReconnect()}
-                  className="ml-2 px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                  onClick={chat.socket.reconnect}
+                  className="ml-2 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
                 >
                   Retry
                 </button>
               </div>
             )}
+
+            {/* ✅ NEW: Skip notification display */}
+            {chat.wasSkippedByPartner && (
+              <div className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-600 text-yellow-700 dark:text-yellow-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+                <span>You were skipped by your chat partner</span>
+                <button 
+                  onClick={chat.chatActions.startNewChat}
+                  className="ml-2 px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
+                >
+                  New Chat
+                </button>
+              </div>
+            )}
+
+            {/* ✅ NEW: Search status display */}
+            {chat.chatState.isFindingPartner && (
+              <div className="bg-blue-100 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+                <span>
+                  {chat.interests.length > 0 
+                    ? `Searching for someone with interests: ${chat.interests.slice(0, 2).join(', ')}...`
+                    : 'Searching for someone to chat with...'
+                  }
+                </span>
+                <button 
+                  onClick={chat.chatActions.stopSearching}
+                  className="ml-2 px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+                >
+                  Stop
+                </button>
+              </div>
+            )}
           </div>
         </div>
-
-    
         
         {/* ✅ TaskBar with audio controls */}
         <TaskBar />
@@ -208,5 +251,3 @@ const ChatPageClientContent: React.FC = () => {
 };
 
 export default ChatPageClientContent;
-
-// hi

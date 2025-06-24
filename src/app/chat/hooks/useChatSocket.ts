@@ -1,181 +1,390 @@
-// src/app/chat/hooks/useChatSocket.ts - COMPLETE FIXED VERSION
+// src/app/chat/hooks/useChatSocket.ts - COMPLETELY FIXED SOCKET CONNECTION
 
-import { useEffect, useRef, useCallback } from 'react';
-import { useSocketCore } from './useSocketCore';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { useSocketEvents } from './useSocketEvents';
-import { useSocketEmitters } from './useSocketEmitters';
 
-interface UseChatSocketParams {
-  onMessage: (msg: any) => void;
-  onPartnerFound: (partner: any) => void;
+interface SocketHandlers {
+  onMessage: (data: any) => void;
+  onPartnerFound: (data: any) => void;
   onPartnerLeft: () => void;
   onPartnerSkipped: (data: any) => void;
   onSkipConfirmed: (data: any) => void;
+  onSearchStarted: (data: any) => void;
+  onSearchStopped: (data: any) => void;
   onStatusChange: (status: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
-  onWaiting: () => void;
-  onCooldown: () => void;
-  onDisconnectHandler: (reason: string) => void;
-  onConnectErrorHandler: (err: Error) => void;
-  authId?: string | null;
-  roomId?: string | null;
-  onWebRTCSignal?: (signalData: any) => void;
+  onWaiting: (data: any) => void;
+  onCooldown: (data: any) => void;
+  onAlreadySearching: (data: any) => void;
+  onSearchError: (data: any) => void;
+  onDisconnectHandler?: () => void;
+  onConnectErrorHandler?: () => void;
+  authId: string | null;
 }
 
-export function useChatSocket(params: UseChatSocketParams) {
-  const roomIdRef = useRef<string | null>(params.roomId || null);
-  const isInitializedRef = useRef(false);
+interface UseChatSocketReturn {
+  socket: Socket | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  connectionError: string | null;
+  roomId: string | null;
   
-  // Core socket management with proper server URL
-  const socketCore = useSocketCore({
-    socketServerUrl: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001',
-    onConnect: () => {
-      console.log('[ChatSocket] Connected successfully');
-    },
-    onDisconnect: (reason: string) => {
-      roomIdRef.current = null;
-      params.onDisconnectHandler(reason);
-    },
-    onConnectError: (error: Error) => {
-      params.onConnectErrorHandler(error);
-    },
-    debug: process.env.NODE_ENV === 'development'
-  });
-
-  // Event management with stable handlers including onSkipConfirmed
-  const socketEvents = useSocketEvents({
-    onMessage: params.onMessage,
-    onPartnerFound: params.onPartnerFound,
-    onPartnerLeft: params.onPartnerLeft,
-    onPartnerSkipped: params.onPartnerSkipped,
-    onSkipConfirmed: params.onSkipConfirmed,
-    onStatusChange: params.onStatusChange,
-    onTypingStart: params.onTypingStart,
-    onTypingStop: params.onTypingStop,
-    onWaiting: params.onWaiting,
-    onCooldown: params.onCooldown,
-    onWebRTCSignal: params.onWebRTCSignal
-  });
-
-  // Event management with stable handlers
-  const setupEventsCallback = useCallback((socket: any, roomIdRef: any) => {
-    return socketEvents.setupEvents(socket, roomIdRef);
-  }, [socketEvents]);
-
   // Emit functions
-  const emitters = useSocketEmitters(socketCore.socket, roomIdRef);
+  emitFindPartner: (data: any) => void;
+  emitStopSearching: () => void;
+  emitSkipPartner: () => void;
+  emitLeaveChat: () => void;
+  emitMessage: (data: any) => void;
+  emitTypingStart: () => void;
+  emitTypingStop: () => void;
+  
+  // Connection management
+  reconnect: () => void;
+  disconnect: () => void;
+}
 
-  // Update room ID reference
-  useEffect(() => {
-    roomIdRef.current = params.roomId || null;
-  }, [params.roomId]);
+export const useChatSocket = (handlers: SocketHandlers): UseChatSocketReturn => {
+  // Socket state
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
 
-  // Single initialization effect with proper cleanup
+  // Refs for state management
+  const roomIdRef = useRef<string | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
+  const isManualDisconnectRef = useRef(false);
+
+  // Socket events handler
+  const { setupEvents, cleanupEvents } = useSocketEvents(handlers);
+
+  // ✅ CRITICAL: Enhanced socket connection with proper error handling
+  const connectSocket = useCallback(() => {
+    if (socket?.connected) {
+      console.log('[ChatSocket] Already connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 🔌 Connecting to chat server...');
+    setIsConnecting(true);
+    setConnectionError(null);
+
+    try {
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+        transports: ['websocket', 'polling'],
+        timeout: 10000,
+        retries: 3,
+        auth: {
+          authId: handlers.authId
+        },
+        query: {
+          clientType: 'web',
+          version: '1.0.0'
+        }
+      });
+
+      // ✅ CRITICAL: Connection event handlers
+      newSocket.on('connect', () => {
+        console.log('[ChatSocket] ✅ Connected to server:', newSocket.id);
+        setIsConnected(true);
+        setIsConnecting(false);
+        setConnectionError(null);
+        reconnectAttemptsRef.current = 0;
+
+        // Authenticate if we have authId
+        if (handlers.authId) {
+          newSocket.emit('authenticate', {
+            authId: handlers.authId,
+            clientInfo: {
+              userAgent: navigator.userAgent,
+              timestamp: Date.now()
+            }
+          });
+        }
+      });
+
+      newSocket.on('disconnect', (reason: string) => {
+        console.log('[ChatSocket] 🔌 Disconnected:', reason);
+        setIsConnected(false);
+        setIsConnecting(false);
+        roomIdRef.current = null;
+        setRoomId(null);
+        
+        if (handlers.onDisconnectHandler) {
+          handlers.onDisconnectHandler();
+        }
+
+        // Auto-reconnect for non-manual disconnections
+        if (!isManualDisconnectRef.current && reason !== 'io client disconnect') {
+          handleReconnect();
+        }
+      });
+
+      newSocket.on('connect_error', (error: any) => {
+        console.error('[ChatSocket] ❌ Connection error:', error);
+        setIsConnecting(false);
+        setConnectionError(error.message || 'Connection failed');
+        
+        if (handlers.onConnectErrorHandler) {
+          handlers.onConnectErrorHandler();
+        }
+
+        // Auto-reconnect on connection error
+        if (!isManualDisconnectRef.current) {
+          handleReconnect();
+        }
+      });
+
+      // ✅ Setup all chat event handlers
+      setupEvents(newSocket, roomIdRef);
+
+      // ✅ Handle room state changes
+      newSocket.on('roomJoined', (data: any) => {
+        if (data?.roomId) {
+          roomIdRef.current = data.roomId;
+          setRoomId(data.roomId);
+          console.log('[ChatSocket] 🏠 Joined room:', data.roomId);
+        }
+      });
+
+      newSocket.on('roomLeft', (data: any) => {
+        roomIdRef.current = null;
+        setRoomId(null);
+        console.log('[ChatSocket] 🏠 Left room:', data?.roomId);
+      });
+
+      // ✅ Handle authentication responses
+      newSocket.on('authSuccess', (data: any) => {
+        console.log('[ChatSocket] 🔐 Authentication successful:', data);
+      });
+
+      newSocket.on('authError', (data: any) => {
+        console.error('[ChatSocket] ❌ Authentication failed:', data);
+        setConnectionError('Authentication failed');
+      });
+
+      setSocket(newSocket);
+
+    } catch (error) {
+      console.error('[ChatSocket] ❌ Socket creation failed:', error);
+      setIsConnecting(false);
+      setConnectionError('Failed to create socket connection');
+    }
+  }, [socket, handlers.authId, setupEvents, handlers.onDisconnectHandler, handlers.onConnectErrorHandler]);
+
+  // ✅ Reconnection logic with exponential backoff
+  const handleReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log('[ChatSocket] 🚫 Max reconnection attempts reached');
+      setConnectionError('Unable to connect after multiple attempts');
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+    reconnectAttemptsRef.current++;
+
+    console.log(`[ChatSocket] 🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      if (!isManualDisconnectRef.current) {
+        connectSocket();
+      }
+    }, delay);
+  }, [connectSocket]);
+
+  // ✅ CRITICAL: Emit functions with proper error handling and validation
+  const emitFindPartner = useCallback((data: any) => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot find partner - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 🔍 Emitting findPartner:', data);
+    socket.emit('findPartner', {
+      interests: data.interests || [],
+      authId: data.authId,
+      username: data.username,
+      autoSearch: data.autoSearch || false,
+      manualSearch: data.manualSearch || false,
+      sessionId: data.sessionId,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitStopSearching = useCallback(() => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot stop searching - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 🛑 Emitting stopSearching');
+    socket.emit('stopSearching', {
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitSkipPartner = useCallback(() => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot skip partner - not connected');
+      return;
+    }
+
+    if (!roomIdRef.current) {
+      console.error('[ChatSocket] ❌ Cannot skip partner - not in room');
+      return;
+    }
+
+    console.log('[ChatSocket] ⏭️ Emitting skipPartner for room:', roomIdRef.current);
+    socket.emit('skipPartner', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitLeaveChat = useCallback(() => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot leave chat - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 👋 Emitting leaveChat');
+    socket.emit('leaveChat', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+    
+    // Clear room immediately
+    roomIdRef.current = null;
+    setRoomId(null);
+  }, [socket]);
+
+  const emitMessage = useCallback((data: any) => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot send message - not connected');
+      return;
+    }
+
+    if (!roomIdRef.current) {
+      console.error('[ChatSocket] ❌ Cannot send message - not in room');
+      return;
+    }
+
+    console.log('[ChatSocket] 📤 Emitting message to room:', roomIdRef.current);
+    socket.emit('sendMessage', {
+      message: data.message,
+      roomId: roomIdRef.current,
+      authId: data.authId,
+      username: data.username,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitTypingStart = useCallback(() => {
+    if (!socket?.connected || !roomIdRef.current) return;
+    
+    socket.emit('typing_start', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitTypingStop = useCallback(() => {
+    if (!socket?.connected || !roomIdRef.current) return;
+    
+    socket.emit('typing_stop', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  // ✅ Manual reconnect function
+  const reconnect = useCallback(() => {
+    console.log('[ChatSocket] 🔄 Manual reconnect triggered');
+    
+    isManualDisconnectRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    
+    if (socket) {
+      cleanupEvents(socket);
+      socket.disconnect();
+    }
+    
+    setSocket(null);
+    setIsConnected(false);
+    setConnectionError(null);
+    
+    setTimeout(connectSocket, 100);
+  }, [socket, cleanupEvents, connectSocket]);
+
+  // ✅ Manual disconnect function
+  const disconnect = useCallback(() => {
+    console.log('[ChatSocket] 🔌 Manual disconnect');
+    
+    isManualDisconnectRef.current = true;
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (socket) {
+      cleanupEvents(socket);
+      socket.disconnect();
+    }
+    
+    setSocket(null);
+    setIsConnected(false);
+    setIsConnecting(false);
+    roomIdRef.current = null;
+    setRoomId(null);
+  }, [socket, cleanupEvents]);
+
+  // ✅ Initialize socket connection
   useEffect(() => {
-    if (isInitializedRef.current) return;
-    
-    console.log('[ChatSocket] Initializing socket connection');
-    isInitializedRef.current = true;
-    
-    // Initialize socket connection
-    const cleanup = socketCore.initializeSocket();
+    connectSocket();
     
     return () => {
-      isInitializedRef.current = false;
-      if (cleanup) cleanup();
-    };
-  }, []); // Empty deps - initialize once
-
-  // Setup events when socket is available
-  useEffect(() => {
-    if (socketCore.socket && socketCore.isInitialized) {
-      console.log('[ChatSocket] Setting up socket events');
+      isManualDisconnectRef.current = true;
       
-      // Setup WebRTC global function if needed
-      if (params.onWebRTCSignal) {
-        (window as any).videoChatEmitWebRTCSignal = (data: any) => {
-          if (socketCore.socket?.connected && roomIdRef.current && data?.signalData) {
-            socketCore.socket.emit('webrtcSignal', {
-              roomId: roomIdRef.current,
-              signalData: data.signalData
-            });
-          }
-        };
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
       }
-
-      const cleanup = setupEventsCallback(socketCore.socket, roomIdRef);
       
-      return () => {
-        cleanup();
-        if (params.onWebRTCSignal) {
-          delete (window as any).videoChatEmitWebRTCSignal;
-        }
-      };
-    }
-  }, [socketCore.socket, socketCore.isInitialized, setupEventsCallback, params.onWebRTCSignal]);
+      if (socket) {
+        cleanupEvents(socket);
+        socket.disconnect();
+      }
+    };
+  }, []);
 
-  // Utility functions
-  const getOnlineUserCount = useCallback(() => {
-    if (socketCore.socket?.connected) {
-      socketCore.socket.emit('getOnlineUserCount');
-      return true;
-    }
-    return false;
-  }, [socketCore.socket]);
-  
-  const emitDebugRequest = useCallback(() => {
-    if (socketCore.socket?.connected) {
-      socketCore.socket.emit('getDebugInfo');
-      return true;
-    }
-    return false;
-  }, [socketCore.socket]);
-  
-  const checkConnectionHealth = useCallback(() => {
-    if (!socketCore.socket?.connected) {
-      return { healthy: false, reason: 'not_connected' };
-    }
-
-    const lastPong = (socketCore.socket as any).conn?.lastPong;
-    const now = Date.now();
-    const timeSinceLastPong = lastPong ? now - lastPong : 0;
-
-    if (timeSinceLastPong > 90000) { // 90 seconds
-      return { healthy: false, reason: 'stale_connection', timeSinceLastPong };
-    }
-
-    return { healthy: true, timeSinceLastPong };
-  }, [socketCore.socket]);
-  
-  const getConnectionInfo = useCallback(() => ({
-    isConnected: socketCore.isConnected,
-    isConnecting: socketCore.isConnecting,
-    connectionError: socketCore.connectionError,
-    socketId: socketCore.socket?.id || null,
-    roomId: roomIdRef.current,
-    transport: socketCore.socket?.io?.engine?.transport?.name || null
-  }), [socketCore.isConnected, socketCore.isConnecting, socketCore.connectionError, socketCore.socket]);
+  // ✅ Update room state
+  useEffect(() => {
+    setRoomId(roomIdRef.current);
+  }, []);
 
   return {
-    // Core state
-    socket: socketCore.socket,
-    isConnected: socketCore.isConnected,
-    connectionError: socketCore.connectionError,
-    isConnecting: socketCore.isConnecting,
-    roomId: roomIdRef.current,
+    socket,
+    isConnected,
+    isConnecting,
+    connectionError,
+    roomId,
     
-    // Emitters
-    ...emitters,
+    // Emit functions
+    emitFindPartner,
+    emitStopSearching,
+    emitSkipPartner,
+    emitLeaveChat,
+    emitMessage,
+    emitTypingStart,
+    emitTypingStop,
     
-    // Utility functions
-    getOnlineUserCount,
-    emitDebugRequest,
-    checkConnectionHealth,
-    getConnectionInfo,
-    
-    // Core functions
-    forceReconnect: socketCore.forceReconnect,
-    destroySocket: socketCore.destroySocket
+    // Connection management
+    reconnect,
+    disconnect
   };
-}
+};

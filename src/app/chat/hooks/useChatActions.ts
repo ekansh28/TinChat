@@ -1,10 +1,20 @@
-// src/app/chat/hooks/useChatActions.ts - WITH MESSAGE SOUNDS
+// src/app/chat/hooks/useChatActions.ts - COMPLETELY FIXED CHAT ACTIONS
 
-import { useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
+import { useCallback, useRef, useEffect } from 'react';
 
-interface ChatActionsProps {
+interface Message {
+  id: string;
+  text: string;
+  sender: 'me' | 'partner' | 'system';
+  timestamp: Date;
+  senderUsername?: string;
+  senderAuthId?: string;
+  senderDisplayNameColor?: string;
+  senderDisplayNameAnimation?: string;
+  senderRainbowSpeed?: number;
+}
+
+interface UseChatActionsProps {
   isConnected: boolean;
   isPartnerConnected: boolean;
   isFindingPartner: boolean;
@@ -17,245 +27,458 @@ interface ChatActionsProps {
   setIsPartnerLeftRecently: (value: boolean) => void;
   setDidSkipPartner: (value: boolean) => void;
   setUserManuallyStopped: (value: boolean) => void;
-  addMessage: (message: any) => void;
-  addSystemMessage: (text: string) => void;
+  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
+  addSystemMessage: (text: string, type?: 'info' | 'warning' | 'error' | 'success') => void;
   emitLeaveChat: () => void;
-  emitSkipPartner: (data: any) => void;
-  emitStopSearching: (data?: any) => void;
+  emitSkipPartner: () => void;
+  emitStopSearching: () => void;
   emitFindPartner: (data: any) => void;
   emitMessage: (data: any) => void;
   emitTypingStart: () => void;
   emitTypingStop: () => void;
-  setCurrentMessage: (value: string) => void;
+  setCurrentMessage: (message: string) => void;
   interests: string[];
   authId: string | null;
   username: string | null;
 }
 
-export const useChatActions = (props: ChatActionsProps) => {
-  const { toast } = useToast();
-  const isProcessingFindOrDisconnect = useRef(false);
-  
-  // Store props in ref to prevent callback recreation
-  const propsRef = useRef(props);
-  propsRef.current = props;
+export const useChatActions = ({
+  isConnected,
+  isPartnerConnected,
+  isFindingPartner,
+  setIsFindingPartner,
+  setIsPartnerConnected,
+  setPartnerInfo,
+  setIsPartnerTyping,
+  setPartnerInterests,
+  setIsSelfDisconnectedRecently,
+  setIsPartnerLeftRecently,
+  setDidSkipPartner,
+  setUserManuallyStopped,
+  addMessage,
+  addSystemMessage,
+  emitLeaveChat,
+  emitSkipPartner,
+  emitStopSearching,
+  emitFindPartner,
+  emitMessage,
+  emitTypingStart,
+  emitTypingStop,
+  setCurrentMessage,
+  interests,
+  authId,
+  username
+}: UseChatActionsProps) => {
 
-  // Skip function with auto-search for skipper
-  const handleSkipPartner = useCallback(() => {
-    const currentProps = propsRef.current;
+  const lastActionRef = useRef<number>(0);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
+
+  // ✅ CRITICAL: Fixed skip partner logic
+  const skipPartner = useCallback(() => {
+    const now = Date.now();
     
-    if (isProcessingFindOrDisconnect.current) return;
-    if (!currentProps.isConnected) {
-      toast({ 
-        title: "Not Connected", 
-        description: "Chat server connection not yet established.", 
-        variant: "destructive" 
-      });
+    // Prevent spam clicking
+    if (now - lastActionRef.current < 1000) {
+      console.log('[ChatActions] 🚫 Skip action throttled');
       return;
     }
 
-    if (!currentProps.isPartnerConnected) {
-      toast({ 
-        title: "No Partner", 
-        description: "No partner to skip.", 
-        variant: "destructive" 
-      });
+    if (!isConnected) {
+      console.log('[ChatActions] 🚫 Cannot skip - not connected to server');
+      addSystemMessage('Not connected to server', 'error');
       return;
     }
 
-    isProcessingFindOrDisconnect.current = true;
-
-    console.log('[ChatActions] Skipping partner and auto-searching');
-    
-    // Set skip state immediately and reset manual stop
-    currentProps.setDidSkipPartner(true);
-    currentProps.setUserManuallyStopped(false);
-    
-    // Emit skip event
-    currentProps.emitSkipPartner({
-      chatType: 'text',
-      interests: currentProps.interests,
-      authId: currentProps.authId,
-      reason: 'skip'
-    });
-
-    // Update local state immediately (server will handle auto-search)
-    currentProps.setIsPartnerConnected(false);
-    currentProps.setPartnerInfo(null);
-    currentProps.setIsPartnerTyping(false);
-    currentProps.setPartnerInterests([]);
-    
-    // Clear other states but set skip state
-    currentProps.setIsSelfDisconnectedRecently(false);
-    currentProps.setIsPartnerLeftRecently(false);
-    
-    // The server should handle the auto-search and send skipConfirmed
-    // Don't manually set isFindingPartner here - wait for server response
-
-    setTimeout(() => {
-      isProcessingFindOrDisconnect.current = false;
-    }, 200);
-  }, [toast]);
-
-  // Disconnect function for manual disconnects (no auto-search)
-  const handleDisconnectPartner = useCallback(() => {
-    const currentProps = propsRef.current;
-    
-    if (isProcessingFindOrDisconnect.current) return;
-    if (!currentProps.isConnected) return;
-
-    if (!currentProps.isPartnerConnected) return;
-
-    isProcessingFindOrDisconnect.current = true;
-
-    console.log('[ChatActions] Manually disconnecting from partner');
-    
-    // Regular leave chat (no auto-search)
-    currentProps.emitLeaveChat();
-    
-    currentProps.addSystemMessage('You have disconnected.');
-    currentProps.setIsPartnerConnected(false);
-    currentProps.setPartnerInfo(null);
-    currentProps.setIsPartnerTyping(false);
-    currentProps.setPartnerInterests([]);
-    currentProps.setIsSelfDisconnectedRecently(true);
-    currentProps.setIsPartnerLeftRecently(false);
-    currentProps.setDidSkipPartner(false);
-    currentProps.setUserManuallyStopped(false);
-    currentProps.setIsFindingPartner(false); // Do NOT auto-search
-
-    setTimeout(() => {
-      isProcessingFindOrDisconnect.current = false;
-    }, 200);
-  }, []);
-
-  // Main find/disconnect handler with skip logic and manual stop tracking
-  const handleFindOrDisconnect = useCallback(() => {
-    const currentProps = propsRef.current;
-    
-    if (isProcessingFindOrDisconnect.current) return;
-    if (!currentProps.isConnected) {
-      toast({ 
-        title: "Not Connected", 
-        description: "Chat server connection not yet established.", 
-        variant: "destructive" 
-      });
+    if (!isPartnerConnected) {
+      console.log('[ChatActions] 🚫 No partner to skip');
+      addSystemMessage('No partner to skip', 'warning');
       return;
     }
 
-    isProcessingFindOrDisconnect.current = true;
+    console.log('[ChatActions] ⏭️ Skipping partner...');
+    lastActionRef.current = now;
 
-    if (currentProps.isPartnerConnected) {
-      // Use skip function when connected to a partner
-      console.log('[ChatActions] Skipping current partner via find/disconnect button');
-      
-      // Set skip state immediately and reset manual stop
-      currentProps.setDidSkipPartner(true);
-      currentProps.setUserManuallyStopped(false);
-      
-      currentProps.emitSkipPartner({
-        chatType: 'text',
-        interests: currentProps.interests,
-        authId: currentProps.authId,
-        reason: 'skip'
-      });
-
-      // Update local state - server will handle auto-search
-      currentProps.setIsPartnerConnected(false);
-      currentProps.setPartnerInfo(null);
-      currentProps.setIsPartnerTyping(false);
-      currentProps.setPartnerInterests([]);
-      
-      currentProps.setIsSelfDisconnectedRecently(false);
-      currentProps.setIsPartnerLeftRecently(false);
-      
-      // Don't manually set isFindingPartner - wait for server response
-      
-    } else if (currentProps.isFindingPartner) {
-      // ✅ CRITICAL: User manually stopped searching - mark it and notify server!
-      console.log('[ChatActions] User manually stopped searching');
-      
-      // ✅ CRITICAL: Notify server to remove from queue
-      currentProps.emitStopSearching({
-        authId: currentProps.authId,
-        reason: 'manual_stop'
-      });
-      
-      currentProps.setIsFindingPartner(false);
-      currentProps.setUserManuallyStopped(true);
-      currentProps.setIsSelfDisconnectedRecently(false);
-      currentProps.setIsPartnerLeftRecently(false);
-      currentProps.setDidSkipPartner(false);
-      currentProps.addSystemMessage('Stopped searching for a partner.');
-    } else {
-      // Start searching - reset manual stop flag
-      console.log('[ChatActions] User manually started searching');
-      currentProps.setIsFindingPartner(true);
-      currentProps.setUserManuallyStopped(false);
-      currentProps.setIsSelfDisconnectedRecently(false);
-      currentProps.setIsPartnerLeftRecently(false);
-      currentProps.setDidSkipPartner(false);
-      currentProps.addSystemMessage('Searching for a partner...');
-      
-      currentProps.emitFindPartner({
-        chatType: 'text',
-        interests: currentProps.interests,
-        authId: currentProps.authId
-      });
-    }
-    
-    setTimeout(() => {
-      isProcessingFindOrDisconnect.current = false;
-    }, 200);
-  }, [toast]);
-
-  // ✅ UPDATED: Message handler with send sound
-  const handleSendMessage = useCallback((message: string) => {
-    const currentProps = propsRef.current;
-    
-    if (!currentProps.isPartnerConnected) return;
-
-    currentProps.addMessage({
-      text: message,
-      sender: 'me'
-    });
-
-    currentProps.emitMessage({
-      roomId: '',
-      message: message,
-      username: currentProps.username,
-      authId: currentProps.authId
-    });
-
-    currentProps.emitTypingStop();
-
-    // ✅ NEW: Play send sound
     try {
-      const audioManager = getAudioManager();
-      audioManager.playMessageSent();
+      // ✅ CRITICAL: Emit skip and let server handle the logic
+      emitSkipPartner();
+      
+      // ✅ IMPORTANT: Immediately update local state
+      setIsPartnerConnected(false);
+      setPartnerInfo(null);
+      setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      
+      // ✅ CRITICAL: Mark as "did skip" but don't set "finding partner" yet
+      // Let the server response handle auto-search state
+      setDidSkipPartner(true);
+      setIsPartnerLeftRecently(false);
+      setIsSelfDisconnectedRecently(false);
+      setUserManuallyStopped(false);
+      
+      console.log('[ChatActions] ✅ Skip request sent, waiting for server response');
+      
     } catch (error) {
-      console.warn('[ChatActions] Failed to play send sound:', error);
+      console.error('[ChatActions] ❌ Skip partner failed:', error);
+      addSystemMessage('Failed to skip partner', 'error');
     }
-  }, []);
+  }, [
+    isConnected,
+    isPartnerConnected,
+    emitSkipPartner,
+    setIsPartnerConnected,
+    setPartnerInfo,
+    setIsPartnerTyping,
+    setPartnerInterests,
+    setDidSkipPartner,
+    setIsPartnerLeftRecently,
+    setIsSelfDisconnectedRecently,
+    setUserManuallyStopped,
+    addSystemMessage
+  ]);
 
-  // Input change handler with typing management
-  const handleInputChange = useCallback((value: string) => {
-    const currentProps = propsRef.current;
+  // ✅ CRITICAL: Fixed leave chat logic
+  const leaveChat = useCallback(() => {
+    const now = Date.now();
     
-    currentProps.setCurrentMessage(value);
-    
-    if (value.trim() && currentProps.isPartnerConnected) {
-      currentProps.emitTypingStart();
-    } else {
-      currentProps.emitTypingStop();
+    if (now - lastActionRef.current < 1000) {
+      console.log('[ChatActions] 🚫 Leave action throttled');
+      return;
     }
-  }, []);
+
+    if (!isConnected) {
+      console.log('[ChatActions] 🚫 Cannot leave - not connected to server');
+      return;
+    }
+
+    console.log('[ChatActions] 👋 Leaving chat...');
+    lastActionRef.current = now;
+
+    try {
+      // Update state immediately
+      setIsPartnerConnected(false);
+      setPartnerInfo(null);
+      setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      setIsFindingPartner(false);
+      
+      // Mark as self-disconnected
+      setIsSelfDisconnectedRecently(true);
+      setIsPartnerLeftRecently(false);
+      setDidSkipPartner(false);
+      setUserManuallyStopped(true);
+      
+      // Emit leave event
+      emitLeaveChat();
+      
+      console.log('[ChatActions] ✅ Left chat successfully');
+      
+    } catch (error) {
+      console.error('[ChatActions] ❌ Leave chat failed:', error);
+      addSystemMessage('Failed to leave chat', 'error');
+    }
+  }, [
+    isConnected,
+    emitLeaveChat,
+    setIsPartnerConnected,
+    setPartnerInfo,
+    setIsPartnerTyping,
+    setPartnerInterests,
+    setIsFindingPartner,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently,
+    setDidSkipPartner,
+    setUserManuallyStopped,
+    addSystemMessage
+  ]);
+
+  // ✅ CRITICAL: Fixed new chat logic
+  const startNewChat = useCallback(() => {
+    const now = Date.now();
+    
+    if (now - lastActionRef.current < 1000) {
+      console.log('[ChatActions] 🚫 New chat action throttled');
+      return;
+    }
+
+    if (!isConnected) {
+      console.log('[ChatActions] 🚫 Cannot start new chat - not connected to server');
+      addSystemMessage('Not connected to server', 'error');
+      return;
+    }
+
+    if (isFindingPartner) {
+      console.log('[ChatActions] 🚫 Already searching for a partner');
+      addSystemMessage('Already searching for a partner', 'warning');
+      return;
+    }
+
+    if (isPartnerConnected) {
+      console.log('[ChatActions] 🚫 Already connected to a partner');
+      addSystemMessage('Already connected to a partner', 'warning');
+      return;
+    }
+
+    console.log('[ChatActions] 🔍 Starting new chat search...');
+    lastActionRef.current = now;
+
+    try {
+      // Clear all previous states
+      setIsPartnerConnected(false);
+      setPartnerInfo(null);
+      setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
+      setDidSkipPartner(false);
+      setUserManuallyStopped(false);
+      
+      // Start finding partner
+      setIsFindingPartner(true);
+      
+      emitFindPartner({
+        interests: interests || [],
+        authId: authId,
+        username: username,
+        manualSearch: true
+      });
+      
+      console.log('[ChatActions] ✅ New chat search started');
+      
+    } catch (error) {
+      console.error('[ChatActions] ❌ Start new chat failed:', error);
+      setIsFindingPartner(false);
+      addSystemMessage('Failed to start new chat', 'error');
+    }
+  }, [
+    isConnected,
+    isFindingPartner,
+    isPartnerConnected,
+    emitFindPartner,
+    setIsFindingPartner,
+    setIsPartnerConnected,
+    setPartnerInfo,
+    setIsPartnerTyping,
+    setPartnerInterests,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently,
+    setDidSkipPartner,
+    setUserManuallyStopped,
+    addSystemMessage,
+    interests,
+    authId,
+    username
+  ]);
+
+  // ✅ CRITICAL: Fixed stop searching logic
+  const stopSearching = useCallback(() => {
+    const now = Date.now();
+    
+    if (now - lastActionRef.current < 500) {
+      console.log('[ChatActions] 🚫 Stop search action throttled');
+      return;
+    }
+
+    if (!isConnected) {
+      console.log('[ChatActions] 🚫 Cannot stop search - not connected to server');
+      return;
+    }
+
+    if (!isFindingPartner) {
+      console.log('[ChatActions] 🚫 Not currently searching');
+      return;
+    }
+
+    console.log('[ChatActions] 🛑 Stopping search...');
+    lastActionRef.current = now;
+
+    try {
+      // Update state immediately
+      setIsFindingPartner(false);
+      setUserManuallyStopped(true);
+      
+      // Clear any partner-related states
+      setIsPartnerConnected(false);
+      setPartnerInfo(null);
+      setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      
+      // Emit stop searching
+      emitStopSearching();
+      
+      console.log('[ChatActions] ✅ Search stopped successfully');
+      
+    } catch (error) {
+      console.error('[ChatActions] ❌ Stop searching failed:', error);
+      addSystemMessage('Failed to stop search', 'error');
+    }
+  }, [
+    isConnected,
+    isFindingPartner,
+    emitStopSearching,
+    setIsFindingPartner,
+    setUserManuallyStopped,
+    setIsPartnerConnected,
+    setPartnerInfo,
+    setIsPartnerTyping,
+    setPartnerInterests,
+    addSystemMessage
+  ]);
+
+  // ✅ CRITICAL: Fixed send message logic
+  const sendMessage = useCallback((messageText: string) => {
+    if (!messageText.trim()) {
+      console.log('[ChatActions] 🚫 Empty message');
+      return;
+    }
+
+    if (!isConnected) {
+      console.log('[ChatActions] 🚫 Cannot send message - not connected to server');
+      addSystemMessage('Not connected to server', 'error');
+      return;
+    }
+
+    if (!isPartnerConnected) {
+      console.log('[ChatActions] 🚫 Cannot send message - no partner connected');
+      addSystemMessage('No partner connected', 'warning');
+      return;
+    }
+
+    console.log('[ChatActions] 📤 Sending message...');
+
+    try {
+      // Add message to local state immediately
+      addMessage({
+        text: messageText.trim(),
+        sender: 'me',
+        senderUsername: username || 'You',
+        senderAuthId: authId || undefined
+      });
+
+      // Emit message to server
+      emitMessage({
+        message: messageText.trim(),
+        authId: authId,
+        username: username
+      });
+
+      // Clear current message
+      setCurrentMessage('');
+
+      // Stop typing indicator
+      if (isTypingRef.current) {
+        emitTypingStop();
+        isTypingRef.current = false;
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
+      }
+
+      console.log('[ChatActions] ✅ Message sent successfully');
+
+    } catch (error) {
+      console.error('[ChatActions] ❌ Send message failed:', error);
+      addSystemMessage('Failed to send message', 'error');
+    }
+  }, [
+    isConnected,
+    isPartnerConnected,
+    addMessage,
+    emitMessage,
+    emitTypingStop,
+    setCurrentMessage,
+    addSystemMessage,
+    authId,
+    username
+  ]);
+
+  // ✅ CRITICAL: Fixed typing indicators
+  const handleTypingStart = useCallback(() => {
+    if (!isConnected || !isPartnerConnected || isTypingRef.current) {
+      return;
+    }
+
+    console.log('[ChatActions] ⌨️ Started typing');
+    
+    isTypingRef.current = true;
+    emitTypingStart();
+
+    // Auto-stop typing after 3 seconds of no activity
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTypingRef.current) {
+        handleTypingStop();
+      }
+    }, 3000);
+  }, [isConnected, isPartnerConnected, emitTypingStart]);
+
+  const handleTypingStop = useCallback(() => {
+    if (!isTypingRef.current) {
+      return;
+    }
+
+    console.log('[ChatActions] ⌨️ Stopped typing');
+    
+    isTypingRef.current = false;
+    emitTypingStop();
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [emitTypingStop]);
+
+  // ✅ Handle input change with typing indicators
+  const handleInputChange = useCallback((value: string) => {
+    setCurrentMessage(value);
+
+    if (value.trim() && isPartnerConnected) {
+      handleTypingStart();
+    } else {
+      handleTypingStop();
+    }
+  }, [setCurrentMessage, isPartnerConnected, handleTypingStart, handleTypingStop]);
+
+  // ✅ Cleanup typing on unmount
+  const cleanup = useCallback(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    
+    if (isTypingRef.current) {
+      isTypingRef.current = false;
+      try {
+        emitTypingStop();
+      } catch (error) {
+        console.warn('[ChatActions] Failed to stop typing on cleanup:', error);
+      }
+    }
+  }, [emitTypingStop]);
+
+  // ✅ Auto-cleanup on component unmount
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
 
   return {
-    handleFindOrDisconnect,
-    handleSkipPartner,      // Skip with auto-search
-    handleDisconnectPartner, // Disconnect without auto-search
-    handleSendMessage,
-    handleInputChange
+    // Core actions
+    skipPartner,
+    leaveChat,
+    startNewChat,
+    stopSearching,
+    sendMessage,
+    
+    // Typing actions
+    handleTypingStart,
+    handleTypingStop,
+    handleInputChange,
+    
+    // Utility
+    cleanup
   };
 };

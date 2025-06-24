@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useChat.ts - WITH MESSAGE RECEIVE SOUNDS
+// src/app/chat/hooks/useChat.ts - COMPLETELY FIXED VERSION
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
@@ -11,8 +11,8 @@ import { useSystemMessages } from './useSystemMessages';
 import { useChatSocket } from './useChatSocket';
 import { useChatActions } from './useChatActions';
 import { useAutoSearch } from './useAutoSearch';
-import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
-import { playMatchSound } from '../utils/ChatHelpers'; // ✅ NEW: Import enhanced audio functions
+import { getAudioManager } from '../components/TaskBar';
+import { playMatchSound } from '../utils/ChatHelpers';
 
 interface UseChatReturn {
   // State
@@ -84,9 +84,8 @@ export const useChat = (): UseChatReturn => {
   const { isMobile, chatWindowStyle } = useViewport();
   const chatState = useChatState();
 
-  // Socket event handlers
+  // ✅ CRITICAL FIX: Enhanced socket event handlers with proper state management
   const socketHandlers = useMemo(() => ({
-    // ✅ UPDATED: onMessage with receive sound
     onMessage: (data: any) => {
       console.log('[Chat] Handling message:', data);
       
@@ -114,7 +113,7 @@ export const useChat = (): UseChatReturn => {
       
       chatState.setIsPartnerTyping(false);
 
-      // ✅ NEW: Play receive sound
+      // Play receive sound
       try {
         const audioManager = getAudioManager();
         audioManager.playMessageReceived();
@@ -126,9 +125,9 @@ export const useChat = (): UseChatReturn => {
     onPartnerFound: (data: any) => {
       console.log('[Chat] Partner found:', data);
       
-      // ✅ FIXED: Play Match.wav using enhanced audio function
+      // Play match sound
       try {
-        playMatchSound(); // This will use the global audio volume settings
+        playMatchSound();
       } catch (error) {
         console.warn('[Chat] Failed to play match sound:', error);
       }
@@ -152,7 +151,7 @@ export const useChat = (): UseChatReturn => {
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerConnected(true);
       
-      // Reset all skip states and manual stop when new partner found
+      // Reset all skip states when new partner found
       setIsSelfDisconnectedRecently(false);
       setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
@@ -176,39 +175,56 @@ export const useChat = (): UseChatReturn => {
       setUserManuallyStopped(false);
     },
 
-    // Handle being skipped - NO AUTO-SEARCH
+    // ✅ CRITICAL FIX: Handle being skipped by partner properly
     onPartnerSkipped: (data: any) => {
-      console.log('[Chat] You were skipped by partner:', data);
+      console.log('[Chat] ❌ YOU WERE SKIPPED by partner:', data);
       
       chatState.setIsPartnerConnected(false);
       chatState.setPartnerInfo(null);
       chatState.setIsPartnerTyping(false);
       setPartnerInterests([]);
       
-      // Mark as skipped but DO NOT auto-search
+      // ✅ CRITICAL: Mark as skipped and STOP any search
       setWasSkippedByPartner(true);
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
       setDidSkipPartner(false);
       setUserManuallyStopped(false);
       
-      // Stop any current search
+      // ✅ IMPORTANT: Stop searching when skipped
       chatState.setIsFindingPartner(false);
+      
+      console.log('[Chat] State updated after being skipped - search stopped');
     },
 
-    // Handle skip confirmation when YOU skip someone
+    // ✅ NEW: Handle skip confirmation when YOU skip someone
     onSkipConfirmed: (data: any) => {
-      console.log('[Chat] Skip confirmed - you skipped someone:', data);
+      console.log('[Chat] ✅ Skip confirmed - you skipped someone:', data);
       
-      // Mark that this user skipped someone
       setDidSkipPartner(true);
       setWasSkippedByPartner(false);
       setIsPartnerLeftRecently(false);
       setIsSelfDisconnectedRecently(false);
       setUserManuallyStopped(false);
       
-      // The auto-search should already be handled by the server
+      // ✅ IMPORTANT: Auto-search should be handled by server
+      if (data.autoSearchStarted) {
+        chatState.setIsFindingPartner(true);
+        console.log('[Chat] Auto-search started after skip');
+      }
+    },
+
+    // ✅ NEW: Handle search started confirmation
+    onSearchStarted: (data: any) => {
+      console.log('[Chat] 🔍 Search started confirmed:', data);
       chatState.setIsFindingPartner(true);
+    },
+
+    // ✅ NEW: Handle search stopped confirmation  
+    onSearchStopped: (data: any) => {
+      console.log('[Chat] 🛑 Search stopped confirmed:', data);
+      chatState.setIsFindingPartner(false);
+      setUserManuallyStopped(true);
     },
 
     onStatusChange: (status: string) => {
@@ -219,28 +235,45 @@ export const useChat = (): UseChatReturn => {
 
     onTypingStart: () => chatState.setIsPartnerTyping(true),
     onTypingStop: () => chatState.setIsPartnerTyping(false),
-    onWaiting: () => {
-      console.log('[Chat] Waiting for partner');
+    
+    onWaiting: (data: any) => {
+      console.log('[Chat] 🔍 Waiting for partner:', data);
       chatState.setIsFindingPartner(true);
     },
-    onCooldown: () => {
-      console.log('[Chat] Find partner cooldown');
+    
+    onCooldown: (data: any) => {
+      console.log('[Chat] ⏰ Find partner cooldown:', data);
       chatState.setIsFindingPartner(false);
     },
+    
     onDisconnectHandler: () => {
-      console.log('[Chat] Socket disconnected');
+      console.log('[Chat] 🔌 Socket disconnected');
       chatState.setIsPartnerConnected(false);
       chatState.setIsFindingPartner(false);
       chatState.setIsPartnerTyping(false);
       chatState.setPartnerInfo(null);
     },
+    
     onConnectErrorHandler: () => {
-      console.log('[Chat] Socket connection error');
+      console.log('[Chat] ❌ Socket connection error');
       chatState.setIsFindingPartner(false);
+    },
+
+    // ✅ NEW: Handle already searching
+    onAlreadySearching: (data: any) => {
+      console.log('[Chat] ⚠️ Already searching:', data);
+      chatState.setIsFindingPartner(true);
+    },
+
+    // ✅ NEW: Handle search error
+    onSearchError: (data: any) => {
+      console.log('[Chat] ❌ Search error:', data);
+      chatState.setIsFindingPartner(false);
+      setUserManuallyStopped(true);
     }
   }), [chatState]);
 
-  // Initialize socket
+  // Initialize socket with all handlers
   const socket = useChatSocket({
     ...socketHandlers,
     authId: auth.authId
@@ -270,7 +303,7 @@ export const useChat = (): UseChatReturn => {
     setMessages: chatState.setMessages
   });
 
-  // Chat actions with manual stop tracking
+  // Chat actions
   const chatActions = useChatActions({
     isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
@@ -299,7 +332,7 @@ export const useChat = (): UseChatReturn => {
     username: auth.username
   });
 
-  // Auto-search only on initial load, NOT after being skipped or manually stopped
+  // ✅ CRITICAL FIX: Enhanced auto-search that respects user state
   useAutoSearch({
     socket,
     auth,

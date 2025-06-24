@@ -1,9 +1,0 @@
-
-node_modules
-npm-debug.log
-.next
-.vscode
-README.md
-Dockerfile.socket
-.dockerignore
-# Add any other files or directories that should not be included in the Docker image
