@@ -641,79 +641,87 @@ async deleteUserProfile(authId: string): Promise<boolean> {
   /**
    * Enhanced health check with comprehensive validation
    */
-async testConnection(): Promise<{ 
-  database: boolean; 
-  redis?: boolean;
-  overall: boolean;
-  cachePerformance?: any;
-  errors: string[];
-  dbLatency?: number;  // Add this
-  redisLatency?: number; // Add this
-}> {
+ async testConnection(): Promise<{ 
+    database: boolean; 
+    redis?: boolean;
+    overall: boolean;
+    cachePerformance?: any;
+    errors: string[];
+    dbLatency?: number;
+    redisLatency?: number;
+  }> {
     const result: any = { overall: false, errors: [] };
 
-    // Test database connection with retry
+
+    // Test database connection with simplified approach
     if (!this.supabase) {
       result.database = false;
       result.errors.push('Supabase client not initialized');
+      logger.error('❌ ProfileManager: Supabase client not initialized');
     } else {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const startTime = Date.now();
-          const { data, error } = await this.supabase
-            .from('user_profiles')
-            .select('id')
-            .limit(1);
+      try {
+        logger.info('🔍 ProfileManager: Testing database connection...');
+        const startTime = Date.now();
+        
+        // ✅ SIMPLIFIED: Use basic select query instead of complex validation
+        const { data, error, count } = await this.supabase
+          .from('user_profiles')
+          .select('id', { count: 'exact', head: true });
+        
+        const dbLatency = Date.now() - startTime;
+        
+        if (error) {
+          logger.error('❌ ProfileManager database test failed:', {
+            code: error.code,
+            message: error.message,
+            details: error.details
+          });
           
-          const dbLatency = Date.now() - startTime;
+          result.database = false;
+          result.errors.push(`Database error: ${error.message}`);
           
-          if (error) {
-            if (attempt === 2) { // Last attempt
-              logger.error('Database connection test failed:', error);
-              result.database = false;
-              result.errors.push(`Database error: ${error.message}`);
-            } else {
-              logger.warn(`Database test attempt ${attempt + 1} failed, retrying...`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              continue;
-            }
-          } else {
-            logger.debug(`✅ Database connection test passed (${dbLatency}ms)`);
-            result.database = true;
-            result.dbLatency = dbLatency;
-            break;
+          // Provide specific guidance based on error type
+          if (error.code === '42P01') {
+            result.errors.push('Table user_profiles does not exist - run migrations');
+          } else if (error.message?.includes('JWT') || error.code === '401') {
+            result.errors.push('Authentication failed - check SUPABASE_SERVICE_ROLE_KEY');
           }
-        } catch (error) {
-          if (attempt === 2) { // Last attempt
-            logger.error('Database connection test exception:', error);
-            result.database = false;
-            result.errors.push(`Database exception: ${error instanceof Error ? error.message : 'Unknown'}`);
-          } else {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
+        } else {
+          logger.info(`✅ ProfileManager database test passed (${dbLatency}ms, ${count} users)`);
+          result.database = true;
+          result.dbLatency = dbLatency;
         }
+      } catch (error: any) {
+        logger.error('❌ ProfileManager database test exception:', {
+          message: error.message,
+          name: error.name
+        });
+        result.database = false;
+        result.errors.push(`Database exception: ${error.message}`);
       }
     }
 
-    // Test Redis connection
+    // Test Redis connection (simplified)
     if (this.redisService) {
       try {
+        logger.debug('🔍 ProfileManager: Testing Redis connection...');
         const startTime = Date.now();
         result.redis = await this.redisService.testConnection();
         const redisLatency = Date.now() - startTime;
         result.redisLatency = redisLatency;
         
         if (result.redis) {
-          // Test cache operations
-          const testKey = 'test_profile_cache';
-          const testData = { id: 'test', username: 'test_user' };
+          logger.debug(`✅ ProfileManager Redis test passed (${redisLatency}ms)`);
           
-          const cacheStartTime = Date.now();
-          const cacheSuccess = await this.redisService.cacheUserProfile(testKey, testData as UserProfile, false);
-          
-          if (cacheSuccess) {
-            const cached = await this.redisService.getCachedUserProfile(testKey);
-            await this.redisService.invalidateUserProfile(testKey);
+          // Test basic cache operations (simplified)
+          try {
+            const testKey = 'test_profile_manager';
+            const testData = { id: 'test', username: 'test_user' };
+            
+            const cacheStartTime = Date.now();
+            await this.redisService.set(testKey, testData, 10); // 10 second TTL
+            const cached = await this.redisService.get(testKey);
+            await this.redisService.del(testKey);
             const cacheLatency = Date.now() - cacheStartTime;
             
             result.cachePerformance = {
@@ -721,22 +729,37 @@ async testConnection(): Promise<{
               cacheWorking: !!cached,
               operationsSuccessful: true
             };
-          } else {
-            result.errors.push('Redis cache operations failed');
+            logger.debug(`✅ ProfileManager Redis cache test passed (${cacheLatency}ms)`);
+          } catch (cacheError) {
+            logger.warn('⚠️ ProfileManager Redis cache operations failed:', cacheError);
             result.cachePerformance = { operationsSuccessful: false };
+            result.errors.push('Redis cache operations failed');
           }
         } else {
+          logger.warn('⚠️ ProfileManager Redis connection test failed');
           result.errors.push('Redis connection test failed');
         }
-      } catch (error) {
-        logger.error('Redis connection test exception:', error);
+      } catch (error: any) {
+        logger.error('❌ ProfileManager Redis test exception:', error);
         result.redis = false;
-        result.errors.push(`Redis exception: ${error instanceof Error ? error.message : 'Unknown'}`);
+        result.errors.push(`Redis exception: ${error.message}`);
       }
+    } else {
+      logger.debug('📋 ProfileManager: Redis not configured');
+      result.redis = undefined;
     }
 
     // Determine overall health
     result.overall = result.database && (!this.redisService || result.redis);
+    
+    const healthStatus = result.overall ? 'HEALTHY' : 'DEGRADED';
+    logger.info(`📊 ProfileManager health check complete: ${healthStatus}`, {
+      database: result.database,
+      redis: result.redis,
+      errors: result.errors,
+      dbLatency: result.dbLatency,
+      redisLatency: result.redisLatency
+    });
     
     return result;
   }

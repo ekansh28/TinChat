@@ -158,31 +158,94 @@ export async function handleFriendsRoutes(req: IncomingMessage, res: ServerRespo
 
 async function handleHealthCheck(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   try {
+    logger.info('🔍 Friends API: Running health check...');
+    
     if (!profileManager) {
+      logger.warn('⚠️ Friends API: ProfileManager not initialized');
       sendJSON(res, 200, {
         success: false,
         message: 'ProfileManager not initialized',
+        status: 'degraded',
         timestamp: new Date().toISOString()
       });
       return true;
     }
 
-    const health = await profileManager.testConnection();
+    // ✅ SIMPLIFIED: Basic health check with timeout
+    let health;
+    try {
+      logger.debug('🔍 Friends API: Testing ProfileManager connection...');
+      
+      // ✅ Add timeout to prevent hanging
+      const healthPromise = profileManager.testConnection();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Health check timeout')), 10000)
+      );
+      
+      health = await Promise.race([healthPromise, timeoutPromise]) as any;
+      
+      logger.info('✅ Friends API: ProfileManager health check completed', {
+        database: health.database,
+        redis: health.redis,
+        overall: health.overall,
+        errors: health.errors?.length || 0
+      });
+      
+    } catch (error: any) {
+      logger.error('❌ Friends API: Health check failed:', {
+        message: error.message,
+        name: error.name
+      });
+      
+      // Return degraded status instead of failing completely
+      sendJSON(res, 200, {
+        success: false,
+        message: 'Health check failed',
+        status: 'degraded',
+        error: error.message,
+        details: {
+          database: false,
+          redis: false,
+          healthCheckFailed: true
+        },
+        timestamp: new Date().toISOString()
+      });
+      return true;
+    }
     
-    sendJSON(res, 200, {
+    // ✅ Return health status based on results
+    const httpStatus = health.overall ? 200 : 503;
+    const status = health.overall ? 'healthy' : 'degraded';
+    
+    sendJSON(res, httpStatus, {
       success: health.overall,
       message: health.overall ? 'Friends API healthy' : 'Friends API degraded',
+      status: status,
       details: {
         database: health.database,
         redis: health.redis,
-        errors: health.errors
+        errors: health.errors || [],
+        performance: {
+          dbLatency: health.dbLatency,
+          redisLatency: health.redisLatency,
+          cachePerformance: health.cachePerformance
+        }
       },
       timestamp: new Date().toISOString()
     });
 
     return true;
-  } catch (error) {
-    sendError(res, 500, 'Health check failed', { error: error instanceof Error ? error.message : 'Unknown error' });
+  } catch (error: any) {
+    logger.error('❌ Friends API: Health check exception:', error);
+    
+    // ✅ Always return a response, never fail completely
+    sendJSON(res, 500, {
+      success: false,
+      message: 'Health check failed with exception',
+      status: 'down',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
     return true;
   }
 }

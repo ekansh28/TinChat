@@ -1,4 +1,4 @@
-// server/config/supabase.ts - ENHANCED VERSION WITH ROBUST ERROR HANDLING
+// server/config/supabase.ts - SIMPLIFIED VERSION WITHOUT COMPLEX FETCH
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
@@ -18,10 +18,9 @@ interface DatabaseHealth {
 let globalSupabaseClient: SupabaseClient | null = null;
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
-const RETRY_DELAY = 2000; // 2 seconds
 
 /**
- * ✅ ENHANCED: Initialize Supabase with better error handling and retry logic
+ * ✅ SIMPLIFIED: Initialize Supabase with minimal configuration
  */
 export function initializeSupabase(): SupabaseClient | null {
   try {
@@ -29,34 +28,30 @@ export function initializeSupabase(): SupabaseClient | null {
     
     if (!config.supabaseUrl || !config.supabaseServiceKey) {
       logger.error('❌ Supabase configuration missing - check environment variables');
+      logger.error('Required: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
       return null;
     }
 
-    // ✅ ENHANCED: Create client with optimized configuration
+    // ✅ SIMPLIFIED: Use basic Supabase client without custom fetch
     const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
         detectSessionInUrl: false
       },
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
+      db: {
+        schema: 'public',
       },
+      // ✅ REMOVED: Complex custom fetch that was causing 401 errors
       global: {
         headers: {
           'User-Agent': 'TinChat-Server/1.0',
-        },
-        fetch: createEnhancedFetch(), // Add custom fetch here
-      },
-      db: {
-        schema: 'public',
+        }
       }
     });
 
     globalSupabaseClient = supabase;
-    logger.info('✅ Supabase client initialized successfully');
+    logger.info('✅ Supabase client initialized successfully with simplified config');
     
     return supabase;
   } catch (error) {
@@ -66,89 +61,11 @@ export function initializeSupabase(): SupabaseClient | null {
 }
 
 /**
- * ✅ NEW: Create enhanced fetch function with retry logic and better error handling
- */
-function createEnhancedFetch() {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const maxRetries = 3;
-    let lastError: Error | null = null;
-    
-    // Convert input to string for logging
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      let timeoutId: NodeJS.Timeout | undefined;
-      
-      try {
-        // ✅ Add timeout to each request
-        const controller = new AbortController();
-        timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
-        const response = await fetch(input, {
-          ...init,
-          signal: controller.signal,
-          headers: {
-            ...init?.headers,
-            'Connection': 'keep-alive',
-          },
-        });
-
-        clearTimeout(timeoutId);
-
-        // ✅ Check for HTTP errors
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        if (attempt > 0) {
-          logger.info(`✅ Supabase request succeeded on attempt ${attempt + 1}`);
-        }
-
-        return response;
-      } catch (error: any) {
-        lastError = error;
-        
-        // Clear timeout if it exists
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-
-        // Log the error with context
-        logger.error(`❌ Supabase request failed (attempt ${attempt + 1}/${maxRetries}):`, {
-          url: url.replace(/\/rest\/v1.*/, '/rest/v1/[endpoint]'), // Hide sensitive parts
-          error: error.message,
-          code: error.code,
-          name: error.name,
-        });
-
-        // Don't retry for certain types of errors
-        if (error.name === 'AbortError') {
-          logger.error(`⏰ Request timeout for ${url}`);
-        } else if (error.message?.includes('NetworkError') || error.message?.includes('fetch failed')) {
-          logger.error(`🌐 Network error for Supabase request: ${error.message}`);
-        }
-
-        // Wait before retrying (except on last attempt)
-        if (attempt < maxRetries - 1) {
-          const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // Exponential backoff, max 5s
-          logger.info(`⏳ Retrying Supabase request in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    // If all retries failed, throw the last error
-    logger.error(`💥 All Supabase request attempts failed after ${maxRetries} tries`);
-    throw lastError || new Error('Unknown fetch error');
-  };
-}
-
-/**
- * ✅ ENHANCED: Get Supabase configuration with validation
+ * ✅ SIMPLIFIED: Get Supabase configuration with basic validation
  */
 function getSupabaseConfig(): SupabaseConfig {
   const config = {
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    supabaseUrl: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
   };
 
@@ -158,11 +75,19 @@ function getSupabaseConfig(): SupabaseConfig {
     config.supabaseUrl = undefined;
   }
 
+  // ✅ Log config status (without exposing keys)
+  logger.info('🔧 Supabase Config Status:', {
+    hasUrl: !!config.supabaseUrl,
+    hasKey: !!config.supabaseServiceKey,
+    urlPrefix: config.supabaseUrl?.substring(0, 30) + '...',
+    keyPrefix: config.supabaseServiceKey?.substring(0, 20) + '...'
+  });
+
   return config;
 }
 
 /**
- * ✅ ENHANCED: Test database connection with comprehensive health check
+ * ✅ SIMPLIFIED: Test database connection with basic query
  */
 export async function testDatabaseConnection(supabase: SupabaseClient): Promise<boolean> {
   if (!supabase) {
@@ -180,58 +105,70 @@ export async function testDatabaseConnection(supabase: SupabaseClient): Promise<
     try {
       const startTime = Date.now();
       
-      // ✅ Test with a simple query that should always work
+      logger.info(`🔍 Testing database connection (attempt ${attempts}/${maxAttempts})...`);
+      
+      // ✅ SIMPLIFIED: Use basic select query without complex options
       const { data, error, status } = await supabase
         .from('user_profiles')
         .select('id')
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
 
       const latency = Date.now() - startTime;
 
       if (error) {
-        // Handle specific error types
-        if (error.code === 'PGRST116') {
-          // No rows found - this is actually success for our test
-          logger.info(`✅ Database connection test passed (no data, but connection works) - ${latency}ms`);
-          return true;
-        } else if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
-          logger.error(`❌ Database table 'user_profiles' does not exist. Please run migrations first.`);
+        logger.error(`❌ Database query error (attempt ${attempts}):`, {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          status: status
+        });
+
+        // Check for specific error types
+        if (error.code === '42P01') {
+          logger.error('❌ Table "user_profiles" does not exist. Please run migrations first.');
           return false;
+        } else if (error.message?.includes('JWT') || status === 401) {
+          logger.error('❌ Authentication failed - check your service role key');
+          return false;
+        }
+
+        // Don't retry for auth errors
+        if (status === 401 || error.code === '401') {
+          return false;
+        }
+
+        if (attempts < maxAttempts) {
+          const delay = 2000 * attempts;
+          logger.info(`⏳ Retrying database connection in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
         } else {
-          throw error;
+          return false;
         }
       }
 
-      logger.info(`✅ Database connection test passed with data - ${latency}ms (attempt ${attempts})`);
+      logger.info(`✅ Database connection test passed - ${latency}ms (attempt ${attempts})`);
+      logger.info(`📊 Query returned ${data?.length || 0} records`);
       return true;
 
     } catch (error: any) {
-      logger.error(`❌ Database connection test failed (attempt ${attempts}/${maxAttempts}):`, {
+      logger.error(`❌ Database connection test exception (attempt ${attempts}):`, {
         message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
+        name: error.name,
+        stack: error.stack?.split('\n')[0] // Just first line of stack
       });
 
       // Check for specific error patterns
       if (error.message?.includes('fetch failed') || error.message?.includes('NetworkError')) {
         logger.error('🌐 Network connectivity issue detected');
-      } else if (error.message?.includes('JWT')) {
-        logger.error('🔑 Authentication issue - check your service role key');
-        return false; // Don't retry auth errors
       } else if (error.message?.includes('timeout')) {
         logger.error('⏰ Database timeout - server may be overloaded');
       }
 
-      // Don't retry for auth errors
-      if (error.code === '401' || error.message?.includes('JWT')) {
-        return false;
-      }
-
       // Wait before retrying
       if (attempts < maxAttempts) {
-        const delay = RETRY_DELAY * attempts;
+        const delay = 2000 * attempts;
         logger.info(`⏳ Retrying database connection in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -243,7 +180,7 @@ export async function testDatabaseConnection(supabase: SupabaseClient): Promise<
 }
 
 /**
- * ✅ NEW: Get detailed database health information
+ * ✅ SIMPLIFIED: Get basic database health information
  */
 export async function getDatabaseHealth(supabase: SupabaseClient): Promise<DatabaseHealth> {
   const startTime = Date.now();
@@ -254,29 +191,32 @@ export async function getDatabaseHealth(supabase: SupabaseClient): Promise<Datab
   };
 
   try {
-    const { data, error } = await supabase
+    // ✅ SIMPLIFIED: Basic count query
+    const { count, error } = await supabase
       .from('user_profiles')
-      .select('count', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true });
 
     health.latency = Date.now() - startTime;
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       health.error = `${error.code}: ${error.message}`;
       return health;
     }
 
     health.connected = true;
+    logger.debug(`✅ Database health check passed: ${count} users, ${health.latency}ms`);
     return health;
 
   } catch (error: any) {
     health.latency = Date.now() - startTime;
     health.error = error.message || 'Unknown error';
+    logger.error('❌ Database health check failed:', error);
     return health;
   }
 }
 
 /**
- * ✅ NEW: Check if specific tables exist
+ * ✅ SIMPLIFIED: Check if required tables exist
  */
 export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
   allTablesExist: boolean;
@@ -289,18 +229,23 @@ export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
 
   for (const table of requiredTables) {
     try {
+      logger.debug(`🔍 Checking table: ${table}`);
+      
       const { error } = await supabase
         .from(table)
         .select('*')
-        .limit(0)
-        .maybeSingle();
+        .limit(0);
 
-      if (error && !error.message.includes('PGRST116')) {
-        if (error.message.includes('does not exist')) {
+      if (error) {
+        if (error.code === '42P01' || error.message.includes('does not exist')) {
           missingTables.push(table);
+          logger.warn(`❌ Missing table: ${table}`);
         } else {
           errors.push(`${table}: ${error.message}`);
+          logger.error(`❌ Error checking ${table}:`, error);
         }
+      } else {
+        logger.debug(`✅ Table exists: ${table}`);
       }
     } catch (error: any) {
       if (error.message?.includes('does not exist')) {
@@ -311,66 +256,25 @@ export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
     }
   }
 
-  return {
+  const result = {
     allTablesExist: missingTables.length === 0,
     missingTables,
     errors,
   };
+
+  logger.info('📋 Table check results:', result);
+  return result;
 }
 
 /**
- * ✅ NEW: Enhanced connection monitoring
- */
-export function startConnectionMonitoring(supabase: SupabaseClient): void {
-  let consecutiveFailures = 0;
-  const MAX_CONSECUTIVE_FAILURES = 3;
-  
-  const monitor = async () => {
-    try {
-      const health = await getDatabaseHealth(supabase);
-      
-      if (health.connected) {
-        if (consecutiveFailures > 0) {
-          logger.info(`✅ Database connection restored after ${consecutiveFailures} failures`);
-          consecutiveFailures = 0;
-        }
-        
-        if (health.latency > 2000) {
-          logger.warn(`⚠️ Slow database response: ${health.latency}ms`);
-        }
-      } else {
-        consecutiveFailures++;
-        logger.error(`❌ Database health check failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, health.error);
-        
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          logger.error('🚨 Database connection appears to be permanently down');
-          // Could trigger alerts or failover logic here
-        }
-      }
-    } catch (error) {
-      consecutiveFailures++;
-      logger.error('❌ Database monitoring error:', error);
-    }
-  };
-
-  // Run health check every 2 minutes
-  setInterval(monitor, 2 * 60 * 1000);
-  
-  // Run initial check after 30 seconds
-  setTimeout(monitor, 30000);
-  
-  logger.info('📊 Database connection monitoring started');
-}
-
-/**
- * ✅ NEW: Get current Supabase client instance
+ * ✅ Get current Supabase client instance
  */
 export function getSupabaseClient(): SupabaseClient | null {
   return globalSupabaseClient;
 }
 
 /**
- * ✅ NEW: Reinitialize Supabase connection
+ * ✅ SIMPLIFIED: Reinitialize Supabase connection
  */
 export async function reinitializeSupabase(): Promise<SupabaseClient | null> {
   logger.info('🔄 Reinitializing Supabase connection...');
@@ -395,7 +299,7 @@ export async function reinitializeSupabase(): Promise<SupabaseClient | null> {
 }
 
 /**
- * ✅ NEW: Create a connection health reporter
+ * ✅ SIMPLIFIED: Create a connection health reporter
  */
 export function createConnectionReporter() {
   return {
@@ -403,7 +307,7 @@ export function createConnectionReporter() {
     getGlobalClient: () => globalSupabaseClient,
     
     async runDiagnostics(supabase: SupabaseClient) {
-      logger.info('🔍 Running Supabase diagnostics...');
+      logger.info('🔍 Running simplified Supabase diagnostics...');
       
       const health = await getDatabaseHealth(supabase);
       const tableCheck = await checkRequiredTables(supabase);
@@ -422,11 +326,11 @@ export function createConnectionReporter() {
       if (!health.connected) {
         recommendations.push('Check network connectivity and Supabase service status');
         recommendations.push('Verify environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)');
+        recommendations.push('Test connection manually with curl');
       }
       
       if (health.latency > 1000) {
-        recommendations.push('Consider upgrading Supabase plan for better performance');
-        recommendations.push('Check for slow queries in your application');
+        recommendations.push('High latency detected - check network or Supabase performance');
       }
       
       if (!tableCheck.allTablesExist) {
@@ -434,12 +338,12 @@ export function createConnectionReporter() {
       }
       
       if (connectionAttempts > 10) {
-        recommendations.push('High number of connection attempts detected - check for connection leaks');
+        recommendations.push('High number of connection attempts detected - check for connection issues');
       }
       
       report.recommendations = recommendations;
       
-      logger.info('📋 Supabase diagnostics complete:', report);
+      logger.info('📋 Simplified Supabase diagnostics complete:', report);
       return report;
     }
   };
