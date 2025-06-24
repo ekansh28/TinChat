@@ -9,7 +9,6 @@ on:
       - '.github/workflows/deploy-server.yml'
       - 'package.json'
       - 'package-lock.json'
-  workflow_dispatch:  # Allow manual deployment
 
 jobs:
   deploy:
@@ -61,12 +60,7 @@ jobs:
             fi
 
             echo "✅ Pre-deployment checks completed"
-      EOF
-
-
-
-
-
+          EOF
 
       - name: 🚀 Deploy & Update Server
         env:
@@ -84,15 +78,11 @@ jobs:
             cd $SERVER_PROJECT_PATH
             
             echo "🔄 Stashing any local changes..."
-            git stash push -m "Auto-stash before deployment $(date)"
+            git stash push -m "Auto-stash before deployment $(date)" || echo "⚠️ Nothing to stash"
             
             echo "🔄 Pulling latest changes from GitHub..."
-            cd .. # Go to root project folder
             git fetch origin main
             git reset --hard origin/main
-            
-            echo "📂 Navigating back to server directory..."
-            cd server
             
             echo "📦 Installing/updating dependencies (EC2 optimized)..."
             npm ci --only=production
@@ -102,9 +92,13 @@ jobs:
             # Backup existing .env
             if [ -f .env ]; then
               cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+              # Preserve existing non-conflicting variables
+              grep -vE '^(NEXT_PUBLIC_|SUPABASE_|UPSTASH_|PORT=|LOG_LEVEL=|NODE_ENV=|PERFORMANCE_MONITORING=)' .env > .env.tmp || true
+            else
+              touch .env.tmp
             fi
             
-            # Update .env with new values (preserving existing ones)
+            # Add new configuration
             echo "# Updated on $(date)" > .env.new
             echo "# TinChat Server Environment Variables" >> .env.new
             echo "" >> .env.new
@@ -137,8 +131,9 @@ jobs:
             echo "PERFORMANCE_MONITORING=true" >> .env.new
             echo "NEXT_PUBLIC_API_URL=http://13.230.12.126:3001" >> .env.new
             
-            # Replace old .env with new one
-            mv .env.new .env
+            # Combine preserved and new variables
+            cat .env.tmp .env.new > .env
+            rm -f .env.tmp .env.new
             
             echo "🏗️ Building TypeScript..."
             npx tsc --build
@@ -213,8 +208,8 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
-            cd $SERVER_PROJECT_PATH/server
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF'
+            cd $SERVER_PROJECT_PATH
             echo "📊 Deployment Summary:"
             echo "Time: $(date)"
             echo "Git Commit: $(git rev-parse --short HEAD)"
@@ -301,8 +296,8 @@ jobs:
           SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
         run: |
           echo "🧹 Attempting to rollback or restart services..."
-          ssh $VPS_USER@$VPS_HOST << 'EOF' || true
-            cd $SERVER_PROJECT_PATH/server
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF' || true
+            cd $SERVER_PROJECT_PATH
             
             echo "🔄 Attempting to restart PM2 processes..."
             pm2 restart all || pm2 start ecosystem.config.js || echo "⚠️ PM2 restart failed"
