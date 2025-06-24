@@ -1,29 +1,49 @@
 {
-  "name": "server",
+  "name": "tinchat-server",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "description": "TinChat Socket.IO Server with Enhanced Networking Support",
+  "main": "server/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.server.json",
-    "start": "node dist/index.js",
-    "dev": "ts-node --transpile-only index.ts",
-    "dev:watch": "ts-node-dev --respawn --transpile-only index.ts"
+    "dev": "tsx watch /index.ts",
+    "start": "tsx index.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "fix-network": "tsx server/scripts/fix-network.ts",
+    "test-connection": "tsx server/scripts/test-connection.ts"
   },
+  "keywords": [
+    "socket.io",
+    "chat",
+    "realtime",
+    "supabase",
+    "networking"
+  ],
+  "author": "TinChat Team",
+  "license": "MIT",
   "dependencies": {
-    "@upstash/redis": "^1.35.0",
-    "dotenv": "^16.5.0",
-    "express": "^4.18.2",
-    "ioredis": "^5.6.1",
-    "p5": "^2.0.3",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
-    "ts-node": "^10.9.2",
-    "zod": "^3.25.51"
+    "@supabase/supabase-js": "^2.39.0",
+    "socket.io": "^4.7.4",
+    "dotenv": "^16.3.1",
+    "ioredis": "^5.3.2",
+    "zod": "^3.22.4",
+    "node-fetch": "^2.7.0",
+    "undici": "^5.28.2"
   },
   "devDependencies": {
-    "@supabase/supabase-js": "^2.50.0",
-    "@types/node": "^22.15.29",
-    "@types/socket.io": "^3.0.1",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.0.0"
-  }
+    "@types/node": "^20.10.5",
+    "@types/node-fetch": "^2.6.9",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/tinchat-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/tinchat-server/issues"
+  },
+  "homepage": "https://github.com/your-username/tinchat-server#readme"
 }
