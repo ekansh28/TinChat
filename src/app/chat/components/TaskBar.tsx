@@ -1,10 +1,10 @@
-// src/app/chat/components/TaskBar.tsx - FIXED TO WORK WITH CORRECT FRIENDSWINDOW
+// src/app/chat/components/TaskBar.tsx - COMPLETELY FIXED VERSION
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { FriendsWindow } from './FriendsWindow'; // ✅ FIXED: Use the correct FriendsWindow
+import { FriendsWindow } from './FriendsWindow';
 
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
@@ -78,7 +78,7 @@ export const TaskBar: React.FC = () => {
   const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // ✅ FIXED: Friends system state - simplified since FriendsWindow handles its own state
+  // ✅ FIXED: Friends system state
   const [showFriendsWindow, setShowFriendsWindow] = useState(false);
 
   // ✅ FIXED: Mobile detection with proper cleanup
@@ -130,13 +130,6 @@ export const TaskBar: React.FC = () => {
     });
     setCurrentTime(timeString);
   }, []);
-
-  // ✅ FIXED: Get current theme mode with proper typing
-  const getCurrentTheme = useCallback((): 'win98' | 'win7' | 'winxp' => {
-    if (isWinXPMode) return 'winxp';
-    if (isWin7Mode) return 'win7';
-    return 'win98';
-  }, [isWin7Mode, isWinXPMode]);
 
   // ✅ FIXED: Get audio icon based on theme and volume
   const getAudioIcon = useCallback(() => {
@@ -452,19 +445,7 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ FIXED: Friends Window with correct props */}
-        {showFriendsWindow && (
-          <FriendsWindow
-            isOpen={showFriendsWindow}
-            onClose={() => setShowFriendsWindow(false)}
-          />
-        )}
-      </>
-    );
-  }
-
-  return null;
-};
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             isOpen={showFriendsWindow}
@@ -656,7 +637,7 @@ export const TaskBar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ FIXED: Friends Window with correct props */}
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             isOpen={showFriendsWindow}
@@ -839,8 +820,7 @@ export const TaskBar: React.FC = () => {
           </div>
         </footer>
 
-        
-{/* ✅ FIXED: Friends Window with correct props */}
+        {/* Friends Window */}
         {showFriendsWindow && (
           <FriendsWindow
             isOpen={showFriendsWindow}
