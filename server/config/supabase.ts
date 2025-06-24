@@ -1,4 +1,4 @@
-// server/config/supabase.ts - SIMPLIFIED VERSION WITHOUT COMPLEX FETCH
+// server/config/supabase.ts - COMPLETELY FIXED VERSION
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
@@ -20,7 +20,7 @@ let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
 
 /**
- * ✅ SIMPLIFIED: Initialize Supabase with minimal configuration
+ * ✅ WORKING: Initialize Supabase with MINIMAL configuration (no custom fetch)
  */
 export function initializeSupabase(): SupabaseClient | null {
   try {
@@ -32,7 +32,7 @@ export function initializeSupabase(): SupabaseClient | null {
       return null;
     }
 
-    // ✅ SIMPLIFIED: Use basic Supabase client without custom fetch
+    // ✅ WORKING: Use BASIC Supabase client configuration ONLY
     const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
@@ -41,17 +41,12 @@ export function initializeSupabase(): SupabaseClient | null {
       },
       db: {
         schema: 'public',
-      },
-      // ✅ REMOVED: Complex custom fetch that was causing 401 errors
-      global: {
-        headers: {
-          'User-Agent': 'TinChat-Server/1.0',
-        }
       }
+      // ✅ CRITICAL: NO custom fetch, NO global headers - keep it simple
     });
 
     globalSupabaseClient = supabase;
-    logger.info('✅ Supabase client initialized successfully with simplified config');
+    logger.info('✅ Supabase client initialized with BASIC configuration');
     
     return supabase;
   } catch (error) {
@@ -61,7 +56,7 @@ export function initializeSupabase(): SupabaseClient | null {
 }
 
 /**
- * ✅ SIMPLIFIED: Get Supabase configuration with basic validation
+ * ✅ WORKING: Basic configuration getter
  */
 function getSupabaseConfig(): SupabaseConfig {
   const config = {
@@ -69,25 +64,17 @@ function getSupabaseConfig(): SupabaseConfig {
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
   };
 
-  // ✅ Validate URLs
+  // ✅ Basic validation
   if (config.supabaseUrl && !config.supabaseUrl.startsWith('https://')) {
     logger.error('❌ Supabase URL must start with https://');
     config.supabaseUrl = undefined;
   }
 
-  // ✅ Log config status (without exposing keys)
-  logger.info('🔧 Supabase Config Status:', {
-    hasUrl: !!config.supabaseUrl,
-    hasKey: !!config.supabaseServiceKey,
-    urlPrefix: config.supabaseUrl?.substring(0, 30) + '...',
-    keyPrefix: config.supabaseServiceKey?.substring(0, 20) + '...'
-  });
-
   return config;
 }
 
 /**
- * ✅ SIMPLIFIED: Test database connection with basic query
+ * ✅ WORKING: Simple database connection test
  */
 export async function testDatabaseConnection(supabase: SupabaseClient): Promise<boolean> {
   if (!supabase) {
@@ -95,92 +82,34 @@ export async function testDatabaseConnection(supabase: SupabaseClient): Promise<
     return false;
   }
 
-  let attempts = 0;
-  const maxAttempts = 3;
+  try {
+    logger.info('🔍 Testing database connection...');
+    
+    // ✅ WORKING: Simple select query
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .limit(1);
 
-  while (attempts < maxAttempts) {
-    attempts++;
-    connectionAttempts++;
-
-    try {
-      const startTime = Date.now();
-      
-      logger.info(`🔍 Testing database connection (attempt ${attempts}/${maxAttempts})...`);
-      
-      // ✅ SIMPLIFIED: Use basic select query without complex options
-      const { data, error, status } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .limit(1);
-
-      const latency = Date.now() - startTime;
-
-      if (error) {
-        logger.error(`❌ Database query error (attempt ${attempts}):`, {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          status: status
-        });
-
-        // Check for specific error types
-        if (error.code === '42P01') {
-          logger.error('❌ Table "user_profiles" does not exist. Please run migrations first.');
-          return false;
-        } else if (error.message?.includes('JWT') || status === 401) {
-          logger.error('❌ Authentication failed - check your service role key');
-          return false;
-        }
-
-        // Don't retry for auth errors
-        if (status === 401 || error.code === '401') {
-          return false;
-        }
-
-        if (attempts < maxAttempts) {
-          const delay = 2000 * attempts;
-          logger.info(`⏳ Retrying database connection in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        } else {
-          return false;
-        }
-      }
-
-      logger.info(`✅ Database connection test passed - ${latency}ms (attempt ${attempts})`);
-      logger.info(`📊 Query returned ${data?.length || 0} records`);
-      return true;
-
-    } catch (error: any) {
-      logger.error(`❌ Database connection test exception (attempt ${attempts}):`, {
-        message: error.message,
-        name: error.name,
-        stack: error.stack?.split('\n')[0] // Just first line of stack
+    if (error) {
+      logger.error('❌ Database test failed:', {
+        code: error.code,
+        message: error.message
       });
-
-      // Check for specific error patterns
-      if (error.message?.includes('fetch failed') || error.message?.includes('NetworkError')) {
-        logger.error('🌐 Network connectivity issue detected');
-      } else if (error.message?.includes('timeout')) {
-        logger.error('⏰ Database timeout - server may be overloaded');
-      }
-
-      // Wait before retrying
-      if (attempts < maxAttempts) {
-        const delay = 2000 * attempts;
-        logger.info(`⏳ Retrying database connection in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+      return false;
     }
-  }
 
-  logger.error(`💥 Database connection failed after ${maxAttempts} attempts`);
-  return false;
+    logger.info(`✅ Database test passed - found ${data?.length || 0} records`);
+    return true;
+
+  } catch (error: any) {
+    logger.error('❌ Database test exception:', error.message);
+    return false;
+  }
 }
 
 /**
- * ✅ SIMPLIFIED: Get basic database health information
+ * ✅ WORKING: Basic health check
  */
 export async function getDatabaseHealth(supabase: SupabaseClient): Promise<DatabaseHealth> {
   const startTime = Date.now();
@@ -191,7 +120,6 @@ export async function getDatabaseHealth(supabase: SupabaseClient): Promise<Datab
   };
 
   try {
-    // ✅ SIMPLIFIED: Basic count query
     const { count, error } = await supabase
       .from('user_profiles')
       .select('*', { count: 'exact', head: true });
@@ -204,19 +132,17 @@ export async function getDatabaseHealth(supabase: SupabaseClient): Promise<Datab
     }
 
     health.connected = true;
-    logger.debug(`✅ Database health check passed: ${count} users, ${health.latency}ms`);
     return health;
 
   } catch (error: any) {
     health.latency = Date.now() - startTime;
     health.error = error.message || 'Unknown error';
-    logger.error('❌ Database health check failed:', error);
     return health;
   }
 }
 
 /**
- * ✅ SIMPLIFIED: Check if required tables exist
+ * ✅ WORKING: Check if tables exist
  */
 export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
   allTablesExist: boolean;
@@ -229,8 +155,6 @@ export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
 
   for (const table of requiredTables) {
     try {
-      logger.debug(`🔍 Checking table: ${table}`);
-      
       const { error } = await supabase
         .from(table)
         .select('*')
@@ -239,13 +163,9 @@ export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
       if (error) {
         if (error.code === '42P01' || error.message.includes('does not exist')) {
           missingTables.push(table);
-          logger.warn(`❌ Missing table: ${table}`);
         } else {
           errors.push(`${table}: ${error.message}`);
-          logger.error(`❌ Error checking ${table}:`, error);
         }
-      } else {
-        logger.debug(`✅ Table exists: ${table}`);
       }
     } catch (error: any) {
       if (error.message?.includes('does not exist')) {
@@ -256,28 +176,25 @@ export async function checkRequiredTables(supabase: SupabaseClient): Promise<{
     }
   }
 
-  const result = {
+  return {
     allTablesExist: missingTables.length === 0,
     missingTables,
     errors,
   };
-
-  logger.info('📋 Table check results:', result);
-  return result;
 }
 
 /**
- * ✅ Get current Supabase client instance
+ * ✅ Get current client
  */
 export function getSupabaseClient(): SupabaseClient | null {
   return globalSupabaseClient;
 }
 
 /**
- * ✅ SIMPLIFIED: Reinitialize Supabase connection
+ * ✅ WORKING: Simple reinitialize
  */
 export async function reinitializeSupabase(): Promise<SupabaseClient | null> {
-  logger.info('🔄 Reinitializing Supabase connection...');
+  logger.info('🔄 Reinitializing Supabase...');
   
   globalSupabaseClient = null;
   connectionAttempts = 0;
@@ -290,7 +207,7 @@ export async function reinitializeSupabase(): Promise<SupabaseClient | null> {
       logger.info('✅ Supabase reinitialization successful');
       return supabase;
     } else {
-      logger.error('❌ Supabase reinitialization failed - connection test failed');
+      logger.error('❌ Supabase reinitialization failed');
       return null;
     }
   }
@@ -299,7 +216,7 @@ export async function reinitializeSupabase(): Promise<SupabaseClient | null> {
 }
 
 /**
- * ✅ SIMPLIFIED: Create a connection health reporter
+ * ✅ WORKING: Simple diagnostics
  */
 export function createConnectionReporter() {
   return {
@@ -307,7 +224,7 @@ export function createConnectionReporter() {
     getGlobalClient: () => globalSupabaseClient,
     
     async runDiagnostics(supabase: SupabaseClient) {
-      logger.info('🔍 Running simplified Supabase diagnostics...');
+      logger.info('🔍 Running basic Supabase diagnostics...');
       
       const health = await getDatabaseHealth(supabase);
       const tableCheck = await checkRequiredTables(supabase);
@@ -320,30 +237,17 @@ export function createConnectionReporter() {
         recommendations: [] as string[]
       };
       
-      // Generate recommendations
-      const recommendations: string[] = [];
-      
+      // Basic recommendations
       if (!health.connected) {
-        recommendations.push('Check network connectivity and Supabase service status');
-        recommendations.push('Verify environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)');
-        recommendations.push('Test connection manually with curl');
-      }
-      
-      if (health.latency > 1000) {
-        recommendations.push('High latency detected - check network or Supabase performance');
+        report.recommendations.push('Check network connectivity and Supabase service status');
+        report.recommendations.push('Verify environment variables');
       }
       
       if (!tableCheck.allTablesExist) {
-        recommendations.push(`Run database migrations - missing tables: ${tableCheck.missingTables.join(', ')}`);
+        report.recommendations.push(`Missing tables: ${tableCheck.missingTables.join(', ')}`);
       }
       
-      if (connectionAttempts > 10) {
-        recommendations.push('High number of connection attempts detected - check for connection issues');
-      }
-      
-      report.recommendations = recommendations;
-      
-      logger.info('📋 Simplified Supabase diagnostics complete:', report);
+      logger.info('📋 Diagnostics complete:', report);
       return report;
     }
   };
