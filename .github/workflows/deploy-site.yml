@@ -1,13 +1,16 @@
-name: 🚀 Deploy to Contabo VPS
+name: 🚀 Deploy Site to VPS
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'
 
 jobs:
   deploy:
-    name: 🔁 Build & Deploy on Contabo VPS
+    name: 🔁 Build & Deploy Site on VPS
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +25,31 @@ jobs:
       - name: 🧠 Add VPS Host to Known Hosts
         run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
+      - name: 🔍 Verify Environment Variables
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          echo "🔍 Checking environment variables in GitHub Actions runner:"
+          echo "  - NEXT_PUBLIC_SUPABASE_URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
+          echo "  - NEXT_PUBLIC_SUPABASE_ANON_KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+          echo "  - SUPABASE_SERVICE_ROLE_KEY length: ${#SUPABASE_SERVICE_ROLE_KEY}"
+          echo "  - NEXT_PUBLIC_API_BASE_URL length: ${#NEXT_PUBLIC_API_BASE_URL}"
+          
+          if [[ -z "$NEXT_PUBLIC_SUPABASE_URL" ]]; then
+            echo "❌ NEXT_PUBLIC_SUPABASE_URL is empty!"
+            exit 1
+          fi
+          
+          if [[ -z "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]]; then
+            echo "❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is empty!"
+            exit 1
+          fi
+          
+          echo "✅ Required environment variables are present"
+
       - name: 🚀 Deploy & Restart on VPS
         env:
           VPS_USER: root
@@ -35,49 +63,68 @@ jobs:
           echo "🔍 Starting deployment process..."
           echo "📋 Environment variables check:"
           echo "  - VPS_HOST: $VPS_HOST"
-          echo "  - VPS_PROJECT_PATH: $VPS_PROJECT_PATH"
+          echo "  - VPS_PROJECT_PATH: $VPS_PROJECT_PATH"  
           echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
+          echo "  - SUPABASE_URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
+          echo "  - SUPABASE_ANON_KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
           
           # Trim whitespace and newlines from path (safety check)
           CLEAN_PATH=$(echo "$VPS_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
           echo "  - CLEAN_PATH: $CLEAN_PATH"
           
+          # Pass environment variables to SSH session
           ssh $VPS_USER@$VPS_HOST "
+            export NEXT_PUBLIC_SUPABASE_URL='$NEXT_PUBLIC_SUPABASE_URL'
+            export NEXT_PUBLIC_SUPABASE_ANON_KEY='$NEXT_PUBLIC_SUPABASE_ANON_KEY'
+            export SUPABASE_SERVICE_ROLE_KEY='$SUPABASE_SERVICE_ROLE_KEY'
+            export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
+            
             set -e
             
-            echo '📂 Changing to project directory: $CLEAN_PATH'
-            cd '$CLEAN_PATH' || { 
-              echo '❌ Failed to change directory to $CLEAN_PATH'
-              echo '🔍 Available directories in parent:'
-              ls -la \$(dirname '$CLEAN_PATH') 2>/dev/null || echo 'Cannot list parent directory'
-              exit 1
-            }
+            echo '📂 Changing to project directory...'
+            cd '$CLEAN_PATH' || { echo '❌ Directory missing'; exit 1; }
             echo '✅ Current directory: \$(pwd)'
             
-            echo '🔍 Git status before update:'
-            git status --porcelain || echo 'Git status failed'
-            git log --oneline -3 || echo 'Git log failed'
-            
-            echo '🔄 Fetching latest changes from GitHub...'
-            git fetch origin main
+            echo '🔄 Force updating repository...'
+            git fetch --all
             git reset --hard origin/main
             git clean -fd
             echo '✅ Repository updated successfully'
             
-            echo '🔍 Git status after update:'
-            git log --oneline -3 || echo 'Git log failed'
-            
             echo '🔧 Creating .env.local file...'
             
-            # Create .env.local file with explicit echo statements to handle empty variables
-            echo \"NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL}\" > .env.local
-            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY}\" >> .env.local
-            echo \"SUPABASE_SERVICE_ROLE_KEY=\${SUPABASE_SERVICE_ROLE_KEY}\" >> .env.local
-            echo \"NEXT_PUBLIC_API_BASE_URL=\${NEXT_PUBLIC_API_BASE_URL}\" >> .env.local
-            echo \"NODE_ENV=production\" >> .env.local
+            # Debug: Show what variables we have (safely)
+            echo '🔍 Environment variables available in SSH session:'
+            echo \"  NEXT_PUBLIC_SUPABASE_URL length: \${#NEXT_PUBLIC_SUPABASE_URL}\"
+            echo \"  NEXT_PUBLIC_SUPABASE_ANON_KEY length: \${#NEXT_PUBLIC_SUPABASE_ANON_KEY}\"
+            echo \"  SUPABASE_SERVICE_ROLE_KEY length: \${#SUPABASE_SERVICE_ROLE_KEY}\"
+            echo \"  NEXT_PUBLIC_API_BASE_URL length: \${#NEXT_PUBLIC_API_BASE_URL}\"
+            
+            # Create .env.local file using the exported variables
+            cat > .env.local << 'ENVEOF'
+            NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+            SUPABASE_SERVICE_ROLE_KEY=\${SUPABASE_SERVICE_ROLE_KEY}
+            NEXT_PUBLIC_API_BASE_URL=\${NEXT_PUBLIC_API_BASE_URL}
+            NODE_ENV=production
+            ENVEOF
+            
+            # Substitute the actual values
+            sed -i \"s|\\\${NEXT_PUBLIC_SUPABASE_URL}|\$NEXT_PUBLIC_SUPABASE_URL|g\" .env.local
+            sed -i \"s|\\\${NEXT_PUBLIC_SUPABASE_ANON_KEY}|\$NEXT_PUBLIC_SUPABASE_ANON_KEY|g\" .env.local
+            sed -i \"s|\\\${SUPABASE_SERVICE_ROLE_KEY}|\$SUPABASE_SERVICE_ROLE_KEY|g\" .env.local
+            sed -i \"s|\\\${NEXT_PUBLIC_API_BASE_URL}|\$NEXT_PUBLIC_API_BASE_URL|g\" .env.local
+            
             echo '✅ Environment file created'
-            echo '🔍 Environment file contents (redacted):'
-            sed 's/=.*/=***REDACTED***/g' .env.local
+            echo '🔍 Environment file verification:'
+            echo \"File exists: \$(test -f .env.local && echo 'YES' || echo 'NO')\"
+            echo \"File size: \$(wc -c < .env.local 2>/dev/null || echo 'unknown') bytes\"
+            echo '🔍 Final environment file check (with variable lengths):'
+            while IFS='=' read -r key value; do
+              if [[ ! -z \"\$key\" && \"\$key\" != \"#\"* ]]; then
+                echo \"  \$key: length \${#value}\"
+              fi
+            done < .env.local
             
             echo '🔍 Checking Next.js configuration...'
             if [ -f \"next.config.ts\" ]; then
@@ -94,47 +141,63 @@ jobs:
               echo 'module.exports = nextConfig' >> next.config.js
               echo '✅ Created basic next.config.js'
             fi
-
+            
             echo '📦 Checking dependencies...'
             
-            # Force clean install if node_modules is corrupted or next is missing
-            if [ ! -d 'node_modules' ] || ! npm list next >/dev/null 2>&1 || git diff --name-only HEAD~1 HEAD | grep -q 'package.json\|package-lock.json'; then
-              echo '🔄 Installing dependencies...'
+            # Check if package.json exists
+            if [ ! -f \"package.json\" ]; then
+              echo '❌ package.json not found!'
+              exit 1
+            fi
+            
+            # Always do a fresh install to ensure next is properly installed
+            echo '🔄 Installing dependencies (fresh install)...'
+            
+            # Clean slate approach
+            rm -rf node_modules package-lock.json .next
+            npm cache clean --force 2>/dev/null || true
+            
+            # Install with specific flags for better compatibility
+            npm install --no-audit --no-fund || {
+              echo '❌ npm install failed, trying alternative approaches...'
               
-              # Clean installation
-              rm -rf node_modules package-lock.json
-              npm cache clean --force
-              
-              npm install || {
-                echo '❌ npm install failed'
-                echo '🔍 Trying with legacy peer deps...'
-                npm install --legacy-peer-deps || {
-                  echo '❌ npm install failed again - showing npm logs:'
-                  cat ~/.npm/_logs/*.log 2>/dev/null | tail -50 || echo 'No npm logs found'
+              # Try with legacy peer deps
+              npm install --legacy-peer-deps --no-audit --no-fund || {
+                echo '❌ Install with legacy-peer-deps failed'
+                
+                # Try installing just the essential packages first
+                echo '🔧 Trying to install core packages first...'
+                npm install next@15.2.3 react@18.3.1 react-dom@18.3.1 --no-audit --no-fund || {
+                  echo '❌ Failed to install core packages'
+                  echo '🔍 Node and npm versions:'
+                  node --version
+                  npm --version
+                  echo '🔍 Disk space:'
+                  df -h .
                   exit 1
                 }
+                
+                # Then install the rest
+                echo '🔧 Installing remaining dependencies...'
+                npm install --no-audit --no-fund || echo 'Some optional dependencies may have failed'
               }
-            else
-              echo '✅ Dependencies are up to date'
-            fi
-            
-            # Verify next is available
-            if ! npm list next >/dev/null 2>&1; then
-              echo '❌ Next.js not found in dependencies, forcing reinstall...'
-              npm install next react react-dom --save
-            fi
-            
-            echo '🔍 Verifying Next.js installation:'
-            npx next --version || {
-              echo '❌ Next.js still not working, checking package.json:'
-              grep -A 10 -B 5 '"next"' package.json || echo 'Next.js not in package.json'
-              exit 1
             }
-
+            
+            # Verify Next.js installation
+            echo '🔍 Verifying Next.js installation:'
+            if [ -f \"node_modules/.bin/next\" ]; then
+              echo '✅ Next.js binary found'
+              ./node_modules/.bin/next --version || echo 'Next version check failed'
+            else
+              echo '❌ Next.js binary not found after installation'
+              ls -la node_modules/.bin/ | head -5
+              exit 1
+            fi
+            
             echo '🏗️ Building the project...'
             
             # Check if this is a Next.js app with static export
-            if grep -q '"output".*"export"' next.config.* 2>/dev/null || grep -q 'output:.*export' next.config.* 2>/dev/null; then
+            if grep -q '\"output\".*\"export\"' next.config.* 2>/dev/null || grep -q 'output:.*export' next.config.* 2>/dev/null; then
               echo '🔍 Detected Next.js static export configuration'
             fi
             
@@ -155,6 +218,13 @@ jobs:
               echo '🔨 Building with direct next path...'
               ./node_modules/.bin/next build || {
                 echo '❌ Direct next build failed'
+                echo '🔍 Last build attempt diagnostics:'
+                echo '  Next.js config:'
+                ls -la next.config.* 2>/dev/null || echo 'No config found'
+                echo '  Environment file check:'
+                cat .env.local | sed 's/=.*/=***/' || echo 'No .env.local'
+                echo '  Node modules:'
+                ls -la node_modules/.bin/ | grep next || echo 'No next binary'
                 exit 1
               }
             elif npm run build; then
@@ -164,14 +234,13 @@ jobs:
               exit 1
             fi
             echo '✅ Build completed successfully'
-            echo '✅ Build completed successfully'
             
             echo '🔍 Build artifacts:'
             ls -la .next/ 2>/dev/null || echo 'No .next directory found'
-
+            
             echo '🔍 Current PM2 status before restart:'
             pm2 list || echo 'PM2 not initialized yet'
-
+            
             echo '🔁 Restarting app via PM2...'
             if pm2 describe tinchat > /dev/null 2>&1; then
               echo '🔄 Restarting existing PM2 process...'
@@ -183,7 +252,7 @@ jobs:
             
             echo '💾 Saving PM2 configuration...'
             pm2 save
-
+            
             echo '🔍 Final PM2 status:'
             pm2 list
             
@@ -196,7 +265,7 @@ jobs:
             echo '🔍 Testing application response...'
             sleep 5  # Give the app time to start
             
-            # Test multiple ports.
+            # Test multiple ports
             for port in 3000 8080 8000 5000; do
               if curl -f -s http://localhost:\$port > /dev/null; then
                 echo '✅ Application is responding on port '\$port
@@ -211,6 +280,6 @@ jobs:
             
             echo '🔍 PM2 process memory/CPU usage:'
             pm2 monit --no-interaction || echo 'Cannot show PM2 monitoring'
-
+            
             echo '✅ Deployment completed successfully!'
           "
