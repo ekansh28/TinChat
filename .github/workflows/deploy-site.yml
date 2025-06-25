@@ -32,18 +32,16 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
-          ssh $VPS_USER@$VPS_HOST bash -s <<SCRIPT
+          ssh $VPS_USER@$VPS_HOST bash -s << 'SCRIPT'
             set -e
             echo "📂 Changing to project directory: \$VPS_PROJECT_PATH"
             cd "\$VPS_PROJECT_PATH"
-
             echo "🔄 Fetching latest changes from GitHub..."
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
-
             echo "🔧 Creating .env.local file..."
-            cat > .env.local <<EOF
+            cat > .env.local << 'EOF'
 NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
