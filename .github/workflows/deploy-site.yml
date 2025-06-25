@@ -32,10 +32,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
-          ssh $VPS_USER@$VPS_HOST bash -s << 'SCRIPT'
+          ssh $VPS_USER@$VPS_HOST "bash -s" -- "$VPS_PROJECT_PATH" << 'SCRIPT'
             set -e
-            echo "📂 Changing to project directory: \$VPS_PROJECT_PATH"
-            cd "\$VPS_PROJECT_PATH"
+            project_path=$1
+            echo "📂 Changing to project directory: \$project_path"
+            cd "\$project_path"
             echo "🔄 Fetching latest changes from GitHub..."
             git fetch origin main
             git reset --hard origin/main
