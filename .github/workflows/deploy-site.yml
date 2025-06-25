@@ -24,18 +24,21 @@ jobs:
 
       - name: 🚀 Deploy & Restart on VPS
         env:
-          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_USER: root  # Or your sudo user if not root
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}  # Your actual project path
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
+          # Trim whitespace and newlines from path (safety check)
+          CLEAN_PATH=$(echo "$VPS_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
+          
           ssh $VPS_USER@$VPS_HOST "
             set -e
-            echo '📂 Changing to project directory: $VPS_PROJECT_PATH'
-            cd '$VPS_PROJECT_PATH' || { echo '❌ Failed to change directory'; exit 1; }
+            echo '📂 Changing to project directory: $CLEAN_PATH'
+            cd '$CLEAN_PATH' || { echo '❌ Failed to change directory'; exit 1; }
             
             echo '🔄 Fetching latest changes from GitHub...'
             git fetch origin main
@@ -53,7 +56,7 @@ jobs:
 
             echo '📦 Checking dependencies...'
             if [ ! -d 'node_modules' ] || git diff --name-only HEAD~1 HEAD | grep -q 'package.json\|package-lock.json'; then
-              echo '🔄 Installing/updating dependencies...'
+              echo '🔄 Installing dependencies...'
               npm ci
             else
               echo '✅ Dependencies are up to date'
@@ -67,3 +70,5 @@ jobs:
 
             echo '✅ Deployment completed successfully!'
           "
+         
+       
