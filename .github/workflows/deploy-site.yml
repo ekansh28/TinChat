@@ -68,13 +68,13 @@ jobs:
             git log --oneline -3 || echo 'Git log failed'
             
             echo '🔧 Creating .env.local file...'
-            cat > .env.local <<EOF
-            NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-            SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
-            NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-            NODE_ENV=production
-            EOF
+            
+            # Create .env.local file with explicit echo statements to handle empty variables
+            echo \"NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL}\" > .env.local
+            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY}\" >> .env.local
+            echo \"SUPABASE_SERVICE_ROLE_KEY=\${SUPABASE_SERVICE_ROLE_KEY}\" >> .env.local
+            echo \"NEXT_PUBLIC_API_BASE_URL=\${NEXT_PUBLIC_API_BASE_URL}\" >> .env.local
+            echo \"NODE_ENV=production\" >> .env.local
             echo '✅ Environment file created'
             echo '🔍 Environment file contents (redacted):'
             sed 's/=.*/=***REDACTED***/g' .env.local

@@ -1,4 +1,4 @@
-- name: 🚀 Deploy & Restart on VPS
+  name: 🚀 Deploy & Restart on VPS
   env:
     VPS_USER: root
     VPS_HOST: ${{ secrets.VPS_HOST }}
