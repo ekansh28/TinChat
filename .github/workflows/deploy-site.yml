@@ -196,7 +196,7 @@ jobs:
             echo '🔍 Testing application response...'
             sleep 5  # Give the app time to start
             
-            # Test multiple ports
+            # Test multiple ports.
             for port in 3000 8080 8000 5000; do
               if curl -f -s http://localhost:\$port > /dev/null; then
                 echo '✅ Application is responding on port '\$port
