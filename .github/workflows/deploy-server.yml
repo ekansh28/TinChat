@@ -1,102 +1,128 @@
-  name: 🚀 Deploy & Restart on VPS
-  env:
-    VPS_USER: root
-    VPS_HOST: ${{ secrets.VPS_HOST }}
-    VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
-    NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-    NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
-  run: |
-    echo "🔍 Starting deployment process..."
-    echo "📋 Environment variables check:"
-    echo "  - VPS_HOST: $VPS_HOST"
-    echo "  - VPS_PROJECT_PATH: $VPS_PROJECT_PATH"
-    echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
-    
-    # First-time setup check
-    echo "🛠️ Checking if project directory exists..."
-    ssh root@$VPS_HOST "
-      if [ ! -d '$VPS_PROJECT_PATH' ]; then
-        echo '🛠️ First-time setup: Creating project directory...'
-        mkdir -p '$VPS_PROJECT_PATH'
-        echo '📥 Cloning repository...'
-        git clone https://github.com/ekansh28/TinChat.git '$VPS_PROJECT_PATH'
-        echo '✅ Repository cloned successfully'
-      else
-        echo '✅ Project directory already exists'
-      fi
-    "
-    
-    # Main deployment
-    echo "🚀 Starting main deployment process..."
-    ssh root@$VPS_HOST "
-      set -e
-      
-      echo '📂 Changing to project directory...'
-      cd '$VPS_PROJECT_PATH' || { echo '❌ Directory missing'; exit 1; }
-      echo '✅ Current directory: \$(pwd)'
-      
-      echo '🔄 Force updating repository...'
-      git fetch --all
-      git reset --hard origin/main
-      git clean -fd
-      echo '✅ Repository updated successfully'
-      
-      echo '🔧 Creating .env.local file...'
-      cat > .env.local <<'ENV_EOF'
-      NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-      NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-      SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
-      NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-      NODE_ENV=production
-      ENV_EOF
-      echo '✅ Environment file created'
-      echo '🔍 Environment file contents (redacted):'
-      sed 's/=.*/=***REDACTED***/g' .env.local
-      
-      echo '📦 Installing dependencies...'
-      npm ci --verbose
-      echo '✅ Dependencies installed successfully'
-      
-      echo '🏗️ Building project...'
-      npm run build || { 
-        echo '❌ Build failed - showing last 20 lines of build output:'
-        tail -20 npm-debug.log 2>/dev/null || echo 'No npm-debug.log found'
-        exit 1
-      }
-      echo '✅ Build completed successfully'
-      
-      echo '🔍 Checking current PM2 status...'
-      pm2 list || echo 'PM2 not initialized yet'
-      
-      echo '🚀 Managing PM2 process...'
-      if pm2 describe tinchat > /dev/null 2>&1; then
-        echo '🔄 Restarting existing PM2 process...'
-        pm2 restart tinchat
-      else
-        echo '🆕 Starting new PM2 process...'
-        pm2 start npm --name 'tinchat' -- start
-      fi
-      
-      echo '💾 Saving PM2 configuration...'
-      pm2 save
-      
-      echo '🔍 Final PM2 status:'
-      pm2 list
-      
-      echo '🔍 Checking PM2 logs (last 10 lines):'
-      pm2 logs tinchat --lines 10 --nostream || echo 'No logs available yet'
-      
-      echo '🔍 Testing application response...'
-      sleep 5  # Give the app time to start
-      if curl -f -s http://localhost:3000 > /dev/null; then
-        echo '✅ Application is responding on port 3000'
-      else
-        echo '⚠️ Application not responding on port 3000 - this might be normal if it uses a different port'
-        echo '🔍 Checking what is listening on common ports:'
-        netstat -tlnp | grep -E ':(3000|8080|8000|5000)' || echo 'No services found on common ports'
-      fi
-      
-      echo '✅ Deployment completed successfully!'
-    "
+name: 🚀 Deploy Server to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  deploy:
+    name: 🔁 Build & Deploy Server on VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: 🔐 Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
+
+      - name: 🧠 Add VPS Host to Known Hosts
+        run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy & Restart on VPS
+        env:
+          VPS_USER: root
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          echo "🔍 Starting deployment process..."
+          echo "📋 Environment variables check:"
+          echo "  - VPS_HOST: $VPS_HOST"
+          echo "  - VPS_PROJECT_PATH: $VPS_PROJECT_PATH"
+          echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
+          
+          # First-time setup check
+          echo "🛠️ Checking if project directory exists..."
+          ssh root@$VPS_HOST "
+            if [ ! -d '$VPS_PROJECT_PATH' ]; then
+              echo '🛠️ First-time setup: Creating project directory...'
+              mkdir -p '$VPS_PROJECT_PATH'
+              echo '📥 Cloning repository...'
+              git clone https://github.com/ekansh28/TinChat.git '$VPS_PROJECT_PATH'
+              echo '✅ Repository cloned successfully'
+            else
+              echo '✅ Project directory already exists'
+            fi
+          "
+          
+          # Main deployment
+          echo "🚀 Starting main deployment process..."
+          ssh root@$VPS_HOST "
+            set -e
+            
+            echo '📂 Changing to project directory...'
+            cd '$VPS_PROJECT_PATH' || { echo '❌ Directory missing'; exit 1; }
+            echo '✅ Current directory: \$(pwd)'
+            
+            echo '🔄 Force updating repository...'
+            git fetch --all
+            git reset --hard origin/main
+            git clean -fd
+            echo '✅ Repository updated successfully'
+            
+            echo '🔧 Creating .env.local file...'
+            
+            # Create .env.local file with explicit echo statements to handle empty variables
+            echo \"NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL}\" > .env.local
+            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY}\" >> .env.local
+            echo \"SUPABASE_SERVICE_ROLE_KEY=\${SUPABASE_SERVICE_ROLE_KEY}\" >> .env.local
+            echo \"NEXT_PUBLIC_API_BASE_URL=\${NEXT_PUBLIC_API_BASE_URL}\" >> .env.local
+            echo \"NODE_ENV=production\" >> .env.local
+            
+            echo '✅ Environment file created'
+            echo '🔍 Environment file contents (redacted):'
+            sed 's/=.*/=***REDACTED***/g' .env.local
+            
+            echo '📦 Installing dependencies...'
+            npm ci --verbose
+            echo '✅ Dependencies installed successfully'
+            
+            echo '🏗️ Building project...'
+            npm run build || { 
+              echo '❌ Build failed - showing last 20 lines of build output:'
+              tail -20 npm-debug.log 2>/dev/null || echo 'No npm-debug.log found'
+              exit 1
+            }
+            echo '✅ Build completed successfully'
+            
+            echo '🔍 Checking current PM2 status...'
+            pm2 list || echo 'PM2 not initialized yet'
+            
+            echo '🚀 Managing PM2 process...'
+            if pm2 describe tinchat > /dev/null 2>&1; then
+              echo '🔄 Restarting existing PM2 process...'
+              pm2 restart tinchat
+            else
+              echo '🆕 Starting new PM2 process...'
+              pm2 start npm --name 'tinchat' -- start
+            fi
+            
+            echo '💾 Saving PM2 configuration...'
+            pm2 save
+            
+            echo '🔍 Final PM2 status:'
+            pm2 list
+            
+            echo '🔍 Checking PM2 logs (last 10 lines):'
+            pm2 logs tinchat --lines 10 --nostream || echo 'No logs available yet'
+            
+            echo '🔍 Testing application response...'
+            sleep 5  # Give the app time to start
+            if curl -f -s http://localhost:3000 > /dev/null; then
+              echo '✅ Application is responding on port 3000'
+            else
+              echo '⚠️ Application not responding on port 3000 - this might be normal if it uses a different port'
+              echo '🔍 Checking what is listening on common ports:'
+              netstat -tlnp | grep -E ':(3000|8080|8000|5000)' || echo 'No services found on common ports'
+            fi
+            
+            echo '✅ Deployment completed successfully!'
+          "
