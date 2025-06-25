@@ -4,7 +4,10 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allows manual triggering
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'  # Also run if the workflow itself changes
+  
 
 jobs:
   deploy:
