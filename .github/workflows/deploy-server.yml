@@ -1,61 +1,50 @@
-- name: 🚀 Deploy & Update Server
+- name: 🚀 Deploy & Restart on VPS
   env:
-    SERVER_USER: ${{ secrets.SERVER_USER }}
-    SERVER_HOST: ${{ secrets.SERVER_HOST }}
-    SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+    VPS_USER: root
+    VPS_HOST: ${{ secrets.VPS_HOST }}
+    VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+    NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
   run: |
-    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 "$SERVER_USER@$SERVER_HOST" bash -s <<'SCRIPT'
-      set -euo pipefail
+    # First-time setup check
+    ssh root@$VPS_HOST "
+      if [ ! -d '$VPS_PROJECT_PATH' ]; then
+        echo '🛠️ First-time setup: Creating project directory...'
+        mkdir -p '$VPS_PROJECT_PATH'
+        git clone https://github.com/ekansh28/TinChat.git '$VPS_PROJECT_PATH'
+      fi
+    "
+    
+    # Main deployment
+    ssh root@$VPS_HOST "
+      set -e
+      cd '$VPS_PROJECT_PATH' || { echo '❌ Directory missing'; exit 1; }
       
-      # Clean project path input
-      PROJECT_PATH=$(echo "${{ secrets.SERVER_PROJECT_PATH }}" | tr -d '\n' | sed 's/ *$//')
-      
-      echo "📂 Changing to server directory: $PROJECT_PATH"
-      cd "$PROJECT_PATH" || {
-        echo "❌ Failed to change to project directory"
-        exit 1
-      }
-      
-      # Git operations
-      echo "🔄 Force updating repository..."
-      git fetch origin main
+      echo '🔄 Force updating repository...'
+      git fetch --all
       git reset --hard origin/main
       git clean -fd
-      echo "✅ Repository updated to commit: $(git rev-parse --short HEAD)"
       
-      # Dependency management
-      echo "📦 Checking dependencies..."
-      if [ ! -d "node_modules" ] || git diff --name-only HEAD~1 HEAD | grep -q "package-lock.json\|package.json"; then
-        echo "🔄 Reinstalling dependencies..."
-        rm -rf node_modules package-lock.json
-        npm ci --only=production
-      fi
-      
-      # Create .env file with GitHub secrets
-      echo "🔧 Creating environment file..."
-      cat > .env <<EOF
-      SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-      UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
-      UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      echo '🔧 Creating .env file...'
+      cat > .env <<'ENV_EOF'
+      NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+      NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+      SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+      NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
       NODE_ENV=production
-      PORT=3001
-      EOF
+      ENV_EOF
       
-      # Build process
-      echo "🏗️ Building project..."
-      rm -rf dist
-      npx tsc --build || {
-        echo "❌ Build failed"
-        npx tsc --build --verbose
-        exit 1
-      }
+      echo '📦 Installing dependencies...'
+      npm ci
       
-      # PM2 process management
-      echo "🔁 Managing PM2 processes..."
-      pm2 delete tinchat-server || true
-      pm2 start dist/index.js --name "tinchat-server" --update-env
+      echo '🏗️ Building project...'
+      npm run build
+      
+      echo '🚀 Starting PM2 process...'
+      pm2 delete tinchat || true
+      pm2 start npm --name 'tinchat' -- start
       pm2 save
-      
-      echo "✅ Deployment completed successfully!"
-    SCRIPT
+      pm2 startup
+    "
