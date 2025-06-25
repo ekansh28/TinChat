@@ -1,10 +1,10 @@
-// src/app/chat/components/FriendsWindow.tsx - COMPLETELY FIXED AUTO-AUTHENTICATION
+// src/app/chat/components/FriendsWindow.tsx - UPDATED WITH THEME SUPPORT AND VERTICAL LAYOUT
 
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UserPlus, Users, MessageCircle, Search, Filter, Settings, Trash2 } from 'lucide-react';
+import { X, UserPlus, Users, MessageCircle, Search, Filter, Settings, Trash2, UserX, UserCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface Friend {
@@ -20,6 +20,15 @@ interface Friend {
   mutualFriends?: number;
 }
 
+interface FriendRequest {
+  id: string;
+  from: Friend;
+  to: Friend;
+  timestamp: Date;
+  type: 'incoming' | 'outgoing';
+  message?: string;
+}
+
 interface FriendsWindowProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,13 +37,7 @@ interface FriendsWindowProps {
 
 interface FriendsState {
   friends: Friend[];
-  pendingRequests: Array<{
-    id: string;
-    from: Friend;
-    to: Friend;
-    timestamp: Date;
-    type: 'incoming' | 'outgoing';
-  }>;
+  pendingRequests: FriendRequest[];
   blockedUsers: Friend[];
   isLoading: boolean;
   error: string | null;
@@ -47,6 +50,36 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 }) => {
   // ✅ CRITICAL: Auto-use authentication (no manual auth required)
   const auth = useAuth();
+  
+  // ✅ THEME DETECTION: Check which theme is active
+  const [currentTheme, setCurrentTheme] = useState<'win98' | 'win7' | 'winxp'>('win98');
+  
+  const checkCurrentTheme = useCallback(() => {
+    if (typeof window === 'undefined') return 'win98';
+    
+    const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
+    const winxpLink = document.getElementById('winxp-css-link') as HTMLLinkElement;
+    
+    const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
+    const hasWinXPCSS = winxpLink && winxpLink.href.includes('xp.css');
+    
+    if (hasWin7CSS) return 'win7';
+    if (hasWinXPCSS) return 'winxp';
+    return 'win98';
+  }, []);
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setCurrentTheme(checkCurrentTheme());
+    };
+    
+    updateTheme();
+    
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.head, { childList: true, subtree: true });
+    
+    return () => observer.disconnect();
+  }, [checkCurrentTheme]);
   
   // State management
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'blocked' | 'add'>('friends');
@@ -68,6 +101,204 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
   // Refs for cleanup
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const isInitializedRef = useRef(false);
+
+  // ✅ THEME-BASED STYLING: Get styles based on current theme
+  const getWindowStyles = (): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      position: 'fixed',
+      bottom: '45px', // Above taskbar
+      right: '20px',
+      width: '320px',
+      height: '500px', // ✅ VERTICAL RECTANGLE
+      zIndex: 5500,
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    };
+
+    switch (currentTheme) {
+      case 'win7':
+        return {
+          ...baseStyles,
+          background: 'rgba(240, 240, 240, 0.98)',
+          border: '1px solid #999',
+          borderRadius: '8px',
+          backdropFilter: 'blur(10px)',
+          bottom: '45px',
+        };
+      case 'winxp':
+        return {
+          ...baseStyles,
+          background: '#ece9d8',
+          border: '1px solid #0054e3',
+          borderRadius: '8px 8px 0 0',
+          bottom: '35px',
+        };
+      default: // win98
+        return {
+          ...baseStyles,
+          background: '#c0c0c0',
+          border: '3px outset #c0c0c0',
+          bottom: '37px',
+        };
+    }
+  };
+
+  const getTitleBarStyles = (): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 8px',
+      flexShrink: 0,
+      userSelect: 'none',
+      cursor: 'move' // Make it draggable-looking
+    };
+
+    switch (currentTheme) {
+      case 'win7':
+        return {
+          ...baseStyles,
+          height: '32px',
+          background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
+          borderBottom: '1px solid #ccc',
+          borderTopLeftRadius: '6px',
+          borderTopRightRadius: '6px',
+          color: '#333',
+        };
+      case 'winxp':
+        return {
+          ...baseStyles,
+          height: '28px',
+          background: 'linear-gradient(to bottom, #0054e3, #0040b3)',
+          color: '#fff',
+          borderTopLeftRadius: '6px',
+          borderTopRightRadius: '6px',
+          fontFamily: 'Tahoma, sans-serif',
+          fontSize: '11px',
+          fontWeight: 'bold'
+        };
+      default: // win98
+        return {
+          ...baseStyles,
+          height: '26px',
+          background: '#c0c0c0',
+          color: '#000',
+          fontSize: '11px',
+          fontWeight: 'bold'
+        };
+    }
+  };
+
+  const getBodyStyles = (): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    };
+
+    switch (currentTheme) {
+      case 'win7':
+        return {
+          ...baseStyles,
+          background: 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(5px)',
+          color: '#333',
+        };
+      case 'winxp':
+        return {
+          ...baseStyles,
+          background: '#ece9d8',
+          color: '#000',
+        };
+      default: // win98
+        return {
+          ...baseStyles,
+          background: '#c0c0c0',
+          color: '#000',
+        };
+    }
+  };
+
+  const getButtonStyles = (variant: 'primary' | 'secondary' | 'danger' = 'primary'): React.CSSProperties => {
+    let baseColor = '#0078d4';
+    if (variant === 'secondary') baseColor = '#666';
+    if (variant === 'danger') baseColor = '#d83b01';
+
+    switch (currentTheme) {
+      case 'win7':
+        return {
+          padding: '4px 8px',
+          border: `1px solid ${baseColor}`,
+          borderRadius: '3px',
+          background: `linear-gradient(to bottom, ${baseColor}20, ${baseColor}10)`,
+          color: baseColor,
+          fontSize: '11px',
+          cursor: 'pointer',
+          transition: 'all 0.2s'
+        };
+      case 'winxp':
+        return {
+          padding: '3px 8px',
+          border: `1px solid ${baseColor}`,
+          borderRadius: '3px',
+          background: variant === 'primary' ? baseColor : '#ece9d8',
+          color: variant === 'primary' ? '#fff' : baseColor,
+          fontSize: '11px',
+          fontFamily: 'Tahoma, sans-serif',
+          cursor: 'pointer'
+        };
+      default: // win98
+        return {
+          padding: '2px 6px',
+          border: '1px outset #c0c0c0',
+          background: '#c0c0c0',
+          color: '#000',
+          fontSize: '11px',
+          cursor: 'pointer'
+        };
+    }
+  };
+
+  const getTabStyles = (isActive: boolean): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      padding: '6px 12px',
+      cursor: 'pointer',
+      fontSize: '11px',
+      fontWeight: 'normal',
+      transition: 'all 0.2s',
+      border: 'none',
+      background: 'none'
+    };
+
+    switch (currentTheme) {
+      case 'win7':
+        return {
+          ...baseStyles,
+          background: isActive ? 'rgba(255, 255, 255, 0.8)' : 'transparent',
+          color: isActive ? '#333' : '#666',
+          borderBottom: isActive ? '2px solid #0078d4' : '2px solid transparent'
+        };
+      case 'winxp':
+        return {
+          ...baseStyles,
+          background: isActive ? '#fff' : 'rgba(255, 255, 255, 0.3)',
+          color: isActive ? '#000' : '#333',
+          border: isActive ? '1px solid #ccc' : '1px solid transparent',
+          borderBottom: 'none',
+          fontFamily: 'Tahoma, sans-serif'
+        };
+      default: // win98
+        return {
+          ...baseStyles,
+          background: isActive ? '#c0c0c0' : '#a0a0a0',
+          border: isActive ? '1px outset #c0c0c0' : '1px outset #a0a0a0',
+          color: '#000'
+        };
+    }
+  };
 
   // ✅ CRITICAL: Auto-load friends data when authenticated (no manual auth step)
   useEffect(() => {
@@ -93,24 +324,9 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
       
       // Load friends, requests, and blocked users in parallel
       const [friendsRes, requestsRes, blockedRes] = await Promise.all([
-        fetch('/api/friends', {
-          headers: {
-            'Authorization': `Bearer ${auth.authId}`,
-            'Content-Type': 'application/json'
-          }
-        }),
-        fetch('/api/friends/requests', {
-          headers: {
-            'Authorization': `Bearer ${auth.authId}`,
-            'Content-Type': 'application/json'
-          }
-        }),
-        fetch('/api/friends/blocked', {
-          headers: {
-            'Authorization': `Bearer ${auth.authId}`,
-            'Content-Type': 'application/json'
-          }
-        })
+        fetch(`/api/friends/list?userId=${auth.authId}`),
+        fetch(`/api/friends/requests?userId=${auth.authId}`),
+        fetch(`/api/friends/blocked?userId=${auth.authId}`)
       ]);
 
       const friendsData = friendsRes.ok ? await friendsRes.json() : { friends: [] };
@@ -151,11 +367,13 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     setIsSearchingUsers(true);
 
     try {
-      const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
-        headers: {
-          'Authorization': `Bearer ${auth.authId}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await fetch('/api/friends/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: query.trim(),
+          currentUserId: auth.authId 
+        })
       });
 
       if (response.ok) {
@@ -194,17 +412,18 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     if (!auth.authId) return;
 
     try {
-      const response = await fetch('/api/friends/request', {
+      const response = await fetch('/api/friends/request/send', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${auth.authId}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ targetUserId })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          fromUserId: auth.authId,
+          toUserId: targetUserId 
+        })
       });
 
       if (response.ok) {
         console.log('[FriendsWindow] ✅ Friend request sent');
+        setAddFriendResults(prev => prev.filter(user => user.id !== targetUserId));
         loadFriendsData(); // Refresh data
       }
     } catch (error) {
@@ -216,12 +435,10 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     if (!auth.authId) return;
 
     try {
-      const response = await fetch(`/api/friends/request/${requestId}/accept`, {
+      const response = await fetch('/api/friends/request/accept', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${auth.authId}`,
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, userId: auth.authId })
       });
 
       if (response.ok) {
@@ -237,12 +454,13 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     if (!auth.authId) return;
 
     try {
-      const response = await fetch(`/api/friends/${friendId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${auth.authId}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await fetch('/api/friends/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: auth.authId,
+          friendId
+        })
       });
 
       if (response.ok) {
@@ -293,442 +511,539 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
   // ✅ Show loading state while authentication is loading
   if (auth.isLoading) {
-    return (
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"
-          >
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-8 max-w-md w-full mx-4">
-              <div className="flex items-center justify-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                <span className="text-gray-700 dark:text-gray-300">Loading...</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    );
+    return null; // Don't show window while loading
   }
 
-  // ✅ Show error if not authenticated (but don't require manual auth)
+  // ✅ Don't show if not authenticated
   if (!auth.authId) {
-    return (
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"
-          >
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-8 max-w-md w-full mx-4">
-              <div className="text-center">
-                <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Authentication Required
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Please log in to access your friends list.
-                </p>
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    );
+    return null;
   }
+
+  if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className={`bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col ${className}`}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className={`friends-window ${currentTheme === 'win7' ? 'glass active' : ''} ${currentTheme === 'winxp' ? 'xp-window' : ''} ${className}`}
+        style={getWindowStyles()}
+      >
+        {/* ✅ TITLE BAR with theme styling */}
+        <div style={getTitleBarStyles()}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Users size={16} />
+            <span>Friends</span>
+            {friendsState.friends.length > 0 && (
+              <span style={{
+                background: currentTheme === 'win98' ? '#fff' : 'rgba(255,255,255,0.8)',
+                color: '#000',
+                padding: '2px 6px',
+                borderRadius: currentTheme === 'win98' ? '0' : '10px',
+                fontSize: '9px',
+                border: currentTheme === 'win98' ? '1px inset #c0c0c0' : 'none'
+              }}>
+                {friendsState.friends.length}
+              </span>
+            )}
+          </div>
+          
+          <button
+            onClick={onClose}
+            style={{
+              ...getButtonStyles('danger'),
+              width: '18px',
+              height: '18px',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-3">
-                <Users className="h-6 w-6 text-blue-500" />
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Friends
-                </h2>
-                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-sm rounded-full">
-                  {filteredFriends.length}
-                </span>
-              </div>
-              
+            ×
+          </button>
+        </div>
+
+        {/* ✅ WINDOW BODY with theme styling */}
+        <div style={getBodyStyles()}>
+          
+          {/* ✅ TABS with theme styling */}
+          <div style={{
+            display: 'flex',
+            borderBottom: currentTheme === 'win98' ? '1px solid #808080' : '1px solid #ccc',
+            background: currentTheme === 'win7' ? 'rgba(255, 255, 255, 0.5)' : 
+                       currentTheme === 'winxp' ? '#e0e0e0' : '#c0c0c0'
+          }}>
+            {[
+              { id: 'friends', label: 'Friends', count: friendsState.friends.length },
+              { id: 'requests', label: 'Requests', count: friendsState.pendingRequests.length },
+              { id: 'blocked', label: 'Blocked', count: friendsState.blockedUsers.length },
+              { id: 'add', label: 'Add', icon: true }
+            ].map((tab) => (
               <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors group"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                style={getTabStyles(activeTab === tab.id)}
               >
-                <X className="h-5 w-5 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
+                {tab.icon && <UserPlus size={12} style={{ marginRight: '4px' }} />}
+                {tab.label}
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span style={{
+                    marginLeft: '4px',
+                    background: activeTab === tab.id ? '#0078d4' : '#ccc',
+                    color: activeTab === tab.id ? '#fff' : '#000',
+                    padding: '1px 4px',
+                    borderRadius: '8px',
+                    fontSize: '9px'
+                  }}>
+                    {tab.count}
+                  </span>
+                )}
               </button>
-            </div>
+            ))}
+          </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6">
-              {[
-                { id: 'friends', label: 'Friends', count: friendsState.friends.length },
-                { id: 'requests', label: 'Requests', count: friendsState.pendingRequests.length },
-                { id: 'blocked', label: 'Blocked', count: friendsState.blockedUsers.length },
-                { id: 'add', label: 'Add Friends', icon: UserPlus }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-2 px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  {tab.icon && <tab.icon className="h-4 w-4" />}
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      activeTab === tab.id
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
-                    }`}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-hidden">
-              {/* Friends Tab */}
-              {activeTab === 'friends' && (
-                <div className="h-full flex flex-col">
-                  {/* Search and Filters */}
-                  <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center space-x-4">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search friends..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      <select
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value as any)}
-                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="all">All Status</option>
-                        <option value="online">Online</option>
-                        <option value="offline">Offline</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Friends List */}
-                  <div className="flex-1 overflow-y-auto p-6">
-                    {friendsState.isLoading ? (
-                      <div className="flex items-center justify-center h-32">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                      </div>
-                    ) : filteredFriends.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Users className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                          {searchQuery ? 'No friends found' : 'No friends yet'}
-                        </h3>
-                        <p className="text-gray-500 dark:text-gray-400">
-                          {searchQuery
-                            ? 'Try adjusting your search terms'
-                            : 'Start connecting with people by adding them as friends'
-                          }
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {filteredFriends.map((friend) => (
-                          <div
-                            key={friend.id}
-                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="relative">
-                                <img
-                                  src={friend.avatarUrl || '/default-avatar.png'}
-                                  alt={friend.displayName || friend.username}
-                                  className="h-10 w-10 rounded-full"
-                                />
-                                <div className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-800 ${
-                                  friend.status === 'online' ? 'bg-green-500' :
-                                  friend.status === 'away' ? 'bg-yellow-500' :
-                                  friend.status === 'busy' ? 'bg-red-500' : 'bg-gray-400'
-                                }`} />
-                              </div>
-                              
-                              <div>
-                                <h4 className="font-medium text-gray-900 dark:text-white">
-                                  {friend.displayName || friend.username}
-                                </h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-                                  {friend.status}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              <button
-                                className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
-                                title="Send Message"
-                              >
-                                <MessageCircle className="h-4 w-4" />
-                              </button>
-                              
-                              <button
-                                onClick={() => removeFriend(friend.id)}
-                                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors"
-                                title="Remove Friend"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Add Friends Tab */}
-              {activeTab === 'add' && (
-                <div className="h-full flex flex-col p-6">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      Add New Friends
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      Search for users by username or display name
-                    </p>
-                  </div>
-
-                  <div className="relative mb-6">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          {/* ✅ CONTENT AREA */}
+          <div style={{ 
+            flex: 1, 
+            overflow: 'hidden', 
+            display: 'flex', 
+            flexDirection: 'column',
+            padding: '8px'
+          }}>
+            
+            {/* ✅ FRIENDS TAB */}
+            {activeTab === 'friends' && (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* Search and Filter */}
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                     <input
                       type="text"
-                      placeholder="Search users..."
-                      value={addFriendQuery}
-                      onChange={(e) => setAddFriendQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Search friends..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '4px',
+                        fontSize: '11px',
+                        border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                        borderRadius: currentTheme === 'win98' ? '0' : '3px',
+                        background: '#fff'
+                      }}
                     />
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value as any)}
+                      style={{
+                        padding: '4px',
+                        fontSize: '11px',
+                        border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                        borderRadius: currentTheme === 'win98' ? '0' : '3px',
+                        background: '#fff'
+                      }}
+                    >
+                      <option value="all">All</option>
+                      <option value="online">Online</option>
+                      <option value="offline">Offline</option>
+                    </select>
                   </div>
+                </div>
 
-                  <div className="flex-1 overflow-y-auto">
-                    {isSearchingUsers ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                      </div>
-                    ) : addFriendResults.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Search className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                          {addFriendQuery ? 'No users found' : 'Start searching'}
-                        </h3>
-                        <p className="text-gray-500 dark:text-gray-400">
-                          {addFriendQuery
-                            ? 'Try different search terms'
-                            : 'Enter a username or display name to search for users'
-                          }
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {addFriendResults.map((user) => (
-                          <div
-                            key={user.id}
-                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                          >
-                            <div className="flex items-center space-x-3">
+                {/* Friends List */}
+                <div style={{ 
+                  flex: 1, 
+                  overflowY: 'auto',
+                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                  background: '#fff',
+                  padding: '4px'
+                }}>
+                  {friendsState.isLoading ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px' }}>
+                      Loading friends...
+                    </div>
+                  ) : filteredFriends.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
+                      {searchQuery ? 'No friends found' : 'No friends yet'}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {filteredFriends.map((friend) => (
+                        <div
+                          key={friend.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '4px',
+                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
+                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                            <div style={{ position: 'relative' }}>
                               <img
-                                src={user.avatarUrl || '/default-avatar.png'}
-                                alt={user.displayName || user.username}
-                                className="h-10 w-10 rounded-full"
+                                src={friend.avatarUrl || '/default-avatar.png'}
+                                alt={friend.displayName || friend.username}
+                                style={{ width: '24px', height: '24px', borderRadius: '50%' }}
                               />
-                              
-                              <div>
-                                <h4 className="font-medium text-gray-900 dark:text-white">
-                                  {user.displayName || user.username}
-                                </h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  @{user.username}
-                                </p>
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '-2px',
+                                right: '-2px',
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: friend.status === 'online' ? '#00ff00' :
+                                           friend.status === 'away' ? '#ffff00' :
+                                           friend.status === 'busy' ? '#ff0000' : '#808080',
+                                border: '1px solid #fff'
+                              }} />
+                            </div>
+                            
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: '11px', 
+                                fontWeight: 'bold',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
+                                {friend.displayName || friend.username}
+                              </div>
+                              <div style={{ fontSize: '9px', color: '#666', textTransform: 'capitalize' }}>
+                                {friend.status}
                               </div>
                             </div>
+                          </div>
 
+                          <div style={{ display: 'flex', gap: '2px' }}>
                             <button
-                              onClick={() => sendFriendRequest(user.id)}
-                              className="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                              title="Send Message"
+                              style={{
+                                ...getButtonStyles('primary'),
+                                width: '20px',
+                                height: '20px',
+                                padding: '0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
                             >
-                              <UserPlus className="h-4 w-4" />
-                              <span>Add Friend</span>
+                              <MessageCircle size={10} />
+                            </button>
+                            
+                            <button
+                              onClick={() => removeFriend(friend.id)}
+                              title="Remove Friend"
+                              style={{
+                                ...getButtonStyles('danger'),
+                                width: '20px',
+                                height: '20px',
+                                padding: '0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Trash2 size={10} />
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Friend Requests Tab */}
-              {activeTab === 'requests' && (
-                <div className="h-full flex flex-col p-6">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      Friend Requests
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      Manage incoming and outgoing friend requests
-                    </p>
-                  </div>
+            {/* ✅ ADD FRIENDS TAB */}
+            {activeTab === 'add' && (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    value={addFriendQuery}
+                    onChange={(e) => setAddFriendQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px',
+                      fontSize: '11px',
+                      border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                      borderRadius: currentTheme === 'win98' ? '0' : '3px',
+                      background: '#fff'
+                    }}
+                  />
+                </div>
 
-                  <div className="flex-1 overflow-y-auto">
-                    {friendsState.pendingRequests.length === 0 ? (
-                      <div className="text-center py-12">
-                        <UserPlus className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                          No pending requests
-                        </h3>
-                        <p className="text-gray-500 dark:text-gray-400">
-                          Friend requests will appear here
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {friendsState.pendingRequests.map((request) => (
-                          <div
-                            key={request.id}
-                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <img
-                                src={request.from.avatarUrl || '/default-avatar.png'}
-                                alt={request.from.displayName || request.from.username}
-                                className="h-10 w-10 rounded-full"
-                              />
-                              
-                              <div>
-                                <h4 className="font-medium text-gray-900 dark:text-white">
-                                  {request.from.displayName || request.from.username}
-                                </h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  {request.type === 'incoming' ? 'Sent you a friend request' : 'You sent a friend request'}
-                                </p>
+                <div style={{ 
+                  flex: 1, 
+                  overflowY: 'auto',
+                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                  background: '#fff',
+                  padding: '4px'
+                }}>
+                  {isSearchingUsers ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px' }}>
+                      Searching...
+                    </div>
+                  ) : addFriendResults.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
+                      {addFriendQuery ? 'No users found' : 'Enter a username to search'}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {addFriendResults.map((user) => (
+                        <div
+                          key={user.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '4px',
+                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
+                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                            <img
+                              src={user.avatarUrl || '/default-avatar.png'}
+                              alt={user.displayName || user.username}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                            />
+                            
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: '11px', 
+                                fontWeight: 'bold',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
+                                {user.displayName || user.username}
+                              </div>
+                              <div style={{ fontSize: '9px', color: '#666' }}>
+                                @{user.username}
                               </div>
                             </div>
-
-                            {request.type === 'incoming' && (
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={() => acceptFriendRequest(request.id)}
-                                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-                                >
-                                  Accept
-                                </button>
-                                <button className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg transition-colors">
-                                  Decline
-                                </button>
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
-              {/* Blocked Users Tab */}
-              {activeTab === 'blocked' && (
-                <div className="h-full flex flex-col p-6">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      Blocked Users
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      Manage your blocked users list
-                    </p>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto">
-                    {friendsState.blockedUsers.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Filter className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                          No blocked users
-                        </h3>
-                        <p className="text-gray-500 dark:text-gray-400">
-                          Blocked users will appear here
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {friendsState.blockedUsers.map((user) => (
-                          <div
-                            key={user.id}
-                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+                          <button
+                            onClick={() => sendFriendRequest(user.id)}
+                            style={{
+                              ...getButtonStyles('primary'),
+                              padding: '4px 8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
                           >
-                            <div className="flex items-center space-x-3">
-                              <img
-                                src={user.avatarUrl || '/default-avatar.png'}
-                                alt={user.displayName || user.username}
-                                className="h-10 w-10 rounded-full grayscale"
-                              />
-                              
-                              <div>
-                                <h4 className="font-medium text-gray-900 dark:text-white">
-                                  {user.displayName || user.username}
-                                </h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Blocked user
-                                </p>
+                            <UserPlus size={10} />
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ✅ FRIEND REQUESTS TAB */}
+            {activeTab === 'requests' && (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ 
+                  flex: 1, 
+                  overflowY: 'auto',
+                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                  background: '#fff',
+                  padding: '4px'
+                }}>
+                  {friendsState.pendingRequests.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
+                      No pending requests
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {friendsState.pendingRequests.map((request) => (
+                        <div
+                          key={request.id}
+                          style={{
+                            padding: '6px',
+                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
+                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                            <img
+                              src={request.from.avatarUrl || '/default-avatar.png'}
+                              alt={request.from.displayName || request.from.username}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                            />
+                            
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '11px', fontWeight: 'bold' }}>
+                                {request.from.displayName || request.from.username}
+                              </div>
+                              <div style={{ fontSize: '9px', color: '#666' }}>
+                                {request.type === 'incoming' ? 'Sent you a friend request' : 'You sent a friend request'}
+                              </div>
+                              {request.message && (
+                                <div style={{ fontSize: '9px', color: '#333', fontStyle: 'italic', marginTop: '2px' }}>
+                                  "{request.message}"
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {request.type === 'incoming' && (
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                              <button
+                                onClick={() => acceptFriendRequest(request.id)}
+                                style={{
+                                  ...getButtonStyles('primary'),
+                                  padding: '3px 8px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                <UserCheck size={10} />
+                                <span>Accept</span>
+                              </button>
+                              <button
+                                style={{
+                                  ...getButtonStyles('secondary'),
+                                  padding: '3px 8px'
+                                }}
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          )}
+                          
+                          {request.type === 'outgoing' && (
+                            <div style={{ textAlign: 'right', fontSize: '9px', color: '#666' }}>
+                              Pending...
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ✅ BLOCKED USERS TAB */}
+            {activeTab === 'blocked' && (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ 
+                  flex: 1, 
+                  overflowY: 'auto',
+                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+                  background: '#fff',
+                  padding: '4px'
+                }}>
+                  {friendsState.blockedUsers.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
+                      No blocked users
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {friendsState.blockedUsers.map((user) => (
+                        <div
+                          key={user.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '4px',
+                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
+                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                            <img
+                              src={user.avatarUrl || '/default-avatar.png'}
+                              alt={user.displayName || user.username}
+                              style={{ 
+                                width: '24px', 
+                                height: '24px', 
+                                borderRadius: '50%',
+                                filter: 'grayscale(100%)',
+                                opacity: 0.7
+                              }}
+                            />
+                            
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: '11px', 
+                                fontWeight: 'bold',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                color: '#666'
+                              }}>
+                                {user.displayName || user.username}
+                              </div>
+                              <div style={{ fontSize: '9px', color: '#999' }}>
+                                Blocked user
                               </div>
                             </div>
-
-                            <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors">
-                              Unblock
-                            </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+
+                          <button
+                            style={{
+                              ...getButtonStyles('primary'),
+                              padding: '4px 8px'
+                            }}
+                          >
+                            Unblock
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+              </div>
+            )}
+
+            {/* ✅ ERROR MESSAGE */}
+            {friendsState.error && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                background: currentTheme === 'win98' ? '#ffcccc' : '#fee',
+                border: currentTheme === 'win98' ? '1px solid #ff0000' : '1px solid #fcc',
+                padding: '8px',
+                borderRadius: currentTheme === 'win98' ? '0' : '4px',
+                fontSize: '11px',
+                color: '#c00',
+                maxWidth: '250px',
+                textAlign: 'center',
+                zIndex: 1000
+              }}>
+                {friendsState.error}
+                <div style={{ marginTop: '4px' }}>
+                  <button
+                    onClick={() => setFriendsState(prev => ({ ...prev, error: null }))}
+                    style={getButtonStyles('secondary')}
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
     </AnimatePresence>
   );
 };

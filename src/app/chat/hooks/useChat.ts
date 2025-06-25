@@ -1,458 +1,437 @@
-// src/app/chat/hooks/useChat.ts - COMPLETELY FIXED VERSION
+// src/app/chat/hooks/useChatSocket.ts - COMPLETELY FIXED WITH SKIP PARTNER PARAMETERS
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useSearchParams, usePathname } from 'next/navigation';
-import { useChatState } from './useChatState';
-import { useAuth } from './useAuth';
-import { useThemeDetection } from './useThemeDetection';
-import { useViewport } from './useViewport';
-import { useFaviconManager } from './useFaviconManager';
-import { useSystemMessages } from './useSystemMessages';
-import { useChatSocket } from './useChatSocket';
-import { useChatActions } from './useChatActions';
-import { useAutoSearch } from './useAutoSearch';
-import { getAudioManager } from '../components/TaskBar';
-import { playMatchSound } from '../utils/ChatHelpers';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { useSocketEvents } from './useSocketEvents';
 
-interface UseChatReturn {
-  // State
-  isMounted: boolean;
-  isScrollEnabled: boolean;
-  isSelfDisconnectedRecently: boolean;
-  isPartnerLeftRecently: boolean;
-  wasSkippedByPartner: boolean;
-  didSkipPartner: boolean;
-  partnerInterests: string[];
-  interests: string[];
-  
-  // Computed values
-  pinkThemeActive: boolean;
-  effectivePageTheme: string;
-  isMobile: boolean;
-  chatWindowStyle: React.CSSProperties;
-  
-  // Chat state
-  chatState: ReturnType<typeof useChatState>;
-  auth: ReturnType<typeof useAuth>;
-  socket: ReturnType<typeof useChatSocket>;
-  
-  // Actions
-  chatActions: ReturnType<typeof useChatActions>;
-  handleUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
-  
-  // Data
-  mappedMessages: any[];
-  memoizedPartnerInfo: any;
-  memoizedOwnInfo: any;
-  
-  // Loading states
-  isLoading: boolean;
-  hasConnectionError: boolean;
+interface SocketHandlers {
+  onMessage: (data: any) => void;
+  onPartnerFound: (data: any) => void;
+  onPartnerLeft: () => void;
+  onPartnerSkipped: (data: any) => void;
+  onSkipConfirmed: (data: any) => void;
+  onSearchStarted: (data: any) => void;
+  onSearchStopped: (data: any) => void;
+  onStatusChange: (status: string) => void;
+  onTypingStart: () => void;
+  onTypingStop: () => void;
+  onWaiting: (data: any) => void;
+  onCooldown: (data: any) => void;
+  onAlreadySearching: (data: any) => void;
+  onSearchError: (data: any) => void;
+  onDisconnectHandler?: () => void;
+  onConnectErrorHandler?: () => void;
+  authId: string | null;
 }
 
-export const useChat = (): UseChatReturn => {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
+interface UseChatSocketReturn {
+  socket: Socket | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  connectionError: string | null;
+  roomId: string | null;
   
-  // State management
-  const [isMounted, setIsMounted] = useState(false);
-  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
-  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
-  const [wasSkippedByPartner, setWasSkippedByPartner] = useState(false);
-  const [didSkipPartner, setDidSkipPartner] = useState(false);
-  const [userManuallyStopped, setUserManuallyStopped] = useState(false);
-  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
-  const [isScrollEnabled] = useState(true);
+  // Emit functions with proper signatures
+  emitFindPartner: (data: {
+    chatType?: 'text' | 'video';
+    interests?: string[];
+    authId?: string | null;
+    username?: string | null;
+    autoSearch?: boolean;
+    manualSearch?: boolean;
+    sessionId?: string;
+  }) => void;
+  emitStopSearching: () => void;
+  emitSkipPartner: (data: {
+    chatType?: 'text' | 'video';
+    interests?: string[];
+    authId?: string | null;
+    reason?: string;
+  }) => void;
+  emitLeaveChat: () => void;
+  emitMessage: (data: {
+    message: string;
+    authId?: string | null;
+    username?: string | null;
+  }) => void;
+  emitTypingStart: () => void;
+  emitTypingStop: () => void;
   
-  // Initialization tracking
-  const initRef = useRef({
-    isInitialized: false,
-    autoSearchStarted: false,
-    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`
-  });
+  // Connection management
+  reconnect: () => void;
+  disconnect: () => void;
+}
 
-  // Extract interests from URL params
-  const interests = useMemo(() => {
-    const interestsParam = searchParams.get('interests');
-    if (!interestsParam) return [];
-    return interestsParam.split(',').filter(i => i.trim() !== '');
-  }, [searchParams]);
+export const useChatSocket = (handlers: SocketHandlers): UseChatSocketReturn => {
+  // Socket state
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
 
-  // Initialize all hooks
-  const auth = useAuth();
-  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
-  const { isMobile, chatWindowStyle } = useViewport();
-  const chatState = useChatState();
+  // Refs for state management
+  const roomIdRef = useRef<string | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
+  const isManualDisconnectRef = useRef(false);
 
-  // ✅ CRITICAL FIX: Enhanced socket event handlers with proper state management
-  const socketHandlers = useMemo(() => ({
-    onMessage: (data: any) => {
-      console.log('[Chat] Handling message:', data);
-      
-      if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
-        chatState.setPartnerInfo(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
-            displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
-            rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
-          };
-        });
-      }
-      
-      chatState.addMessage({
-        text: data.message,
-        sender: 'partner',
-        senderUsername: data.senderUsername,
-        senderAuthId: data.senderAuthId,
-        senderDisplayNameColor: data.senderDisplayNameColor,
-        senderDisplayNameAnimation: data.senderDisplayNameAnimation,
-        senderRainbowSpeed: data.senderRainbowSpeed
-      });
-      
-      chatState.setIsPartnerTyping(false);
+  // Socket events handler
+  const { setupEvents, cleanupEvents } = useSocketEvents(handlers);
 
-      // Play receive sound
-      try {
-        const audioManager = getAudioManager();
-        audioManager.playMessageReceived();
-      } catch (error) {
-        console.warn('[Chat] Failed to play receive sound:', error);
-      }
-    },
-
-    onPartnerFound: (data: any) => {
-      console.log('[Chat] Partner found:', data);
-      
-      // Play match sound
-      try {
-        playMatchSound();
-      } catch (error) {
-        console.warn('[Chat] Failed to play match sound:', error);
-      }
-      
-      chatState.setPartnerInfo({
-        id: data.partnerId,
-        username: data.partnerUsername || 'Stranger',
-        displayName: data.partnerDisplayName,
-        avatarUrl: data.partnerAvatarUrl,
-        bannerUrl: data.partnerBannerUrl,
-        pronouns: data.partnerPronouns,
-        status: data.partnerStatus || 'online',
-        displayNameColor: data.partnerDisplayNameColor || '#667eea',
-        displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
-        rainbowSpeed: data.partnerRainbowSpeed || 3,
-        authId: data.partnerAuthId,
-        badges: data.partnerBadges || []
-      });
-      
-      setPartnerInterests(data.interests || []);
-      chatState.setIsFindingPartner(false);
-      chatState.setIsPartnerConnected(true);
-      
-      // Reset all skip states when new partner found
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      setWasSkippedByPartner(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(false);
-      
-      chatState.setMessages([]);
-    },
-
-    onPartnerLeft: () => {
-      console.log('[Chat] Partner left normally');
-      chatState.setIsPartnerConnected(false);
-      chatState.setIsFindingPartner(false);
-      chatState.setPartnerInfo(null);
-      chatState.setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      setIsPartnerLeftRecently(true);
-      setIsSelfDisconnectedRecently(false);
-      setWasSkippedByPartner(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(false);
-    },
-
-    // ✅ CRITICAL FIX: Handle being skipped by partner properly
-    onPartnerSkipped: (data: any) => {
-      console.log('[Chat] ❌ YOU WERE SKIPPED by partner:', data);
-      
-      chatState.setIsPartnerConnected(false);
-      chatState.setPartnerInfo(null);
-      chatState.setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      
-      // ✅ CRITICAL: Mark as skipped and STOP any search
-      setWasSkippedByPartner(true);
-      setIsPartnerLeftRecently(false);
-      setIsSelfDisconnectedRecently(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(false);
-      
-      // ✅ IMPORTANT: Stop searching when skipped
-      chatState.setIsFindingPartner(false);
-      
-      console.log('[Chat] State updated after being skipped - search stopped');
-    },
-
-    // ✅ NEW: Handle skip confirmation when YOU skip someone
-    onSkipConfirmed: (data: any) => {
-      console.log('[Chat] ✅ Skip confirmed - you skipped someone:', data);
-      
-      setDidSkipPartner(true);
-      setWasSkippedByPartner(false);
-      setIsPartnerLeftRecently(false);
-      setIsSelfDisconnectedRecently(false);
-      setUserManuallyStopped(false);
-      
-      // ✅ IMPORTANT: Auto-search should be handled by server
-      if (data.autoSearchStarted) {
-        chatState.setIsFindingPartner(true);
-        console.log('[Chat] Auto-search started after skip');
-      }
-    },
-
-    // ✅ NEW: Handle search started confirmation
-    onSearchStarted: (data: any) => {
-      console.log('[Chat] 🔍 Search started confirmed:', data);
-      chatState.setIsFindingPartner(true);
-    },
-
-    // ✅ NEW: Handle search stopped confirmation  
-    onSearchStopped: (data: any) => {
-      console.log('[Chat] 🛑 Search stopped confirmed:', data);
-      chatState.setIsFindingPartner(false);
-      setUserManuallyStopped(true);
-    },
-
-    onStatusChange: (status: string) => {
-      chatState.setPartnerInfo(prev => 
-        prev ? {...prev, status: status as any} : null
-      );
-    },
-
-    onTypingStart: () => chatState.setIsPartnerTyping(true),
-    onTypingStop: () => chatState.setIsPartnerTyping(false),
-    
-    onWaiting: (data: any) => {
-      console.log('[Chat] 🔍 Waiting for partner:', data);
-      chatState.setIsFindingPartner(true);
-    },
-    
-    onCooldown: (data: any) => {
-      console.log('[Chat] ⏰ Find partner cooldown:', data);
-      chatState.setIsFindingPartner(false);
-    },
-    
-    onDisconnectHandler: () => {
-      console.log('[Chat] 🔌 Socket disconnected');
-      chatState.setIsPartnerConnected(false);
-      chatState.setIsFindingPartner(false);
-      chatState.setIsPartnerTyping(false);
-      chatState.setPartnerInfo(null);
-    },
-    
-    onConnectErrorHandler: () => {
-      console.log('[Chat] ❌ Socket connection error');
-      chatState.setIsFindingPartner(false);
-    },
-
-    // ✅ NEW: Handle already searching
-    onAlreadySearching: (data: any) => {
-      console.log('[Chat] ⚠️ Already searching:', data);
-      chatState.setIsFindingPartner(true);
-    },
-
-    // ✅ NEW: Handle search error
-    onSearchError: (data: any) => {
-      console.log('[Chat] ❌ Search error:', data);
-      chatState.setIsFindingPartner(false);
-      setUserManuallyStopped(true);
+  // ✅ CRITICAL: Enhanced socket connection with proper error handling
+  const connectSocket = useCallback(() => {
+    if (socket?.connected) {
+      console.log('[ChatSocket] Already connected');
+      return;
     }
-  }), [chatState]);
 
-  // Initialize socket with all handlers
-  const socket = useChatSocket({
-    ...socketHandlers,
-    authId: auth.authId
-  });
+    console.log('[ChatSocket] 🔌 Connecting to chat server...');
+    setIsConnecting(true);
+    setConnectionError(null);
 
-  // Favicon management
-  useFaviconManager({
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    connectionError: socket.connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently: isPartnerLeftRecently || wasSkippedByPartner
-  });
+    try {
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+        transports: ['websocket', 'polling'],
+        timeout: 10000,
+        retries: 3,
+        auth: {
+          authId: handlers.authId
+        },
+        query: {
+          clientType: 'web',
+          version: '1.0.0'
+        }
+      });
 
-  // System messages
-  useSystemMessages({
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    connectionError: socket.connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently,
-    wasSkippedByPartner,
-    didSkipPartner,
-    partnerInterests,
-    interests,
-    messages: chatState.messages,
-    setMessages: chatState.setMessages
-  });
+      // ✅ CRITICAL: Connection event handlers
+      newSocket.on('connect', () => {
+        console.log('[ChatSocket] ✅ Connected to server:', newSocket.id);
+        setIsConnected(true);
+        setIsConnecting(false);
+        setConnectionError(null);
+        reconnectAttemptsRef.current = 0;
 
-  // Chat actions
-  const chatActions = useChatActions({
-    isConnected: socket.isConnected,
-    isPartnerConnected: chatState.isPartnerConnected,
-    isFindingPartner: chatState.isFindingPartner,
-    setIsFindingPartner: chatState.setIsFindingPartner,
-    setIsPartnerConnected: chatState.setIsPartnerConnected,
-    setPartnerInfo: chatState.setPartnerInfo,
-    setIsPartnerTyping: chatState.setIsPartnerTyping,
-    setPartnerInterests,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    setDidSkipPartner,
-    setUserManuallyStopped,
-    addMessage: chatState.addMessage,
-    addSystemMessage: chatState.addSystemMessage,
-    emitLeaveChat: socket.emitLeaveChat,
-    emitSkipPartner: socket.emitSkipPartner,
-    emitStopSearching: socket.emitStopSearching,
-    emitFindPartner: socket.emitFindPartner,
-    emitMessage: socket.emitMessage,
-    emitTypingStart: socket.emitTypingStart,
-    emitTypingStop: socket.emitTypingStop,
-    setCurrentMessage: chatState.setCurrentMessage,
-    interests,
-    authId: auth.authId,
-    username: auth.username
-  });
+        // Authenticate if we have authId
+        if (handlers.authId) {
+          newSocket.emit('authenticate', {
+            authId: handlers.authId,
+            clientInfo: {
+              userAgent: navigator.userAgent,
+              timestamp: Date.now()
+            }
+          });
+        }
+      });
 
-  // ✅ CRITICAL FIX: Enhanced auto-search that respects user state
-  useAutoSearch({
-    socket,
-    auth,
-    chatState,
-    interests,
-    initRef,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    wasSkippedByPartner,
-    didSkipPartner,
-    userManuallyStopped
-  });
-  
-  // Navigation cleanup
+      newSocket.on('disconnect', (reason: string) => {
+        console.log('[ChatSocket] 🔌 Disconnected:', reason);
+        setIsConnected(false);
+        setIsConnecting(false);
+        roomIdRef.current = null;
+        setRoomId(null);
+        
+        if (handlers.onDisconnectHandler) {
+          handlers.onDisconnectHandler();
+        }
+
+        // Auto-reconnect for non-manual disconnections
+        if (!isManualDisconnectRef.current && reason !== 'io client disconnect') {
+          handleReconnect();
+        }
+      });
+
+      newSocket.on('connect_error', (error: any) => {
+        console.error('[ChatSocket] ❌ Connection error:', error);
+        setIsConnecting(false);
+        setConnectionError(error.message || 'Connection failed');
+        
+        if (handlers.onConnectErrorHandler) {
+          handlers.onConnectErrorHandler();
+        }
+
+        // Auto-reconnect on connection error
+        if (!isManualDisconnectRef.current) {
+          handleReconnect();
+        }
+      });
+
+      // ✅ Setup all chat event handlers
+      setupEvents(newSocket, roomIdRef);
+
+      // ✅ Handle room state changes
+      newSocket.on('roomJoined', (data: any) => {
+        if (data?.roomId) {
+          roomIdRef.current = data.roomId;
+          setRoomId(data.roomId);
+          console.log('[ChatSocket] 🏠 Joined room:', data.roomId);
+        }
+      });
+
+      newSocket.on('roomLeft', (data: any) => {
+        roomIdRef.current = null;
+        setRoomId(null);
+        console.log('[ChatSocket] 🏠 Left room:', data?.roomId);
+      });
+
+      // ✅ Handle authentication responses
+      newSocket.on('authSuccess', (data: any) => {
+        console.log('[ChatSocket] 🔐 Authentication successful:', data);
+      });
+
+      newSocket.on('authError', (data: any) => {
+        console.error('[ChatSocket] ❌ Authentication failed:', data);
+        setConnectionError('Authentication failed');
+      });
+
+      setSocket(newSocket);
+
+    } catch (error) {
+      console.error('[ChatSocket] ❌ Socket creation failed:', error);
+      setIsConnecting(false);
+      setConnectionError('Failed to create socket connection');
+    }
+  }, [socket, handlers.authId, setupEvents, handlers.onDisconnectHandler, handlers.onConnectErrorHandler]);
+
+  // ✅ Reconnection logic with exponential backoff
+  const handleReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log('[ChatSocket] 🚫 Max reconnection attempts reached');
+      setConnectionError('Unable to connect after multiple attempts');
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+    reconnectAttemptsRef.current++;
+
+    console.log(`[ChatSocket] 🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      if (!isManualDisconnectRef.current) {
+        connectSocket();
+      }
+    }, delay);
+  }, [connectSocket]);
+
+  // ✅ CRITICAL: Enhanced emit functions with proper parameters
+
+  const emitFindPartner = useCallback((data: {
+    chatType?: 'text' | 'video';
+    interests?: string[];
+    authId?: string | null;
+    username?: string | null;
+    autoSearch?: boolean;
+    manualSearch?: boolean;
+    sessionId?: string;
+  }) => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot find partner - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 🔍 Emitting findPartner:', data);
+    socket.emit('findPartner', {
+      chatType: data.chatType || 'text', // ✅ Default to 'text'
+      interests: data.interests || [],
+      authId: data.authId,
+      username: data.username,
+      autoSearch: data.autoSearch || false,
+      manualSearch: data.manualSearch || false,
+      sessionId: data.sessionId,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitStopSearching = useCallback(() => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot stop searching - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 🛑 Emitting stopSearching');
+    socket.emit('stopSearching', {
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  // ✅ CRITICAL: Fixed emitSkipPartner with proper parameters
+  const emitSkipPartner = useCallback((data: {
+    chatType?: 'text' | 'video';
+    interests?: string[];
+    authId?: string | null;
+    reason?: string;
+  }) => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot skip partner - not connected');
+      return;
+    }
+
+    if (!roomIdRef.current) {
+      console.error('[ChatSocket] ❌ Cannot skip partner - not in room');
+      return;
+    }
+
+    console.log('[ChatSocket] ⏭️ Emitting skipPartner for room:', roomIdRef.current);
+    socket.emit('skipPartner', {
+      roomId: roomIdRef.current,
+      chatType: data.chatType || 'text', // ✅ Include chatType
+      interests: data.interests || [],
+      authId: data.authId,
+      reason: data.reason || 'skip',
+      autoSearchForSkipper: true, // ✅ Only auto-search for the person who skipped
+      skipperAuthId: data.authId, // ✅ Identify who initiated the skip
+      timestamp: Date.now()
+    });
+    
+    // Clear room ID since we're leaving
+    roomIdRef.current = null;
+    setRoomId(null);
+  }, [socket]);
+
+  const emitLeaveChat = useCallback(() => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot leave chat - not connected');
+      return;
+    }
+
+    console.log('[ChatSocket] 👋 Emitting leaveChat');
+    socket.emit('leaveChat', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+    
+    // Clear room immediately
+    roomIdRef.current = null;
+    setRoomId(null);
+  }, [socket]);
+
+  const emitMessage = useCallback((data: {
+    message: string;
+    authId?: string | null;
+    username?: string | null;
+  }) => {
+    if (!socket?.connected) {
+      console.error('[ChatSocket] ❌ Cannot send message - not connected');
+      return;
+    }
+
+    if (!roomIdRef.current) {
+      console.error('[ChatSocket] ❌ Cannot send message - not in room');
+      return;
+    }
+
+    console.log('[ChatSocket] 📤 Emitting message to room:', roomIdRef.current);
+    socket.emit('sendMessage', {
+      message: data.message,
+      roomId: roomIdRef.current,
+      authId: data.authId,
+      username: data.username,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitTypingStart = useCallback(() => {
+    if (!socket?.connected || !roomIdRef.current) return;
+    
+    socket.emit('typing_start', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  const emitTypingStop = useCallback(() => {
+    if (!socket?.connected || !roomIdRef.current) return;
+    
+    socket.emit('typing_stop', {
+      roomId: roomIdRef.current,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  // ✅ Manual reconnect function
+  const reconnect = useCallback(() => {
+    console.log('[ChatSocket] 🔄 Manual reconnect triggered');
+    
+    isManualDisconnectRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    
+    if (socket) {
+      cleanupEvents(socket);
+      socket.disconnect();
+    }
+    
+    setSocket(null);
+    setIsConnected(false);
+    setConnectionError(null);
+    
+    setTimeout(connectSocket, 100);
+  }, [socket, cleanupEvents, connectSocket]);
+
+  // ✅ Manual disconnect function
+  const disconnect = useCallback(() => {
+    console.log('[ChatSocket] 🔌 Manual disconnect');
+    
+    isManualDisconnectRef.current = true;
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (socket) {
+      cleanupEvents(socket);
+      socket.disconnect();
+    }
+    
+    setSocket(null);
+    setIsConnected(false);
+    setIsConnecting(false);
+    roomIdRef.current = null;
+    setRoomId(null);
+  }, [socket, cleanupEvents]);
+
+  // ✅ Initialize socket connection
   useEffect(() => {
-    if (pathname === '/chat') {
-      console.log('[Chat] Route change cleanup');
-      chatState.resetChatState();
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      setWasSkippedByPartner(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(false);
-      setPartnerInterests([]);
-      initRef.current.autoSearchStarted = false;
-    }
-  }, [pathname, chatState.resetChatState]);
-
-  // Mount effect
-  useEffect(() => { 
-    console.log('[Chat] Component mounted');
-    setIsMounted(true);
-    initRef.current.isInitialized = true;
+    connectSocket();
     
     return () => {
-      console.log('[Chat] Component unmounting');
-      initRef.current.isInitialized = false;
+      isManualDisconnectRef.current = true;
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
+      if (socket) {
+        cleanupEvents(socket);
+        socket.disconnect();
+      }
     };
   }, []);
 
-  // Username click handler
-  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
-    console.log('[Chat] Username clicked:', authId, clickPosition);
+  // ✅ Update room state
+  useEffect(() => {
+    setRoomId(roomIdRef.current);
   }, []);
-
-  // Memoized message mapping
-  const mappedMessages = useMemo(() => {
-    return chatState.messages.map(msg => ({
-      id: msg.id,
-      content: msg.text,
-      sender: msg.sender === 'me' ? 'self' : msg.sender,
-      timestamp: msg.timestamp?.getTime(),
-      senderUsername: msg.senderUsername,
-      senderAuthId: msg.senderAuthId,
-      senderDisplayNameColor: msg.senderDisplayNameColor,
-      senderDisplayNameAnimation: msg.senderDisplayNameAnimation,
-      senderRainbowSpeed: msg.senderRainbowSpeed
-    }));
-  }, [chatState.messages]);
-
-  // Memoized partner info
-  const memoizedPartnerInfo = useMemo(() => {
-    if (!chatState.partnerInfo) return undefined;
-    
-    return {
-      username: chatState.partnerInfo.username,
-      displayName: chatState.partnerInfo.displayName,
-      avatar: chatState.partnerInfo.avatarUrl || '/default-avatar.png',
-      displayNameColor: chatState.partnerInfo.displayNameColor,
-      displayNameAnimation: chatState.partnerInfo.displayNameAnimation,
-      rainbowSpeed: chatState.partnerInfo.rainbowSpeed,
-      authId: chatState.partnerInfo.authId
-    };
-  }, [chatState.partnerInfo]);
-
-  // Memoized own info
-  const memoizedOwnInfo = useMemo(() => ({
-    username: auth.username || "You",
-    authId: auth.authId,
-    displayNameColor: auth.displayNameColor,
-    displayNameAnimation: auth.displayNameAnimation
-  }), [auth.username, auth.authId, auth.displayNameColor, auth.displayNameAnimation]);
-
-  // Loading and error states
-  const isLoading = !isMounted || auth.isLoading || (socket.isConnecting && !socket.isConnected);
-  const hasConnectionError = !!socket.connectionError && !socket.isConnected && !socket.isConnecting;
 
   return {
-    // State
-    isMounted,
-    isScrollEnabled,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently,
-    wasSkippedByPartner,
-    didSkipPartner,
-    partnerInterests,
-    interests,
-    
-    // Computed values
-    pinkThemeActive,
-    effectivePageTheme,
-    isMobile,
-    chatWindowStyle,
-    
-    // Chat state
-    chatState,
-    auth,
     socket,
+    isConnected,
+    isConnecting,
+    connectionError,
+    roomId,
     
-    // Actions
-    chatActions,
-    handleUsernameClick,
+    // Emit functions with proper parameters
+    emitFindPartner,
+    emitStopSearching,
+    emitSkipPartner, // ✅ Now accepts parameters
+    emitLeaveChat,
+    emitMessage,
+    emitTypingStart,
+    emitTypingStop,
     
-    // Data
-    mappedMessages,
-    memoizedPartnerInfo,
-    memoizedOwnInfo,
-    
-    // Loading states
-    isLoading,
-    hasConnectionError
+    // Connection management
+    reconnect,
+    disconnect
   };
 };

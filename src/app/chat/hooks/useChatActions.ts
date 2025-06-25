@@ -1,484 +1,227 @@
-// src/app/chat/hooks/useChatActions.ts - COMPLETELY FIXED CHAT ACTIONS
+// src/app/chat/hooks/useAutoSearch.ts - COMPLETELY FIXED WITH CHATTYPE
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
-interface Message {
-  id: string;
-  text: string;
-  sender: 'me' | 'partner' | 'system';
-  timestamp: Date;
-  senderUsername?: string;
-  senderAuthId?: string;
-  senderDisplayNameColor?: string;
-  senderDisplayNameAnimation?: string;
-  senderRainbowSpeed?: number;
-}
-
-interface UseChatActionsProps {
-  isConnected: boolean;
-  isPartnerConnected: boolean;
-  isFindingPartner: boolean;
-  setIsFindingPartner: (value: boolean) => void;
-  setIsPartnerConnected: (value: boolean) => void;
-  setPartnerInfo: (value: any) => void;
-  setIsPartnerTyping: (value: boolean) => void;
-  setPartnerInterests: (value: string[]) => void;
+interface UseAutoSearchProps {
+  socket: {
+    isConnected: boolean;
+    emitFindPartner: (data: any) => void;
+  };
+  auth: {
+    authId: string | null;
+    username: string | null;
+  };
+  chatState: {
+    isPartnerConnected: boolean;
+    isFindingPartner: boolean;
+  };
+  interests: string[];
+  initRef: React.MutableRefObject<{
+    isInitialized: boolean;
+    autoSearchStarted: boolean;
+    sessionId: string;
+  }>;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
-  setDidSkipPartner: (value: boolean) => void;
-  setUserManuallyStopped: (value: boolean) => void;
-  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
-  addSystemMessage: (text: string, type?: 'info' | 'warning' | 'error' | 'success') => void;
-  emitLeaveChat: () => void;
-  emitSkipPartner: () => void;
-  emitStopSearching: () => void;
-  emitFindPartner: (data: any) => void;
-  emitMessage: (data: any) => void;
-  emitTypingStart: () => void;
-  emitTypingStop: () => void;
-  setCurrentMessage: (message: string) => void;
-  interests: string[];
-  authId: string | null;
-  username: string | null;
+  wasSkippedByPartner: boolean;
+  didSkipPartner: boolean;
+  userManuallyStopped: boolean;
 }
 
-export const useChatActions = ({
-  isConnected,
-  isPartnerConnected,
-  isFindingPartner,
-  setIsFindingPartner,
-  setIsPartnerConnected,
-  setPartnerInfo,
-  setIsPartnerTyping,
-  setPartnerInterests,
+export const useAutoSearch = ({
+  socket,
+  auth,
+  chatState,
+  interests,
+  initRef,
   setIsSelfDisconnectedRecently,
   setIsPartnerLeftRecently,
-  setDidSkipPartner,
-  setUserManuallyStopped,
-  addMessage,
-  addSystemMessage,
-  emitLeaveChat,
-  emitSkipPartner,
-  emitStopSearching,
-  emitFindPartner,
-  emitMessage,
-  emitTypingStart,
-  emitTypingStop,
-  setCurrentMessage,
-  interests,
-  authId,
-  username
-}: UseChatActionsProps) => {
+  wasSkippedByPartner,
+  didSkipPartner,
+  userManuallyStopped
+}: UseAutoSearchProps) => {
+  
+  const lastAutoSearchRef = useRef<number>(0);
+  const autoSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoSearchingRef = useRef(false);
 
-  const lastActionRef = useRef<number>(0);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isTypingRef = useRef(false);
-
-  // ✅ CRITICAL: Fixed skip partner logic
-  const skipPartner = useCallback(() => {
+  // ✅ CRITICAL: Auto-search logic with chatType that respects all user states
+  const performAutoSearch = useCallback(() => {
     const now = Date.now();
     
-    // Prevent spam clicking
-    if (now - lastActionRef.current < 1000) {
-      console.log('[ChatActions] 🚫 Skip action throttled');
+    // Prevent spam
+    if (now - lastAutoSearchRef.current < 500) {
+      console.log('[AutoSearch] 🚫 Auto-search throttled');
       return;
     }
 
-    if (!isConnected) {
-      console.log('[ChatActions] 🚫 Cannot skip - not connected to server');
-      addSystemMessage('Not connected to server', 'error');
+    // Don't auto-search if user manually stopped or was skipped
+    if (userManuallyStopped) {
+      console.log('[AutoSearch] 🚫 User manually stopped - no auto-search');
       return;
     }
 
-    if (!isPartnerConnected) {
-      console.log('[ChatActions] 🚫 No partner to skip');
-      addSystemMessage('No partner to skip', 'warning');
+    if (wasSkippedByPartner) {
+      console.log('[AutoSearch] 🚫 Was skipped by partner - no auto-search');
       return;
     }
 
-    console.log('[ChatActions] ⏭️ Skipping partner...');
-    lastActionRef.current = now;
-
-    try {
-      // ✅ CRITICAL: Emit skip and let server handle the logic
-      emitSkipPartner();
-      
-      // ✅ IMPORTANT: Immediately update local state
-      setIsPartnerConnected(false);
-      setPartnerInfo(null);
-      setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      
-      // ✅ CRITICAL: Mark as "did skip" but don't set "finding partner" yet
-      // Let the server response handle auto-search state
-      setDidSkipPartner(true);
-      setIsPartnerLeftRecently(false);
-      setIsSelfDisconnectedRecently(false);
-      setUserManuallyStopped(false);
-      
-      console.log('[ChatActions] ✅ Skip request sent, waiting for server response');
-      
-    } catch (error) {
-      console.error('[ChatActions] ❌ Skip partner failed:', error);
-      addSystemMessage('Failed to skip partner', 'error');
+    // Don't auto-search if already connected or searching
+    if (chatState.isPartnerConnected) {
+      console.log('[AutoSearch] 🚫 Already connected to partner');
+      return;
     }
-  }, [
-    isConnected,
-    isPartnerConnected,
-    emitSkipPartner,
-    setIsPartnerConnected,
-    setPartnerInfo,
-    setIsPartnerTyping,
-    setPartnerInterests,
-    setDidSkipPartner,
-    setIsPartnerLeftRecently,
-    setIsSelfDisconnectedRecently,
-    setUserManuallyStopped,
-    addSystemMessage
-  ]);
 
-  // ✅ CRITICAL: Fixed leave chat logic
-  const leaveChat = useCallback(() => {
-    const now = Date.now();
+    if (chatState.isFindingPartner) {
+      console.log('[AutoSearch] 🚫 Already searching for partner');
+      return;
+    }
+
+    // Don't auto-search if socket not ready
+    if (!socket.isConnected) {
+      console.log('[AutoSearch] 🚫 Socket not connected');
+      return;
+    }
+
+    // Don't auto-search if not initialized
+    if (!initRef.current.isInitialized) {
+      console.log('[AutoSearch] 🚫 Not initialized yet');
+      return;
+    }
+
+    console.log('[AutoSearch] 🔍 Starting auto-search...');
     
-    if (now - lastActionRef.current < 1000) {
-      console.log('[ChatActions] 🚫 Leave action throttled');
-      return;
-    }
-
-    if (!isConnected) {
-      console.log('[ChatActions] 🚫 Cannot leave - not connected to server');
-      return;
-    }
-
-    console.log('[ChatActions] 👋 Leaving chat...');
-    lastActionRef.current = now;
-
-    try {
-      // Update state immediately
-      setIsPartnerConnected(false);
-      setPartnerInfo(null);
-      setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      setIsFindingPartner(false);
-      
-      // Mark as self-disconnected
-      setIsSelfDisconnectedRecently(true);
-      setIsPartnerLeftRecently(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(true);
-      
-      // Emit leave event
-      emitLeaveChat();
-      
-      console.log('[ChatActions] ✅ Left chat successfully');
-      
-    } catch (error) {
-      console.error('[ChatActions] ❌ Leave chat failed:', error);
-      addSystemMessage('Failed to leave chat', 'error');
-    }
-  }, [
-    isConnected,
-    emitLeaveChat,
-    setIsPartnerConnected,
-    setPartnerInfo,
-    setIsPartnerTyping,
-    setPartnerInterests,
-    setIsFindingPartner,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    setDidSkipPartner,
-    setUserManuallyStopped,
-    addSystemMessage
-  ]);
-
-  // ✅ CRITICAL: Fixed new chat logic
-  const startNewChat = useCallback(() => {
-    const now = Date.now();
+    isAutoSearchingRef.current = true;
+    lastAutoSearchRef.current = now;
     
-    if (now - lastActionRef.current < 1000) {
-      console.log('[ChatActions] 🚫 New chat action throttled');
-      return;
-    }
+    // Clear any previous states
+    setIsSelfDisconnectedRecently(false);
+    setIsPartnerLeftRecently(false);
+    
+    // ✅ CRITICAL FIX: Include chatType in auto-search
+    socket.emitFindPartner({
+      chatType: 'text', // ✅ REQUIRED: Add chatType field
+      interests: interests || [],
+      authId: auth.authId,
+      username: auth.username,
+      autoSearch: true,
+      sessionId: initRef.current.sessionId
+    });
 
-    if (!isConnected) {
-      console.log('[ChatActions] 🚫 Cannot start new chat - not connected to server');
-      addSystemMessage('Not connected to server', 'error');
-      return;
-    }
-
-    if (isFindingPartner) {
-      console.log('[ChatActions] 🚫 Already searching for a partner');
-      addSystemMessage('Already searching for a partner', 'warning');
-      return;
-    }
-
-    if (isPartnerConnected) {
-      console.log('[ChatActions] 🚫 Already connected to a partner');
-      addSystemMessage('Already connected to a partner', 'warning');
-      return;
-    }
-
-    console.log('[ChatActions] 🔍 Starting new chat search...');
-    lastActionRef.current = now;
-
-    try {
-      // Clear all previous states
-      setIsPartnerConnected(false);
-      setPartnerInfo(null);
-      setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      setIsSelfDisconnectedRecently(false);
-      setIsPartnerLeftRecently(false);
-      setDidSkipPartner(false);
-      setUserManuallyStopped(false);
-      
-      // Start finding partner
-      setIsFindingPartner(true);
-      
-      emitFindPartner({
-        interests: interests || [],
-        authId: authId,
-        username: username,
-        manualSearch: true
-      });
-      
-      console.log('[ChatActions] ✅ New chat search started');
-      
-    } catch (error) {
-      console.error('[ChatActions] ❌ Start new chat failed:', error);
-      setIsFindingPartner(false);
-      addSystemMessage('Failed to start new chat', 'error');
-    }
   }, [
-    isConnected,
-    isFindingPartner,
-    isPartnerConnected,
-    emitFindPartner,
-    setIsFindingPartner,
-    setIsPartnerConnected,
-    setPartnerInfo,
-    setIsPartnerTyping,
-    setPartnerInterests,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    setDidSkipPartner,
-    setUserManuallyStopped,
-    addSystemMessage,
+    socket,
+    auth,
+    chatState,
     interests,
-    authId,
-    username
+    initRef,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently,
+    userManuallyStopped,
+    wasSkippedByPartner
   ]);
 
-  // ✅ CRITICAL: Fixed stop searching logic
-  const stopSearching = useCallback(() => {
-    const now = Date.now();
-    
-    if (now - lastActionRef.current < 500) {
-      console.log('[ChatActions] 🚫 Stop search action throttled');
-      return;
-    }
-
-    if (!isConnected) {
-      console.log('[ChatActions] 🚫 Cannot stop search - not connected to server');
-      return;
-    }
-
-    if (!isFindingPartner) {
-      console.log('[ChatActions] 🚫 Not currently searching');
-      return;
-    }
-
-    console.log('[ChatActions] 🛑 Stopping search...');
-    lastActionRef.current = now;
-
-    try {
-      // Update state immediately
-      setIsFindingPartner(false);
-      setUserManuallyStopped(true);
-      
-      // Clear any partner-related states
-      setIsPartnerConnected(false);
-      setPartnerInfo(null);
-      setIsPartnerTyping(false);
-      setPartnerInterests([]);
-      
-      // Emit stop searching
-      emitStopSearching();
-      
-      console.log('[ChatActions] ✅ Search stopped successfully');
-      
-    } catch (error) {
-      console.error('[ChatActions] ❌ Stop searching failed:', error);
-      addSystemMessage('Failed to stop search', 'error');
-    }
-  }, [
-    isConnected,
-    isFindingPartner,
-    emitStopSearching,
-    setIsFindingPartner,
-    setUserManuallyStopped,
-    setIsPartnerConnected,
-    setPartnerInfo,
-    setIsPartnerTyping,
-    setPartnerInterests,
-    addSystemMessage
-  ]);
-
-  // ✅ CRITICAL: Fixed send message logic
-  const sendMessage = useCallback((messageText: string) => {
-    if (!messageText.trim()) {
-      console.log('[ChatActions] 🚫 Empty message');
-      return;
-    }
-
-    if (!isConnected) {
-      console.log('[ChatActions] 🚫 Cannot send message - not connected to server');
-      addSystemMessage('Not connected to server', 'error');
-      return;
-    }
-
-    if (!isPartnerConnected) {
-      console.log('[ChatActions] 🚫 Cannot send message - no partner connected');
-      addSystemMessage('No partner connected', 'warning');
-      return;
-    }
-
-    console.log('[ChatActions] 📤 Sending message...');
-
-    try {
-      // Add message to local state immediately
-      addMessage({
-        text: messageText.trim(),
-        sender: 'me',
-        senderUsername: username || 'You',
-        senderAuthId: authId || undefined
-      });
-
-      // Emit message to server
-      emitMessage({
-        message: messageText.trim(),
-        authId: authId,
-        username: username
-      });
-
-      // Clear current message
-      setCurrentMessage('');
-
-      // Stop typing indicator
-      if (isTypingRef.current) {
-        emitTypingStop();
-        isTypingRef.current = false;
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-          typingTimeoutRef.current = null;
-        }
-      }
-
-      console.log('[ChatActions] ✅ Message sent successfully');
-
-    } catch (error) {
-      console.error('[ChatActions] ❌ Send message failed:', error);
-      addSystemMessage('Failed to send message', 'error');
-    }
-  }, [
-    isConnected,
-    isPartnerConnected,
-    addMessage,
-    emitMessage,
-    emitTypingStop,
-    setCurrentMessage,
-    addSystemMessage,
-    authId,
-    username
-  ]);
-
-  // ✅ CRITICAL: Fixed typing indicators
-  const handleTypingStart = useCallback(() => {
-    if (!isConnected || !isPartnerConnected || isTypingRef.current) {
-      return;
-    }
-
-    console.log('[ChatActions] ⌨️ Started typing');
-    
-    isTypingRef.current = true;
-    emitTypingStart();
-
-    // Auto-stop typing after 3 seconds of no activity
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      if (isTypingRef.current) {
-        handleTypingStop();
-      }
-    }, 3000);
-  }, [isConnected, isPartnerConnected, emitTypingStart]);
-
-  const handleTypingStop = useCallback(() => {
-    if (!isTypingRef.current) {
-      return;
-    }
-
-    console.log('[ChatActions] ⌨️ Stopped typing');
-    
-    isTypingRef.current = false;
-    emitTypingStop();
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-  }, [emitTypingStop]);
-
-  // ✅ Handle input change with typing indicators
-  const handleInputChange = useCallback((value: string) => {
-    setCurrentMessage(value);
-
-    if (value.trim() && isPartnerConnected) {
-      handleTypingStart();
-    } else {
-      handleTypingStop();
-    }
-  }, [setCurrentMessage, isPartnerConnected, handleTypingStart, handleTypingStop]);
-
-  // ✅ Cleanup typing on unmount
-  const cleanup = useCallback(() => {
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-    
-    if (isTypingRef.current) {
-      isTypingRef.current = false;
-      try {
-        emitTypingStop();
-      } catch (error) {
-        console.warn('[ChatActions] Failed to stop typing on cleanup:', error);
-      }
-    }
-  }, [emitTypingStop]);
-
-  // ✅ Auto-cleanup on component unmount
+  // ✅ CRITICAL: Initial auto-search when component loads
   useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+    if (!socket.isConnected || !initRef.current.isInitialized) {
+      return;
+    }
+
+    // Only auto-search once on initial load
+    if (initRef.current.autoSearchStarted) {
+      return;
+    }
+
+    // Don't auto-search if already connected or searching
+    if (chatState.isPartnerConnected || chatState.isFindingPartner) {
+      return;
+    }
+
+    // Don't auto-search if user manually stopped
+    if (userManuallyStopped) {
+      return;
+    }
+
+    console.log('[AutoSearch] 🚀 Initial auto-search trigger');
+    
+    // Add small delay to ensure everything is ready
+    autoSearchTimeoutRef.current = setTimeout(() => {
+      initRef.current.autoSearchStarted = true;
+      performAutoSearch();
+    }, 100);
+
+    return () => {
+      if (autoSearchTimeoutRef.current) {
+        clearTimeout(autoSearchTimeoutRef.current);
+        autoSearchTimeoutRef.current = null;
+      }
+    };
+  }, [
+    socket.isConnected,
+    initRef.current.isInitialized,
+    chatState.isPartnerConnected,
+    chatState.isFindingPartner,
+    performAutoSearch,
+    userManuallyStopped
+  ]);
+
+  // ✅ CRITICAL: Auto-search after YOU skip someone (server should handle this but backup)
+  useEffect(() => {
+    if (!didSkipPartner) return;
+    if (wasSkippedByPartner) return; // Don't auto-search if we were skipped
+    if (userManuallyStopped) return;
+    if (!socket.isConnected) return;
+    if (chatState.isPartnerConnected) return;
+    if (chatState.isFindingPartner) return; // Server should already be searching
+
+    console.log('[AutoSearch] 🔄 Auto-search after skipping partner');
+    
+    // Small delay to let server start auto-search first
+    autoSearchTimeoutRef.current = setTimeout(() => {
+      if (!chatState.isFindingPartner && !chatState.isPartnerConnected) {
+        console.log('[AutoSearch] 🔄 Server didnt start auto-search, starting manually');
+        performAutoSearch();
+      }
+    }, 1000);
+
+    return () => {
+      if (autoSearchTimeoutRef.current) {
+        clearTimeout(autoSearchTimeoutRef.current);
+        autoSearchTimeoutRef.current = null;
+      }
+    };
+  }, [
+    didSkipPartner,
+    wasSkippedByPartner,
+    userManuallyStopped,
+    socket.isConnected,
+    chatState.isPartnerConnected,
+    chatState.isFindingPartner,
+    performAutoSearch
+  ]);
+
+  // ✅ Reset auto-search state when partner found
+  useEffect(() => {
+    if (chatState.isPartnerConnected) {
+      isAutoSearchingRef.current = false;
+      if (autoSearchTimeoutRef.current) {
+        clearTimeout(autoSearchTimeoutRef.current);
+        autoSearchTimeoutRef.current = null;
+      }
+    }
+  }, [chatState.isPartnerConnected]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSearchTimeoutRef.current) {
+        clearTimeout(autoSearchTimeoutRef.current);
+      }
+      isAutoSearchingRef.current = false;
+    };
+  }, []);
 
   return {
-    // Core actions
-    skipPartner,
-    leaveChat,
-    startNewChat,
-    stopSearching,
-    sendMessage,
-    
-    // Typing actions
-    handleTypingStart,
-    handleTypingStop,
-    handleInputChange,
-    
-    // Utility
-    cleanup
+    performAutoSearch,
+    isAutoSearching: isAutoSearchingRef.current
   };
 };

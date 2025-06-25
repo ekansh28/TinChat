@@ -1,3 +1,5 @@
+// src/app/chat/components/ChatWindow.tsx - FIXED TO REMOVE SEARCHING MESSAGE
+
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import MessageRow from './MessageRow';
@@ -41,7 +43,7 @@ const INPUT_AREA_HEIGHT = 60; // px
 const INPUT_AREA_HEIGHT_MOBILE = 70; // px
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
-  messages = [], // ✅ DEFAULT VALUE: Prevent undefined
+  messages = [],
   onSendMessage,
   inputValue,
   onInputChange,
@@ -95,7 +97,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         });
       }
     }
-  }, [safeMessages]); // ✅ Use safeMessages instead of messages
+  }, [safeMessages]);
 
   // Check if pink theme is active
   const isPinkThemeActive = useMemo(() => {
@@ -187,7 +189,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // Auto-scroll effect for new messages
   useEffect(() => { 
     scrollToBottom();
-  }, [safeMessages, isPartnerTyping, scrollToBottom]); // ✅ Use safeMessages instead of messages
+  }, [safeMessages, isPartnerTyping, scrollToBottom]);
 
   const inputAndSendDisabled = useMemo(() => 
     !isConnected || !isPartnerConnected, 
@@ -255,7 +257,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const renderContent = () => {
     const content = [];
     
-    // Empty state messages
+    // ✅ FIXED: REMOVED ALL "Searching" and "Waiting" MESSAGES
+    // Empty state messages - ONLY show connection status
     if (!isConnected && safeMessages.length === 0) {
       content.push(
         <div key="connecting" className={cn(
@@ -267,23 +270,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           Connecting to chat server...
         </div>
       );
-    } else if (isConnected && safeMessages.length === 0 && !isPartnerConnected) {
-      content.push(
-        <div key="waiting" className={cn(
-          "text-center text-xs italic p-4",
-          isWindows7Theme 
-            ? 'text-gray-100 theme-7-text-shadow' 
-            : 'text-gray-500 dark:text-gray-400'
-        )}>
-          Waiting for partner...
-        </div>
-      );
     }
+    // ✅ REMOVED: No more "Waiting for partner..." or "Searching..." messages
     
     // ✅ MESSAGES: Same layout for mobile and desktop - traditional format
-    // ✅ SAFE: Use safeMessages to prevent undefined access
     safeMessages.forEach((msg, index) => {
-      // ✅ SAFETY CHECK: Ensure message object exists
       if (msg && typeof msg === 'object') {
         content.push(
           <MessageRow 
@@ -301,13 +292,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     });
     
     // ✅ TYPING INDICATOR: Always render at the end (after all messages)
-    // This ensures it appears at the bottom on mobile and after messages on desktop
     if (isPartnerTyping) {
       content.push(
         <div 
           key="typing-indicator"
           className={cn(
-            // ✅ MOBILE: Add specific class for CSS targeting
             "typing-indicator-container",
             isMobile && "mobile-typing-indicator-container"
           )}
@@ -320,7 +309,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             recentPartnerData={recentPartnerData || undefined}
             isMobile={false} // ✅ UNIFIED LAYOUT: Always use desktop-style indicator
             className={cn(
-              // ✅ MOBILE: Add mobile-specific styling
               isMobile && "mobile-typing-indicator"
             )}
           />
@@ -361,13 +349,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           isMobile && 'p-2'
         )} 
         style={{ 
-          // ✅ FIXED: Let flexbox handle height instead of calc()
           flex: '1 1 0%',
           minHeight: 0,
           overflowY: isScrollEnabled ? 'auto' : 'hidden',
           WebkitOverflowScrolling: 'touch',
           
-          // ✅ KEY DIFFERENCE: Mobile vs Desktop message positioning
           display: 'flex',
           flexDirection: 'column',
           
@@ -383,8 +369,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         
         {/* Messages and content */}
         <div className={cn(
-          // ✅ MOBILE: Keep messages in container at bottom
-          // ✅ DESKTOP: Normal flow
           isMobile ? 'flex flex-col w-full' : 'w-full'
         )}>
           {renderContent()}
@@ -404,7 +388,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       <div 
         className={cn(
           "flex-shrink-0 w-full",
-          // ✅ MOBILE: Force visibility
           isMobile && "mobile-input-container"
         )}
         style={{ 
@@ -412,7 +395,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           minHeight: `${currentInputAreaHeight}px`,
           maxHeight: `${currentInputAreaHeight}px`,
           position: 'relative',
-          // ✅ MOBILE: Explicit visibility styles
           ...(isMobile && {
             zIndex: 10,
             display: 'block',
