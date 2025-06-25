@@ -81,26 +81,17 @@ jobs:
             
             echo '🔍 Checking Next.js configuration...'
             if [ -f \"next.config.ts\" ]; then
-              echo '📄 Found next.config.ts:'
-              cat next.config.ts
+              echo '📄 Found next.config.ts'
             elif [ -f \"next.config.js\" ]; then
-              echo '📄 Found next.config.js:'
-              cat next.config.js
+              echo '📄 Found next.config.js'
             else
               echo '⚠️ No next.config found - creating basic next.config.js...'
-              cat > next.config.js <<'NEXTCONFIG'
-              /** @type {import('next').NextConfig} */
-              const nextConfig = {
-                eslint: {
-                  ignoreDuringBuilds: true,
-                },
-                typescript: {
-                  ignoreBuildErrors: true,
-                },
-              }
-
-              module.exports = nextConfig
-              NEXTCONFIG
+              echo '/** @type {import(\"next\").NextConfig} */' > next.config.js
+              echo 'const nextConfig = {' >> next.config.js
+              echo '  eslint: { ignoreDuringBuilds: true },' >> next.config.js
+              echo '  typescript: { ignoreBuildErrors: true },' >> next.config.js
+              echo '}' >> next.config.js
+              echo 'module.exports = nextConfig' >> next.config.js
               echo '✅ Created basic next.config.js'
             fi
 
@@ -159,29 +150,31 @@ jobs:
             fi
             
             # Attempt the build using npx to ensure next is found
-            npx next build || npm run build || {
+            echo '🔨 Starting build process...'
+            if npx next build; then
+              echo '✅ Build successful with npx next build'
+            elif npm run build; then
+              echo '✅ Build successful with npm run build'
+            else
               echo '❌ Build failed - detailed diagnostics:'
               
               echo '🔍 Next.js configuration:'
-              cat next.config.* 2>/dev/null || echo 'No next.config found'
+              ls -la next.config.* 2>/dev/null || echo 'No next.config found'
               
               echo '🔍 Package.json scripts:'
-              grep -A 10 '"scripts"' package.json 2>/dev/null || echo 'Cannot read scripts'
+              grep -A 10 '\"scripts\"' package.json 2>/dev/null || echo 'Cannot read scripts'
               
               echo '🔍 Next.js dependency:'
               npm list next 2>/dev/null || echo 'Next.js not installed'
               
-              echo '🔍 Node modules structure:'
-              ls -la node_modules/.bin/ | head -10 2>/dev/null || echo 'Cannot read node_modules'
-              
-              echo '🔍 Available commands:'
+              echo '🔍 Node modules binaries:'
               ls -la node_modules/.bin/ | grep next || echo 'No next commands found'
               
-              echo '🔍 Environment variables in build:'
+              echo '🔍 Environment variables:'
               env | grep -E '^(NEXT_|NODE_)' || echo 'No relevant env vars'
               
               exit 1
-            }
+            fi
             echo '✅ Build completed successfully'
             
             echo '🔍 Build artifacts:'
