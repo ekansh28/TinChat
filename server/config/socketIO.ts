@@ -360,7 +360,7 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     }
   }, 60000);
 
-  // ✅ Periodic cleanup of stale mappings
+  // ✅ Periodic cleanup of stale mappings theek hai
   setInterval(() => {
     const activeSocketIds = new Set(io.sockets.sockets.keys());
     
