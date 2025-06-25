@@ -32,37 +32,38 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
-          ssh $VPS_USER@$VPS_HOST "bash -s" -- "$VPS_PROJECT_PATH" << 'SCRIPT'
+          ssh $VPS_USER@$VPS_HOST "
             set -e
-            project_path=$1
-            echo "📂 Changing to project directory: \$project_path"
-            cd "\$project_path"
-            echo "🔄 Fetching latest changes from GitHub..."
+            echo '📂 Changing to project directory: $VPS_PROJECT_PATH'
+            cd '$VPS_PROJECT_PATH' || { echo '❌ Failed to change directory'; exit 1; }
+            
+            echo '🔄 Fetching latest changes from GitHub...'
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
-            echo "🔧 Creating .env.local file..."
-            cat > .env.local << 'EOF'
-            NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-            SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-            NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+            
+            echo '🔧 Creating .env.local file...'
+            cat > .env.local <<EOF
+            NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+            SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+            NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
             NODE_ENV=production
             EOF
 
-            echo "📦 Installing dependencies..."
-            if [ ! -d "node_modules" ] || git diff --name-only HEAD~1 HEAD | grep -q "package.json\|package-lock.json"; then
-              rm -rf node_modules package-lock.json
-              npm install
+            echo '📦 Checking dependencies...'
+            if [ ! -d 'node_modules' ] || git diff --name-only HEAD~1 HEAD | grep -q 'package.json\|package-lock.json'; then
+              echo '🔄 Installing/updating dependencies...'
+              npm ci
             else
-              echo "Dependencies are up to date"
+              echo '✅ Dependencies are up to date'
             fi
 
-            echo "🏗️ Building the project..."
+            echo '🏗️ Building the project...'
             npm run build
 
-            echo "🔁 Restarting app via PM2..."
-            pm2 restart tinchat || pm2 start npm --name "tinchat" -- start
+            echo '🔁 Restarting app via PM2...'
+            pm2 restart tinchat || pm2 start npm --name 'tinchat' -- start
 
-            echo "✅ Deployment completed!"
-          SCRIPT
+            echo '✅ Deployment completed successfully!'
+          "
