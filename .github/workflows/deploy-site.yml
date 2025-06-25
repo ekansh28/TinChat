@@ -149,32 +149,21 @@ jobs:
               echo '⚠️ TypeScript errors found, but continuing with build...'
             fi
             
-            # Attempt the build using npx to ensure next is found
+            # Attempt the build using direct path to next
             echo '🔨 Starting build process...'
-            if npx next build; then
-              echo '✅ Build successful with npx next build'
+            if [ -f \"node_modules/.bin/next\" ]; then
+              echo '🔨 Building with direct next path...'
+              ./node_modules/.bin/next build || {
+                echo '❌ Direct next build failed'
+                exit 1
+              }
             elif npm run build; then
               echo '✅ Build successful with npm run build'
             else
-              echo '❌ Build failed - detailed diagnostics:'
-              
-              echo '🔍 Next.js configuration:'
-              ls -la next.config.* 2>/dev/null || echo 'No next.config found'
-              
-              echo '🔍 Package.json scripts:'
-              grep -A 10 '\"scripts\"' package.json 2>/dev/null || echo 'Cannot read scripts'
-              
-              echo '🔍 Next.js dependency:'
-              npm list next 2>/dev/null || echo 'Next.js not installed'
-              
-              echo '🔍 Node modules binaries:'
-              ls -la node_modules/.bin/ | grep next || echo 'No next commands found'
-              
-              echo '🔍 Environment variables:'
-              env | grep -E '^(NEXT_|NODE_)' || echo 'No relevant env vars'
-              
+              echo '❌ All build methods failed'
               exit 1
             fi
+            echo '✅ Build completed successfully'
             echo '✅ Build completed successfully'
             
             echo '🔍 Build artifacts:'
