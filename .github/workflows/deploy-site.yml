@@ -27,87 +27,43 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
-          # Add all your environment variables here
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
-          # Add any other environment variables your app needs
         run: |
-          ssh $VPS_USER@$VPS_HOST bash -s <<'SCRIPT'
+          ssh $VPS_USER@$VPS_HOST bash -s <<SCRIPT
             set -e
-            echo "📂 Changing to project directory: ${{ secrets.VPS_PROJECT_PATH }}"
-            cd "${{ secrets.VPS_PROJECT_PATH }}"
-            
-            # ✅ FORCE PULL: Remove any local changes and pull latest from GitHub
-            echo "🔄 Fetching latest changes from GitHub..."
-            git fetch origin main || {
-              echo "❌ Failed to fetch from origin"
-              exit 1
-            }
-            
-            echo "📝 Current branch: $(git branch --show-current)"
-            echo "📝 Current local commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-            echo "📝 Latest remote commit: $(git rev-parse --short origin/main)"
-            
-            # Check if there are any uncommitted changes and discard them
-            if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-              echo "⚠️ Found uncommitted changes on VPS, discarding them..."
-              git reset --hard HEAD
-            fi
-            
-            # Check if there are any untracked files and remove them
-            if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-              echo "⚠️ Found untracked files on VPS, cleaning them..."
-              git clean -fd
-            fi
-            
-            # Force reset to latest main branch (this will discard any local changes)
-            echo "🔄 Force updating to latest main branch..."
-            git reset --hard origin/main || {
-              echo "❌ Failed to reset to origin/main"
-              exit 1
-            }
-            
-            echo "✅ Repository forcefully updated to commit: $(git rev-parse --short HEAD)"
-            
-            echo "🔧 Creating environment file from GitHub secrets..."
-            cat > .env.local <<'ENV_FILE'
-NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
-NODE_ENV=production
-ENV_FILE
-            
-            echo "✅ Environment variables set from GitHub secrets"
-            
-            echo "📦 Installing dependencies..."
-            # Clear node_modules if package files changed or don't exist
-            if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "package-lock.json\|package.json" || [ ! -d "node_modules" ]; then
-              echo "📦 Package files changed or node_modules missing, reinstalling..."
-              rm -rf node_modules package-lock.json
-              npm install || {
-                echo "❌ Failed to install dependencies"
-                exit 1
-              }
-            else
-              echo "📦 No package changes detected, keeping existing dependencies"
-            fi
-            
-            echo "🏗️ Building the project..."
-            npm run build || {
-              echo "❌ Build failed"
-              exit 1
-            }
-            
-            echo "🔁 Restarting PM2 process..."
-            pm2 restart tinchat || pm2 start npm --name "tinchat" -- start || {
-              echo "❌ Failed to start/restart PM2 process"
-              exit 1
-            }
-            
-            echo "✅ Deployment completed successfully"
-          SCRIPT
+            echo "📂 Changing to project directory: \$VPS_PROJECT_PATH"
+            cd "\$VPS_PROJECT_PATH"
 
-      # ... rest of your notification steps ...
+            echo "🔄 Fetching latest changes from GitHub..."
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+
+            echo "🔧 Creating .env.local file..."
+            cat > .env.local <<EOF
+NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+NODE_ENV=production
+EOF
+
+            echo "📦 Installing dependencies..."
+            if [ ! -d "node_modules" ] || git diff --name-only HEAD~1 HEAD | grep -q "package.json\|package-lock.json"; then
+              rm -rf node_modules package-lock.json
+              npm install
+            else
+              echo "Dependencies are up to date"
+            fi
+
+            echo "🏗️ Building the project..."
+            npm run build
+
+            echo "🔁 Restarting app via PM2..."
+            pm2 restart tinchat || pm2 start npm --name "tinchat" -- start
+
+            echo "✅ Deployment completed!"
+          SCRIPT
