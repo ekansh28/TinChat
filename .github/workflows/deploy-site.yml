@@ -7,6 +7,7 @@ on:
     paths-ignore:
       - 'server/**'
       - '.github/workflows/deploy-server.yml'
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   deploy:
@@ -100,31 +101,20 @@ jobs:
             echo \"  SUPABASE_SERVICE_ROLE_KEY length: \${#SUPABASE_SERVICE_ROLE_KEY}\"
             echo \"  NEXT_PUBLIC_API_BASE_URL length: \${#NEXT_PUBLIC_API_BASE_URL}\"
             
-            # Create .env.local file using the exported variables
-            cat > .env.local << 'ENVEOF'
-            NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-            SUPABASE_SERVICE_ROLE_KEY=\${SUPABASE_SERVICE_ROLE_KEY}
-            NEXT_PUBLIC_API_BASE_URL=\${NEXT_PUBLIC_API_BASE_URL}
-            NODE_ENV=production
-            ENVEOF
-            
-            # Substitute the actual values
-            sed -i \"s|\\\${NEXT_PUBLIC_SUPABASE_URL}|\$NEXT_PUBLIC_SUPABASE_URL|g\" .env.local
-            sed -i \"s|\\\${NEXT_PUBLIC_SUPABASE_ANON_KEY}|\$NEXT_PUBLIC_SUPABASE_ANON_KEY|g\" .env.local
-            sed -i \"s|\\\${SUPABASE_SERVICE_ROLE_KEY}|\$SUPABASE_SERVICE_ROLE_KEY|g\" .env.local
-            sed -i \"s|\\\${NEXT_PUBLIC_API_BASE_URL}|\$NEXT_PUBLIC_API_BASE_URL|g\" .env.local
+            # Create .env.local file using simple echo statements instead of here-document
+            echo '🔧 Creating .env.local with echo statements...'
+            echo \"NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL\" > .env.local
+            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\$NEXT_PUBLIC_SUPABASE_ANON_KEY\" >> .env.local
+            echo \"SUPABASE_SERVICE_ROLE_KEY=\$SUPABASE_SERVICE_ROLE_KEY\" >> .env.local
+            echo \"NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL\" >> .env.local
+            echo \"NODE_ENV=production\" >> .env.local
             
             echo '✅ Environment file created'
             echo '🔍 Environment file verification:'
             echo \"File exists: \$(test -f .env.local && echo 'YES' || echo 'NO')\"
             echo \"File size: \$(wc -c < .env.local 2>/dev/null || echo 'unknown') bytes\"
-            echo '🔍 Final environment file check (with variable lengths):'
-            while IFS='=' read -r key value; do
-              if [[ ! -z \"\$key\" && \"\$key\" != \"#\"* ]]; then
-                echo \"  \$key: length \${#value}\"
-              fi
-            done < .env.local
+            echo '🔍 Environment file contents (with redacted values):'
+            sed 's/=.*/=***REDACTED***/g' .env.local || echo 'Cannot read .env.local'
             
             echo '🔍 Checking Next.js configuration...'
             if [ -f \"next.config.ts\" ]; then
