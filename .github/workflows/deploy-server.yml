@@ -3,139 +3,59 @@
     SERVER_USER: ${{ secrets.SERVER_USER }}
     SERVER_HOST: ${{ secrets.SERVER_HOST }}
     SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
-    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-    UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
-    UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
   run: |
     ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 "$SERVER_USER@$SERVER_HOST" bash -s <<'SCRIPT'
       set -euo pipefail
       
-      SERVER_PROJECT_PATH="${{ secrets.SERVER_PROJECT_PATH }}"
+      # Clean project path input
+      PROJECT_PATH=$(echo "${{ secrets.SERVER_PROJECT_PATH }}" | tr -d '\n' | sed 's/ *$//')
       
-      echo "📂 Changing to server directory: $SERVER_PROJECT_PATH"
-      cd "$SERVER_PROJECT_PATH"
-      
-      # ✅ FORCE PULL: Remove any local changes and pull latest from GitHub
-      echo "🔄 Fetching latest changes from GitHub..."
-      git fetch origin main || {
-        echo "❌ Failed to fetch from origin"
+      echo "📂 Changing to server directory: $PROJECT_PATH"
+      cd "$PROJECT_PATH" || {
+        echo "❌ Failed to change to project directory"
         exit 1
       }
       
-      echo "📝 Current branch: $(git branch --show-current)"
-      echo "📝 Current local commit: $(git rev-parse --short HEAD)"
-      echo "📝 Latest remote commit: $(git rev-parse --short origin/main)"
+      # Git operations
+      echo "🔄 Force updating repository..."
+      git fetch origin main
+      git reset --hard origin/main
+      git clean -fd
+      echo "✅ Repository updated to commit: $(git rev-parse --short HEAD)"
       
-      # Check if there are any uncommitted changes
-      if ! git diff-index --quiet HEAD --; then
-        echo "⚠️ Found uncommitted changes on VPS, discarding them..."
-        git reset --hard HEAD
-      fi
-      
-      # Check if there are any untracked files
-      if [ -n "$(git status --porcelain)" ]; then
-        echo "⚠️ Found untracked files on VPS, cleaning them..."
-        git clean -fd
-      fi
-      
-      # Force reset to latest main branch (this will discard any local changes)
-      echo "🔄 Force updating to latest main branch..."
-      git reset --hard origin/main || {
-        echo "❌ Failed to reset to origin/main"
-        exit 1
-      }
-      
-      echo "✅ Repository forcefully updated to commit: $(git rev-parse --short HEAD)"
-      
-      # ✅ FIXED: Better dependency management
-      echo "📦 Installing/updating dependencies..."
-      
-      # Clear node_modules if package files might have changed
-      if git diff --name-only HEAD~1 HEAD | grep -q "package-lock.json\|package.json" || [ ! -d "node_modules" ]; then
-        echo "📦 Package files changed or node_modules missing, reinstalling..."
+      # Dependency management
+      echo "📦 Checking dependencies..."
+      if [ ! -d "node_modules" ] || git diff --name-only HEAD~1 HEAD | grep -q "package-lock.json\|package.json"; then
+        echo "🔄 Reinstalling dependencies..."
         rm -rf node_modules package-lock.json
-        npm install --only=production || {
-          echo "❌ Failed to install production dependencies"
-          exit 1
-        }
-      else
-        echo "📦 No package changes detected, keeping existing dependencies"
+        npm ci --only=production
       fi
       
-      echo "✅ Dependencies ready"
+      # Create .env file with GitHub secrets
+      echo "🔧 Creating environment file..."
+      cat > .env <<EOF
+      SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+      UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      NODE_ENV=production
+      PORT=3001
+      EOF
       
-      # ✅ Create .env file using GitHub secrets, not VPS variables
-      echo "🔧 Creating environment file from GitHub secrets..."
-      
-      cat > .env <<'ENV_FILE'
-SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
-UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-NODE_ENV=production
-PORT=3001
-ENV_FILE
-      
-      echo "✅ Environment variables set from GitHub secrets"
-      
-      # ✅ TypeScript build with proper error handling
-      echo "🏗️ Building TypeScript..."
-      
-      # Clean previous build
+      # Build process
+      echo "🏗️ Building project..."
       rm -rf dist
-      
-      # Build with explicit error handling
-      if ! npx tsc --build; then
-        echo "❌ TypeScript build failed"
-        echo "📋 Build logs:"
-        npx tsc --build --verbose || true
+      npx tsc --build || {
+        echo "❌ Build failed"
+        npx tsc --build --verbose
         exit 1
-      fi
+      }
       
-      # Verify build output
-      if [ ! -d "dist" ] || [ ! -f "dist/index.js" ]; then
-        echo "❌ Build output validation failed"
-        echo "📂 Dist directory contents:"
-        ls -la dist/ || echo "Dist directory does not exist"
-        exit 1
-      fi
-      
-      echo "✅ TypeScript build completed successfully"
-      
-      # ✅ PM2 process management with better error handling
+      # PM2 process management
       echo "🔁 Managing PM2 processes..."
+      pm2 delete tinchat-server || true
+      pm2 start dist/index.js --name "tinchat-server" --update-env
+      pm2 save
       
-      # Check if PM2 is installed
-      if ! command -v pm2 &> /dev/null; then
-        echo "❌ PM2 is not installed"
-        exit 1
-      fi
-      
-      # Stop existing processes gracefully
-      echo "🛑 Stopping existing processes..."
-      pm2 stop all || echo "⚠️ No processes to stop"
-      
-      # Start/restart the application
-      echo "🚀 Starting TinChat server..."
-      if [ -f "ecosystem.config.js" ]; then
-        pm2 start ecosystem.config.js --update-env || {
-          echo "❌ Failed to start with ecosystem config"
-          exit 1
-        }
-      else
-        pm2 start dist/index.js --name "tinchat-server" --update-env || {
-          echo "❌ Failed to start server directly"
-          exit 1
-        }
-      fi
-      
-      # Wait for server to start
-      echo "⏳ Waiting for server to stabilize..."
-      sleep 15
-      
-      # Save PM2 configuration
-      pm2 save || echo "⚠️ Failed to save PM2 configuration"
-      
-      echo "✅ PM2 processes started successfully"
+      echo "✅ Deployment completed successfully!"
     SCRIPT
