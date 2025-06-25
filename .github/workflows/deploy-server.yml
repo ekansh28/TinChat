@@ -21,27 +21,34 @@ jobs:
       - name: 🔐 Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
+          ssh-private-key: ${{ secrets.SERVER_DEPLOY_KEY }}
 
-      - name: 🧠 Add VPS Host to Known Hosts
-        run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      - name: 🧠 Add Server Host to Known Hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔍 Verify Environment Variables
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           echo "🔍 Checking environment variables for server deployment:"
-          echo "  - VPS_HOST length: ${#VPS_HOST}"
-          echo "  - VPS_PROJECT_PATH length: ${#VPS_PROJECT_PATH}"
+          echo "  - SERVER_HOST length: ${#SERVER_HOST}"
+          echo "  - SERVER_PROJECT_PATH length: ${#SERVER_PROJECT_PATH}"
+          echo "  - SERVER_USER length: ${#SERVER_USER}"
           
-          if [[ -z "$VPS_HOST" ]]; then
-            echo "❌ VPS_HOST is empty!"
+          if [[ -z "$SERVER_HOST" ]]; then
+            echo "❌ SERVER_HOST is empty!"
             exit 1
           fi
           
-          if [[ -z "$VPS_PROJECT_PATH" ]]; then
-            echo "❌ VPS_PROJECT_PATH is empty!"
+          if [[ -z "$SERVER_PROJECT_PATH" ]]; then
+            echo "❌ SERVER_PROJECT_PATH is empty!"
+            exit 1
+          fi
+          
+          if [[ -z "$SERVER_USER" ]]; then
+            echo "❌ SERVER_USER is empty!"
             exit 1
           fi
           
@@ -49,22 +56,28 @@ jobs:
 
       - name: 🚀 Deploy Server on VPS
         env:
-          VPS_USER: root
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           echo "🔍 Starting server deployment process..."
           echo "📋 Environment variables check:"
-          echo "  - VPS_HOST: $VPS_HOST"
-          echo "  - VPS_PROJECT_PATH: $VPS_PROJECT_PATH"
+          echo "  - SERVER_HOST: $SERVER_HOST"
+          echo "  - SERVER_USER: $SERVER_USER"
+          echo "  - SERVER_PROJECT_PATH: $SERVER_PROJECT_PATH"
+          echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
           
           # Trim whitespace and newlines from path (safety check)
-          CLEAN_PATH=$(echo "$VPS_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
+          CLEAN_PATH=$(echo "$SERVER_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
           echo "  - CLEAN_PATH: $CLEAN_PATH"
           
           # First-time setup check
           echo "🛠️ Checking if project directory exists..."
-          ssh $VPS_USER@$VPS_HOST "
+          ssh $SERVER_USER@$SERVER_HOST "
             if [ ! -d '$CLEAN_PATH' ]; then
               echo '🛠️ First-time setup: Creating project directory...'
               mkdir -p '$CLEAN_PATH'
@@ -76,9 +89,14 @@ jobs:
             fi
           "
           
-          # Main server deployment
+          # Pass environment variables to SSH session for server
           echo "🚀 Starting main server deployment process..."
-          ssh $VPS_USER@$VPS_HOST "
+          ssh $SERVER_USER@$SERVER_HOST "
+            export NEXT_PUBLIC_SUPABASE_URL='$NEXT_PUBLIC_SUPABASE_URL'
+            export NEXT_PUBLIC_SUPABASE_ANON_KEY='$NEXT_PUBLIC_SUPABASE_ANON_KEY'
+            export SUPABASE_SERVICE_ROLE_KEY='$SUPABASE_SERVICE_ROLE_KEY'
+            export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
+            
             set -e
             
             echo '📂 Changing to project directory...'
@@ -90,6 +108,19 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             echo '✅ Repository updated successfully'
+            
+            echo '🔧 Creating server .env.local file...'
+            
+            # Create .env.local file for server with environment variables
+            echo \"NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL\" > .env.local
+            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\$NEXT_PUBLIC_SUPABASE_ANON_KEY\" >> .env.local
+            echo \"SUPABASE_SERVICE_ROLE_KEY=\$SUPABASE_SERVICE_ROLE_KEY\" >> .env.local
+            echo \"NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL\" >> .env.local
+            echo \"NODE_ENV=production\" >> .env.local
+            
+            echo '✅ Server environment file created'
+            echo '🔍 Environment file contents (redacted):'
+            sed 's/=.*/=***REDACTED***/g' .env.local
             
             echo '🔍 Checking server directory...'
             if [ -d \"server\" ]; then
