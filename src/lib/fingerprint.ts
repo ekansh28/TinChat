@@ -9,7 +9,7 @@ interface ExtendedNavigator extends Navigator {
 }
 
 /**
- * Generates a device fingerprint for socket identification
+ * Generates a device fingerprint for socket identification.
  * This helps prevent duplicate connections and improves connection management
  */
 export function generateDeviceFingerprint(): string {
