@@ -23,7 +23,7 @@ export function useOnlineUsersData() {
 
   useEffect(() => {
     // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001', {
       transports: ['websocket', 'polling'],
       timeout: 20000,
     });

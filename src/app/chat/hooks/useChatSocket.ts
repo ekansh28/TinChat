@@ -92,7 +92,7 @@ export const useChatSocket = (handlers: SocketHandlers): UseChatSocketReturn => 
     setConnectionError(null);
 
     try {
-      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001', {
         transports: ['websocket', 'polling'],
         timeout: 10000,
         retries: 3,

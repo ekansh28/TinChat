@@ -66,7 +66,7 @@ interface UseFriendsOptions {
 export const useFriends = ({ 
   authId, 
   username, 
-  socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
+  socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001',
   autoConnect = true 
 }: UseFriendsOptions) => {
   const [state, setState] = useState<FriendsState>({
