@@ -82,7 +82,11 @@ const ChatPageClientContent: React.FC = () => {
     socketConnecting: chat.socket.isConnecting,
     socketError: chat.socket.connectionError,
     isLoading: chat.isLoading,
-    hasConnectionError: chat.hasConnectionError
+    hasConnectionError: chat.hasConnectionError,
+    wasSkippedByPartner: chat.wasSkippedByPartner,
+    didSkipPartner: chat.didSkipPartner,
+    isPartnerConnected: chat.chatState.isPartnerConnected,
+    isFindingPartner: chat.chatState.isFindingPartner
   });
 
   // ✅ FIXED: Use the computed loading and error states from useChat
@@ -93,34 +97,18 @@ const ChatPageClientContent: React.FC = () => {
   if (chat.hasConnectionError) {
     return <ConnectionErrorScreen 
       error={chat.socket.connectionError} 
-      onRetry={chat.socket.reconnect}
+      onRetry={chat.socket.forceReconnect}
     />;
   }
 
-  // ✅ FIXED: Create proper button handler functions
-  const handleFindOrDisconnect = () => {
-    if (chat.chatState.isPartnerConnected) {
-      // Skip current partner
-      chat.chatActions.skipPartner();
-    } else if (chat.chatState.isFindingPartner) {
-      // Stop searching
-      chat.chatActions.stopSearching();
-    } else {
-      // Start new chat
-      chat.chatActions.startNewChat();
-    }
-  };
-
-  const handleSendMessage = (message: string) => {
-    chat.chatActions.sendMessage(message);
-  };
-
-  // ✅ FIXED: Calculate button text based on current state
+  // ✅ FIXED: Enhanced button text logic based on actual state
   const getButtonText = () => {
     if (chat.chatState.isPartnerConnected) {
       return chat.isMobile ? 'Skip' : 'Skip Partner';
     } else if (chat.chatState.isFindingPartner) {
       return chat.isMobile ? 'Stop' : 'Stop Search';
+    } else if (chat.wasSkippedByPartner) {
+      return chat.isMobile ? 'Find' : 'Find Partner';
     } else {
       return chat.isMobile ? 'Find' : 'New Chat';
     }
@@ -128,6 +116,18 @@ const ChatPageClientContent: React.FC = () => {
 
   // ✅ FIXED: Better button disabled state
   const isButtonDisabled = !chat.socket.isConnected || !!chat.socket.connectionError;
+
+  // ✅ FIXED: Enhanced button action handler
+  const handleFindOrDisconnect = () => {
+    if (isButtonDisabled) return;
+    
+    // Use the chatActions method which handles all the logic
+    chat.chatActions.handleFindOrDisconnect();
+  };
+
+  const handleSendMessage = (message: string) => {
+    chat.chatActions.handleSendMessage(message);
+  };
 
   return (
     <>
@@ -202,7 +202,7 @@ const ChatPageClientContent: React.FC = () => {
               <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
                 <span>Connection Error: {chat.socket.connectionError}</span>
                 <button 
-                  onClick={chat.socket.reconnect}
+                  onClick={chat.socket.forceReconnect}
                   className="ml-2 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
                 >
                   Retry
@@ -210,15 +210,51 @@ const ChatPageClientContent: React.FC = () => {
               </div>
             )}
 
-            {/* ✅ NEW: Skip notification display */}
+            {/* ✅ ENHANCED: Skip notification display with better messaging */}
             {chat.wasSkippedByPartner && (
               <div className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-600 text-yellow-700 dark:text-yellow-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
-                <span>You were skipped by your chat partner</span>
+                <span>Your chat partner skipped you</span>
                 <button 
-                  onClick={chat.chatActions.startNewChat}
+                  onClick={() => chat.chatActions.handleFindOrDisconnect()}
                   className="ml-2 px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
+                  disabled={isButtonDisabled}
                 >
-                  New Chat
+                  Find New Partner
+                </button>
+              </div>
+            )}
+
+            {/* ✅ NEW: Show when you recently skipped someone */}
+            {chat.didSkipPartner && chat.chatState.isFindingPartner && (
+              <div className="bg-blue-100 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 px-3 py-2 text-sm flex-shrink-0">
+                <span>Looking for a new partner...</span>
+              </div>
+            )}
+
+            {/* ✅ NEW: Show when manually disconnected recently */}
+            {chat.isSelfDisconnectedRecently && !chat.chatState.isFindingPartner && !chat.wasSkippedByPartner && (
+              <div className="bg-gray-100 dark:bg-gray-800/30 border border-gray-400 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+                <span>You disconnected from the chat</span>
+                <button 
+                  onClick={() => chat.chatActions.handleFindOrDisconnect()}
+                  className="ml-2 px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"
+                  disabled={isButtonDisabled}
+                >
+                  Find Partner
+                </button>
+              </div>
+            )}
+
+            {/* ✅ NEW: Show when partner left recently */}
+            {chat.isPartnerLeftRecently && !chat.chatState.isFindingPartner && !chat.wasSkippedByPartner && (
+              <div className="bg-orange-100 dark:bg-orange-900/30 border border-orange-400 dark:border-orange-600 text-orange-700 dark:text-orange-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
+                <span>Your partner left the chat</span>
+                <button 
+                  onClick={() => chat.chatActions.handleFindOrDisconnect()}
+                  className="ml-2 px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"
+                  disabled={isButtonDisabled}
+                >
+                  Find New Partner
                 </button>
               </div>
             )}
