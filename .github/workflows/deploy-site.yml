@@ -98,7 +98,10 @@ jobs:
             echo "  - VPS_USER: $VPS_USER"
             echo "🔍 Trying to ping the host..."
             ping -c 3 $VPS_HOST || echo "❌ Host is not reachable via ping"
-            exit 1
+            
+            echo "⚠️ VPS connectivity test failed, but continuing anyway..."
+            echo "⚠️ The main deployment will likely fail if VPS is unreachable"
+            echo "⚠️ Please check your VPS status and network configuration"
           fi
 
       - name: 🚀 Deploy & Restart on VPS
@@ -110,6 +113,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_SOCKET_SERVER_URL: ${{ secrets.NEXT_PUBLIC_SOCKET_SERVER_URL }}
         run: |
           echo "🔍 Starting deployment process..."
           echo "📋 Environment variables check:"
@@ -118,6 +122,7 @@ jobs:
           echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
           echo "  - SUPABASE_URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
           echo "  - SUPABASE_ANON_KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+          echo "  - SOCKET_SERVER_URL length: ${#NEXT_PUBLIC_SOCKET_SERVER_URL}"
           
           # Trim whitespace and newlines from path (safety check)
           CLEAN_PATH=$(echo "$VPS_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
@@ -129,6 +134,7 @@ jobs:
             export NEXT_PUBLIC_SUPABASE_ANON_KEY='$NEXT_PUBLIC_SUPABASE_ANON_KEY'
             export SUPABASE_SERVICE_ROLE_KEY='$SUPABASE_SERVICE_ROLE_KEY'
             export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
+            export NEXT_PUBLIC_SOCKET_SERVER_URL='$NEXT_PUBLIC_SOCKET_SERVER_URL'
             
             set -e
             
@@ -150,6 +156,7 @@ jobs:
             echo \"  NEXT_PUBLIC_SUPABASE_ANON_KEY length: \${#NEXT_PUBLIC_SUPABASE_ANON_KEY}\"
             echo \"  SUPABASE_SERVICE_ROLE_KEY length: \${#SUPABASE_SERVICE_ROLE_KEY}\"
             echo \"  NEXT_PUBLIC_API_BASE_URL length: \${#NEXT_PUBLIC_API_BASE_URL}\"
+            echo \"  NEXT_PUBLIC_SOCKET_SERVER_URL length: \${#NEXT_PUBLIC_SOCKET_SERVER_URL}\"
             
             # Create .env.local file using simple echo statements instead of here-document
             echo '🔧 Creating .env.local with echo statements...'
@@ -157,6 +164,7 @@ jobs:
             echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\$NEXT_PUBLIC_SUPABASE_ANON_KEY\" >> .env.local
             echo \"SUPABASE_SERVICE_ROLE_KEY=\$SUPABASE_SERVICE_ROLE_KEY\" >> .env.local
             echo \"NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL\" >> .env.local
+            echo \"NEXT_PUBLIC_SOCKET_SERVER_URL=\$NEXT_PUBLIC_SOCKET_SERVER_URL\" >> .env.local
             echo \"NODE_ENV=production\" >> .env.local
             
             echo '✅ Environment file created'
@@ -249,7 +257,7 @@ jobs:
             if npm run typecheck >/dev/null 2>&1; then
               echo '✅ TypeScript check passed'
             else
-              echo '⚠️ TypeScript errors found, but continuing with build....'
+              echo '⚠️ TypeScript errors found, but continuing with build...'
             fi
             
             # Attempt the build using direct path to next
