@@ -1,227 +1,261 @@
-// src/app/chat/hooks/useAutoSearch.ts - COMPLETELY FIXED WITH CHATTYPE
+// src/app/chat/hooks/useChatActions.ts - WITH MESSAGE SOUNDS
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
 
-interface UseAutoSearchProps {
-  socket: {
-    isConnected: boolean;
-    emitFindPartner: (data: any) => void;
-  };
-  auth: {
-    authId: string | null;
-    username: string | null;
-  };
-  chatState: {
-    isPartnerConnected: boolean;
-    isFindingPartner: boolean;
-  };
-  interests: string[];
-  initRef: React.MutableRefObject<{
-    isInitialized: boolean;
-    autoSearchStarted: boolean;
-    sessionId: string;
-  }>;
+interface ChatActionsProps {
+  isConnected: boolean;
+  isPartnerConnected: boolean;
+  isFindingPartner: boolean;
+  setIsFindingPartner: (value: boolean) => void;
+  setIsPartnerConnected: (value: boolean) => void;
+  setPartnerInfo: (value: any) => void;
+  setIsPartnerTyping: (value: boolean) => void;
+  setPartnerInterests: (value: string[]) => void;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
-  wasSkippedByPartner: boolean;
-  didSkipPartner: boolean;
-  userManuallyStopped: boolean;
+  setDidSkipPartner: (value: boolean) => void;
+  setUserManuallyStopped: (value: boolean) => void;
+  addMessage: (message: any) => void;
+  addSystemMessage: (text: string) => void;
+  emitLeaveChat: () => void;
+  emitSkipPartner: (data: any) => void;
+  emitStopSearching: (data?: any) => void;
+  emitFindPartner: (data: any) => void;
+  emitMessage: (data: any) => void;
+  emitTypingStart: () => void;
+  emitTypingStop: () => void;
+  setCurrentMessage: (value: string) => void;
+  interests: string[];
+  authId: string | null;
+  username: string | null;
 }
 
-export const useAutoSearch = ({
-  socket,
-  auth,
-  chatState,
-  interests,
-  initRef,
-  setIsSelfDisconnectedRecently,
-  setIsPartnerLeftRecently,
-  wasSkippedByPartner,
-  didSkipPartner,
-  userManuallyStopped
-}: UseAutoSearchProps) => {
+export const useChatActions = (props: ChatActionsProps) => {
+  const { toast } = useToast();
+  const isProcessingFindOrDisconnect = useRef(false);
   
-  const lastAutoSearchRef = useRef<number>(0);
-  const autoSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isAutoSearchingRef = useRef(false);
+  // Store props in ref to prevent callback recreation
+  const propsRef = useRef(props);
+  propsRef.current = props;
 
-  // ✅ CRITICAL: Auto-search logic with chatType that respects all user states
-  const performAutoSearch = useCallback(() => {
-    const now = Date.now();
+  // Skip function with auto-search for skipper
+  const handleSkipPartner = useCallback(() => {
+    const currentProps = propsRef.current;
     
-    // Prevent spam
-    if (now - lastAutoSearchRef.current < 500) {
-      console.log('[AutoSearch] 🚫 Auto-search throttled');
+    if (isProcessingFindOrDisconnect.current) return;
+    if (!currentProps.isConnected) {
+      toast({ 
+        title: "Not Connected", 
+        description: "Chat server connection not yet established.", 
+        variant: "destructive" 
+      });
       return;
     }
 
-    // Don't auto-search if user manually stopped or was skipped
-    if (userManuallyStopped) {
-      console.log('[AutoSearch] 🚫 User manually stopped - no auto-search');
+    if (!currentProps.isPartnerConnected) {
+      toast({ 
+        title: "No Partner", 
+        description: "No partner to skip.", 
+        variant: "destructive" 
+      });
       return;
     }
 
-    if (wasSkippedByPartner) {
-      console.log('[AutoSearch] 🚫 Was skipped by partner - no auto-search');
-      return;
-    }
+    isProcessingFindOrDisconnect.current = true;
 
-    // Don't auto-search if already connected or searching
-    if (chatState.isPartnerConnected) {
-      console.log('[AutoSearch] 🚫 Already connected to partner');
-      return;
-    }
-
-    if (chatState.isFindingPartner) {
-      console.log('[AutoSearch] 🚫 Already searching for partner');
-      return;
-    }
-
-    // Don't auto-search if socket not ready
-    if (!socket.isConnected) {
-      console.log('[AutoSearch] 🚫 Socket not connected');
-      return;
-    }
-
-    // Don't auto-search if not initialized
-    if (!initRef.current.isInitialized) {
-      console.log('[AutoSearch] 🚫 Not initialized yet');
-      return;
-    }
-
-    console.log('[AutoSearch] 🔍 Starting auto-search...');
+    console.log('[ChatActions] Skipping partner and auto-searching');
     
-    isAutoSearchingRef.current = true;
-    lastAutoSearchRef.current = now;
+    // Set skip state immediately and reset manual stop
+    currentProps.setDidSkipPartner(true);
+    currentProps.setUserManuallyStopped(false);
     
-    // Clear any previous states
-    setIsSelfDisconnectedRecently(false);
-    setIsPartnerLeftRecently(false);
-    
-    // ✅ CRITICAL FIX: Include chatType in auto-search
-    socket.emitFindPartner({
-      chatType: 'text', // ✅ REQUIRED: Add chatType field
-      interests: interests || [],
-      authId: auth.authId,
-      username: auth.username,
-      autoSearch: true,
-      sessionId: initRef.current.sessionId
+    // Emit skip event
+    currentProps.emitSkipPartner({
+      chatType: 'text',
+      interests: currentProps.interests,
+      authId: currentProps.authId,
+      reason: 'skip'
     });
 
-  }, [
-    socket,
-    auth,
-    chatState,
-    interests,
-    initRef,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    userManuallyStopped,
-    wasSkippedByPartner
-  ]);
-
-  // ✅ CRITICAL: Initial auto-search when component loads
-  useEffect(() => {
-    if (!socket.isConnected || !initRef.current.isInitialized) {
-      return;
-    }
-
-    // Only auto-search once on initial load
-    if (initRef.current.autoSearchStarted) {
-      return;
-    }
-
-    // Don't auto-search if already connected or searching
-    if (chatState.isPartnerConnected || chatState.isFindingPartner) {
-      return;
-    }
-
-    // Don't auto-search if user manually stopped
-    if (userManuallyStopped) {
-      return;
-    }
-
-    console.log('[AutoSearch] 🚀 Initial auto-search trigger');
+    // Update local state immediately (server will handle auto-search)
+    currentProps.setIsPartnerConnected(false);
+    currentProps.setPartnerInfo(null);
+    currentProps.setIsPartnerTyping(false);
+    currentProps.setPartnerInterests([]);
     
-    // Add small delay to ensure everything is ready
-    autoSearchTimeoutRef.current = setTimeout(() => {
-      initRef.current.autoSearchStarted = true;
-      performAutoSearch();
-    }, 100);
-
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
-    };
-  }, [
-    socket.isConnected,
-    initRef.current.isInitialized,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner,
-    performAutoSearch,
-    userManuallyStopped
-  ]);
-
-  // ✅ CRITICAL: Auto-search after YOU skip someone (server should handle this but backup)
-  useEffect(() => {
-    if (!didSkipPartner) return;
-    if (wasSkippedByPartner) return; // Don't auto-search if we were skipped
-    if (userManuallyStopped) return;
-    if (!socket.isConnected) return;
-    if (chatState.isPartnerConnected) return;
-    if (chatState.isFindingPartner) return; // Server should already be searching
-
-    console.log('[AutoSearch] 🔄 Auto-search after skipping partner');
+    // Clear other states but set skip state
+    currentProps.setIsSelfDisconnectedRecently(false);
+    currentProps.setIsPartnerLeftRecently(false);
     
-    // Small delay to let server start auto-search first
-    autoSearchTimeoutRef.current = setTimeout(() => {
-      if (!chatState.isFindingPartner && !chatState.isPartnerConnected) {
-        console.log('[AutoSearch] 🔄 Server didnt start auto-search, starting manually');
-        performAutoSearch();
-      }
-    }, 1000);
+    // The server should handle the auto-search and send skipConfirmed
+    // Don't manually set isFindingPartner here - wait for server response
 
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
-    };
-  }, [
-    didSkipPartner,
-    wasSkippedByPartner,
-    userManuallyStopped,
-    socket.isConnected,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner,
-    performAutoSearch
-  ]);
+    setTimeout(() => {
+      isProcessingFindOrDisconnect.current = false;
+    }, 200);
+  }, [toast]);
 
-  // ✅ Reset auto-search state when partner found
-  useEffect(() => {
-    if (chatState.isPartnerConnected) {
-      isAutoSearchingRef.current = false;
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
+  // Disconnect function for manual disconnects (no auto-search)
+  const handleDisconnectPartner = useCallback(() => {
+    const currentProps = propsRef.current;
+    
+    if (isProcessingFindOrDisconnect.current) return;
+    if (!currentProps.isConnected) return;
+
+    if (!currentProps.isPartnerConnected) return;
+
+    isProcessingFindOrDisconnect.current = true;
+
+    console.log('[ChatActions] Manually disconnecting from partner');
+    
+    // Regular leave chat (no auto-search)
+    currentProps.emitLeaveChat();
+    
+    currentProps.addSystemMessage('You have disconnected.');
+    currentProps.setIsPartnerConnected(false);
+    currentProps.setPartnerInfo(null);
+    currentProps.setIsPartnerTyping(false);
+    currentProps.setPartnerInterests([]);
+    currentProps.setIsSelfDisconnectedRecently(true);
+    currentProps.setIsPartnerLeftRecently(false);
+    currentProps.setDidSkipPartner(false);
+    currentProps.setUserManuallyStopped(false);
+    currentProps.setIsFindingPartner(false); // Do NOT auto-search
+
+    setTimeout(() => {
+      isProcessingFindOrDisconnect.current = false;
+    }, 200);
+  }, []);
+
+  // Main find/disconnect handler with skip logic and manual stop tracking
+  const handleFindOrDisconnect = useCallback(() => {
+    const currentProps = propsRef.current;
+    
+    if (isProcessingFindOrDisconnect.current) return;
+    if (!currentProps.isConnected) {
+      toast({ 
+        title: "Not Connected", 
+        description: "Chat server connection not yet established.", 
+        variant: "destructive" 
+      });
+      return;
     }
-  }, [chatState.isPartnerConnected]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-      }
-      isAutoSearchingRef.current = false;
-    };
+    isProcessingFindOrDisconnect.current = true;
+
+    if (currentProps.isPartnerConnected) {
+      // Use skip function when connected to a partner
+      console.log('[ChatActions] Skipping current partner via find/disconnect button');
+      
+      // Set skip state immediately and reset manual stop
+      currentProps.setDidSkipPartner(true);
+      currentProps.setUserManuallyStopped(false);
+      
+      currentProps.emitSkipPartner({
+        chatType: 'text',
+        interests: currentProps.interests,
+        authId: currentProps.authId,
+        reason: 'skip'
+      });
+
+      // Update local state - server will handle auto-search
+      currentProps.setIsPartnerConnected(false);
+      currentProps.setPartnerInfo(null);
+      currentProps.setIsPartnerTyping(false);
+      currentProps.setPartnerInterests([]);
+      
+      currentProps.setIsSelfDisconnectedRecently(false);
+      currentProps.setIsPartnerLeftRecently(false);
+      
+      // Don't manually set isFindingPartner - wait for server response
+      
+    } else if (currentProps.isFindingPartner) {
+      // ✅ CRITICAL: User manually stopped searching - mark it and notify server!
+      console.log('[ChatActions] User manually stopped searching');
+      
+      // ✅ CRITICAL: Notify server to remove from queue
+      currentProps.emitStopSearching({
+        authId: currentProps.authId,
+        reason: 'manual_stop'
+      });
+      
+      currentProps.setIsFindingPartner(false);
+      currentProps.setUserManuallyStopped(true);
+      currentProps.setIsSelfDisconnectedRecently(false);
+      currentProps.setIsPartnerLeftRecently(false);
+      currentProps.setDidSkipPartner(false);
+      currentProps.addSystemMessage('Stopped searching for a partner.');
+    } else {
+      // Start searching - reset manual stop flag
+      console.log('[ChatActions] User manually started searching');
+      currentProps.setIsFindingPartner(true);
+      currentProps.setUserManuallyStopped(false);
+      currentProps.setIsSelfDisconnectedRecently(false);
+      currentProps.setIsPartnerLeftRecently(false);
+      currentProps.setDidSkipPartner(false);
+      currentProps.addSystemMessage('Searching for a partner...');
+      
+      currentProps.emitFindPartner({
+        chatType: 'text',
+        interests: currentProps.interests,
+        authId: currentProps.authId
+      });
+    }
+    
+    setTimeout(() => {
+      isProcessingFindOrDisconnect.current = false;
+    }, 200);
+  }, [toast]);
+
+  // ✅ UPDATED: Message handler with send sound
+  const handleSendMessage = useCallback((message: string) => {
+    const currentProps = propsRef.current;
+    
+    if (!currentProps.isPartnerConnected) return;
+
+    currentProps.addMessage({
+      text: message,
+      sender: 'me'
+    });
+
+    currentProps.emitMessage({
+      roomId: '',
+      message: message,
+      username: currentProps.username,
+      authId: currentProps.authId
+    });
+
+    currentProps.emitTypingStop();
+
+    // ✅ NEW: Play send sound
+    try {
+      const audioManager = getAudioManager();
+      audioManager.playMessageSent();
+    } catch (error) {
+      console.warn('[ChatActions] Failed to play send sound:', error);
+    }
+  }, []);
+
+  // Input change handler with typing management
+  const handleInputChange = useCallback((value: string) => {
+    const currentProps = propsRef.current;
+    
+    currentProps.setCurrentMessage(value);
+    
+    if (value.trim() && currentProps.isPartnerConnected) {
+      currentProps.emitTypingStart();
+    } else {
+      currentProps.emitTypingStop();
+    }
   }, []);
 
   return {
-    performAutoSearch,
-    isAutoSearching: isAutoSearchingRef.current
+    handleFindOrDisconnect,
+    handleSkipPartner,      // Skip with auto-search
+    handleDisconnectPartner, // Disconnect without auto-search
+    handleSendMessage,
+    handleInputChange
   };
 };

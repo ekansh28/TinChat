@@ -1,303 +1,261 @@
-// src/app/chat/hooks/useChat.ts - MAIN CHAT HOOK COMBINING ALL FUNCTIONALITY
+// src/app/chat/hooks/useChat.ts - WITH MESSAGE RECEIVE SOUNDS
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useAuth } from './useAuth';
-import { useChatSocket } from './useChatSocket';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { useChatState } from './useChatState';
-import { useAutoSearch } from './useAutoSearch';
-import { useSystemMessages } from './useSystemMessages';
-import { useFaviconManager } from './useFaviconManager';
+import { useAuth } from './useAuth';
 import { useThemeDetection } from './useThemeDetection';
 import { useViewport } from './useViewport';
-import { Message, PartnerInfo } from '../utils/ChatHelpers';
-import { getAudioManager } from '../components/TaskBar';
+import { useFaviconManager } from './useFaviconManager';
+import { useSystemMessages } from './useSystemMessages';
+import { useChatSocket } from './useChatSocket';
+import { useChatActions } from './useChatActions';
+import { useAutoSearch } from './useAutoSearch';
+import { getAudioManager } from '../components/TaskBar'; // ✅ NEW: Import audio manager
+import { playMatchSound } from '../utils/ChatHelpers'; // ✅ NEW: Import enhanced audio functions
 
-interface ChatActions {
-  startNewChat: () => void;
-  stopSearching: () => void;
-  skipPartner: () => void;
-  sendMessage: (message: string) => void;
-  handleInputChange: (value: string) => void;
-}
-
-interface UseChat {
-  // Auth state
-  auth: {
-    authId: string | null;
-    username: string | null;
-    displayNameColor: string;
-    displayNameAnimation: string;
-    isLoading: boolean;
-  };
-  
-  // Socket state
-  socket: {
-    isConnected: boolean;
-    isConnecting: boolean;
-    connectionError: string | null;
-    reconnect: () => void;
-  };
-  
-  // Chat state
-  chatState: {
-    messages: Message[];
-    isPartnerConnected: boolean;
-    isFindingPartner: boolean;
-    partnerInfo: PartnerInfo | null;
-    isPartnerTyping: boolean;
-    currentMessage: string;
-  };
-  
-  // UI state
-  isMobile: boolean;
+interface UseChatReturn {
+  // State
+  isMounted: boolean;
   isScrollEnabled: boolean;
-  chatWindowStyle: React.CSSProperties;
+  isSelfDisconnectedRecently: boolean;
+  isPartnerLeftRecently: boolean;
+  wasSkippedByPartner: boolean;
+  didSkipPartner: boolean;
+  partnerInterests: string[];
+  interests: string[];
+  
+  // Computed values
   pinkThemeActive: boolean;
   effectivePageTheme: string;
+  isMobile: boolean;
+  chatWindowStyle: React.CSSProperties;
+  
+  // Chat state
+  chatState: ReturnType<typeof useChatState>;
+  auth: ReturnType<typeof useAuth>;
+  socket: ReturnType<typeof useChatSocket>;
+  
+  // Actions
+  chatActions: ReturnType<typeof useChatActions>;
+  handleUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
+  
+  // Data
+  mappedMessages: any[];
+  memoizedPartnerInfo: any;
+  memoizedOwnInfo: any;
   
   // Loading states
   isLoading: boolean;
   hasConnectionError: boolean;
-  isMounted: boolean;
-  
-  // Processed data
-  mappedMessages: any[] | null;
-  memoizedPartnerInfo: any;
-  memoizedOwnInfo: any;
-  interests: string[];
-  
-  // Actions
-  chatActions: ChatActions;
-  
-  // Event handlers
-  handleUsernameClick: (authId: string, clickPosition: { x: number; y: number }) => void;
-  
-  // Notification states
-  wasSkippedByPartner: boolean;
-  didSkipPartner: boolean;
-  userManuallyStopped: boolean;
 }
 
-export const useChat = (): UseChat => {
-  // ✅ Mount tracking
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    setIsMounted(true);
-    return () => setIsMounted(false);
-  }, []);
-
-  // ✅ Core hooks
-  const auth = useAuth();
-  const chatState = useChatState();
-  const { isMobile, chatWindowStyle } = useViewport();
-  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
+export const useChat = (): UseChatReturn => {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   
-  // ✅ State management
-  const [interests] = useState<string[]>([]);
-  const [isScrollEnabled] = useState(true);
+  // State management
+  const [isMounted, setIsMounted] = useState(false);
+  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
+  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
   const [wasSkippedByPartner, setWasSkippedByPartner] = useState(false);
   const [didSkipPartner, setDidSkipPartner] = useState(false);
   const [userManuallyStopped, setUserManuallyStopped] = useState(false);
-  const [isSelfDisconnectedRecently, setIsSelfDisconnectedRecently] = useState(false);
-  const [isPartnerLeftRecently, setIsPartnerLeftRecently] = useState(false);
-
-  // ✅ Initialization tracking
+  const [partnerInterests, setPartnerInterests] = useState<string[]>([]);
+  const [isScrollEnabled] = useState(true);
+  
+  // Initialization tracking
   const initRef = useRef({
     isInitialized: false,
     autoSearchStarted: false,
     sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`
   });
 
-  // ✅ Socket handlers
+  // Extract interests from URL params
+  const interests = useMemo(() => {
+    const interestsParam = searchParams.get('interests');
+    if (!interestsParam) return [];
+    return interestsParam.split(',').filter(i => i.trim() !== '');
+  }, [searchParams]);
+
+  // Initialize all hooks
+  const auth = useAuth();
+  const { pinkThemeActive, effectivePageTheme } = useThemeDetection(isMounted);
+  const { isMobile, chatWindowStyle } = useViewport();
+  const chatState = useChatState();
+
+  // Socket event handlers
   const socketHandlers = useMemo(() => ({
+    // ✅ UPDATED: onMessage with receive sound
     onMessage: (data: any) => {
-      console.log('[useChat] 📨 Message received:', data);
+      console.log('[Chat] Handling message:', data);
       
-      const newMessage: Message = {
-        id: `msg-${Date.now()}-${Math.random()}`,
-        text: data.message || data.text,
+      if (data.senderAuthId && (data.senderDisplayNameColor || data.senderDisplayNameAnimation)) {
+        chatState.setPartnerInfo(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            displayNameColor: data.senderDisplayNameColor || prev.displayNameColor,
+            displayNameAnimation: data.senderDisplayNameAnimation || prev.displayNameAnimation,
+            rainbowSpeed: data.senderRainbowSpeed || prev.rainbowSpeed
+          };
+        });
+      }
+      
+      chatState.addMessage({
+        text: data.message,
         sender: 'partner',
-        timestamp: new Date(),
-        senderUsername: data.username,
-        senderAuthId: data.authId,
-        senderDisplayNameColor: data.displayNameColor,
-        senderDisplayNameAnimation: data.displayNameAnimation,
-        senderRainbowSpeed: data.rainbowSpeed
-      };
+        senderUsername: data.senderUsername,
+        senderAuthId: data.senderAuthId,
+        senderDisplayNameColor: data.senderDisplayNameColor,
+        senderDisplayNameAnimation: data.senderDisplayNameAnimation,
+        senderRainbowSpeed: data.senderRainbowSpeed
+      });
       
-      chatState.addMessage(newMessage);
-      
-      // Play sound
+      chatState.setIsPartnerTyping(false);
+
+      // ✅ NEW: Play receive sound
       try {
         const audioManager = getAudioManager();
         audioManager.playMessageReceived();
       } catch (error) {
-        console.warn('[useChat] Failed to play message sound:', error);
+        console.warn('[Chat] Failed to play receive sound:', error);
       }
     },
 
     onPartnerFound: (data: any) => {
-      console.log('[useChat] 🎉 Partner found:', data);
+      console.log('[Chat] Partner found:', data);
       
+      // ✅ FIXED: Play Match.wav using enhanced audio function
+      try {
+        playMatchSound(); // This will use the global audio volume settings
+      } catch (error) {
+        console.warn('[Chat] Failed to play match sound:', error);
+      }
+      
+      chatState.setPartnerInfo({
+        id: data.partnerId,
+        username: data.partnerUsername || 'Stranger',
+        displayName: data.partnerDisplayName,
+        avatarUrl: data.partnerAvatarUrl,
+        bannerUrl: data.partnerBannerUrl,
+        pronouns: data.partnerPronouns,
+        status: data.partnerStatus || 'online',
+        displayNameColor: data.partnerDisplayNameColor || '#667eea',
+        displayNameAnimation: data.partnerDisplayNameAnimation || 'none',
+        rainbowSpeed: data.partnerRainbowSpeed || 3,
+        authId: data.partnerAuthId,
+        badges: data.partnerBadges || []
+      });
+      
+      setPartnerInterests(data.interests || []);
+      chatState.setIsFindingPartner(false);
+      chatState.setIsPartnerConnected(true);
+      
+      // Reset all skip states and manual stop when new partner found
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
       setUserManuallyStopped(false);
       
-      chatState.setIsPartnerConnected(true);
-      chatState.setIsFindingPartner(false);
-      
-      if (data.partnerInfo) {
-        const partnerInfo: PartnerInfo = {
-          id: data.partnerInfo.id || data.partnerId,
-          username: data.partnerInfo.username || 'Stranger',
-          displayName: data.partnerInfo.displayName,
-          avatarUrl: data.partnerInfo.avatarUrl,
-          displayNameColor: data.partnerInfo.displayNameColor,
-          displayNameAnimation: data.partnerInfo.displayNameAnimation,
-          rainbowSpeed: data.partnerInfo.rainbowSpeed,
-          authId: data.partnerInfo.authId,
-          status: data.partnerInfo.status || 'online'
-        };
-        chatState.setPartnerInfo(partnerInfo);
-      }
-      
-      // Play match sound
-      try {
-        const audioManager = getAudioManager();
-        audioManager.playMessageReceived(); // Using same sound for match
-      } catch (error) {
-        console.warn('[useChat] Failed to play match sound:', error);
-      }
+      chatState.setMessages([]);
     },
 
     onPartnerLeft: () => {
-      console.log('[useChat] 👋 Partner left normally');
-      
-      setIsPartnerLeftRecently(true);
-      chatState.setIsPartnerConnected(false);
-      chatState.setPartnerInfo(null);
-      chatState.setIsPartnerTyping(false);
-      
-      setTimeout(() => setIsPartnerLeftRecently(false), 5000);
-    },
-
-    onPartnerSkipped: (data: any) => {
-      console.log('[useChat] 😞 You were skipped by partner:', data);
-      
-      setWasSkippedByPartner(true);
-      setDidSkipPartner(false);
-      
+      console.log('[Chat] Partner left normally');
       chatState.setIsPartnerConnected(false);
       chatState.setIsFindingPartner(false);
       chatState.setPartnerInfo(null);
       chatState.setIsPartnerTyping(false);
-      
-      setTimeout(() => setWasSkippedByPartner(false), 10000);
+      setPartnerInterests([]);
+      setIsPartnerLeftRecently(true);
+      setIsSelfDisconnectedRecently(false);
+      setWasSkippedByPartner(false);
+      setDidSkipPartner(false);
+      setUserManuallyStopped(false);
     },
 
-    onSkipConfirmed: (data: any) => {
-      console.log('[useChat] ✅ Skip confirmed, server will auto-search:', data);
+    // Handle being skipped - NO AUTO-SEARCH
+    onPartnerSkipped: (data: any) => {
+      console.log('[Chat] You were skipped by partner:', data);
       
+      chatState.setIsPartnerConnected(false);
+      chatState.setPartnerInfo(null);
+      chatState.setIsPartnerTyping(false);
+      setPartnerInterests([]);
+      
+      // Mark as skipped but DO NOT auto-search
+      setWasSkippedByPartner(true);
+      setIsPartnerLeftRecently(false);
+      setIsSelfDisconnectedRecently(false);
+      setDidSkipPartner(false);
+      setUserManuallyStopped(false);
+      
+      // Stop any current search
+      chatState.setIsFindingPartner(false);
+    },
+
+    // Handle skip confirmation when YOU skip someone
+    onSkipConfirmed: (data: any) => {
+      console.log('[Chat] Skip confirmed - you skipped someone:', data);
+      
+      // Mark that this user skipped someone
       setDidSkipPartner(true);
       setWasSkippedByPartner(false);
-      
-      chatState.setIsPartnerConnected(false);
-      chatState.setPartnerInfo(null);
-      chatState.setIsPartnerTyping(false);
-      
-      // Server should start auto-search, so we set isFindingPartner to true
-      if (data.autoSearchStarted) {
-        chatState.setIsFindingPartner(true);
-      }
-      
-      setTimeout(() => setDidSkipPartner(false), 5000);
-    },
-
-    onSearchStarted: (data: any) => {
-      console.log('[useChat] 🔍 Search started:', data);
-      
+      setIsPartnerLeftRecently(false);
+      setIsSelfDisconnectedRecently(false);
       setUserManuallyStopped(false);
-      chatState.setIsFindingPartner(true);
-      chatState.setIsPartnerConnected(false);
-    },
-
-    onSearchStopped: (data: any) => {
-      console.log('[useChat] 🛑 Search stopped:', data);
       
-      setUserManuallyStopped(true);
-      chatState.setIsFindingPartner(false);
+      // The auto-search should already be handled by the server
+      chatState.setIsFindingPartner(true);
     },
 
     onStatusChange: (status: string) => {
-      console.log('[useChat] 📊 Status change:', status);
+      chatState.setPartnerInfo(prev => 
+        prev ? {...prev, status: status as any} : null
+      );
     },
 
-    onTypingStart: () => {
-      console.log('[useChat] ⌨️ Partner started typing');
-      chatState.setIsPartnerTyping(true);
-    },
-
-    onTypingStop: () => {
-      console.log('[useChat] ⌨️ Partner stopped typing');
-      chatState.setIsPartnerTyping(false);
-    },
-
-    onWaiting: (data: any) => {
-      console.log('[useChat] ⏳ Waiting for partner:', data);
+    onTypingStart: () => chatState.setIsPartnerTyping(true),
+    onTypingStop: () => chatState.setIsPartnerTyping(false),
+    onWaiting: () => {
+      console.log('[Chat] Waiting for partner');
       chatState.setIsFindingPartner(true);
     },
-
-    onCooldown: (data: any) => {
-      console.log('[useChat] ⏰ Cooldown active:', data);
-    },
-
-    onAlreadySearching: (data: any) => {
-      console.log('[useChat] ⚠️ Already searching:', data);
-      chatState.setIsFindingPartner(true);
-    },
-
-    onSearchError: (data: any) => {
-      console.log('[useChat] ❌ Search error:', data);
+    onCooldown: () => {
+      console.log('[Chat] Find partner cooldown');
       chatState.setIsFindingPartner(false);
     },
-
     onDisconnectHandler: () => {
-      console.log('[useChat] 🔌 Socket disconnected');
-      setIsSelfDisconnectedRecently(true);
-      setTimeout(() => setIsSelfDisconnectedRecently(false), 5000);
+      console.log('[Chat] Socket disconnected');
+      chatState.setIsPartnerConnected(false);
+      chatState.setIsFindingPartner(false);
+      chatState.setIsPartnerTyping(false);
+      chatState.setPartnerInfo(null);
     },
-
     onConnectErrorHandler: () => {
-      console.log('[useChat] ❌ Socket connection error');
-    },
+      console.log('[Chat] Socket connection error');
+      chatState.setIsFindingPartner(false);
+    }
+  }), [chatState]);
 
+  // Initialize socket
+  const socket = useChatSocket({
+    ...socketHandlers,
     authId: auth.authId
-  }), [chatState, auth.authId]);
-
-  // ✅ Initialize socket
-  const socket = useChatSocket(socketHandlers);
-
-  // ✅ Auto-search hook
-  useAutoSearch({
-    socket: {
-      isConnected: socket.isConnected,
-      emitFindPartner: socket.emitFindPartner
-    },
-    auth,
-    chatState: {
-      isPartnerConnected: chatState.isPartnerConnected,
-      isFindingPartner: chatState.isFindingPartner
-    },
-    interests,
-    initRef,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    wasSkippedByPartner,
-    didSkipPartner,
-    userManuallyStopped
   });
 
-  // ✅ System messages hook
+  // Favicon management
+  useFaviconManager({
+    isPartnerConnected: chatState.isPartnerConnected,
+    isFindingPartner: chatState.isFindingPartner,
+    connectionError: socket.connectionError,
+    isSelfDisconnectedRecently,
+    isPartnerLeftRecently: isPartnerLeftRecently || wasSkippedByPartner
+  });
+
+  // System messages
   useSystemMessages({
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
@@ -306,131 +264,94 @@ export const useChat = (): UseChat => {
     isPartnerLeftRecently,
     wasSkippedByPartner,
     didSkipPartner,
-    partnerInterests: chatState.partnerInfo?.username ? [chatState.partnerInfo.username] : [],
+    partnerInterests,
     interests,
     messages: chatState.messages,
     setMessages: chatState.setMessages
   });
 
-  // ✅ Favicon manager hook
-  useFaviconManager({
+  // Chat actions with manual stop tracking
+  const chatActions = useChatActions({
+    isConnected: socket.isConnected,
     isPartnerConnected: chatState.isPartnerConnected,
     isFindingPartner: chatState.isFindingPartner,
-    connectionError: socket.connectionError,
-    isSelfDisconnectedRecently,
-    isPartnerLeftRecently
+    setIsFindingPartner: chatState.setIsFindingPartner,
+    setIsPartnerConnected: chatState.setIsPartnerConnected,
+    setPartnerInfo: chatState.setPartnerInfo,
+    setIsPartnerTyping: chatState.setIsPartnerTyping,
+    setPartnerInterests,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently,
+    setDidSkipPartner,
+    setUserManuallyStopped,
+    addMessage: chatState.addMessage,
+    addSystemMessage: chatState.addSystemMessage,
+    emitLeaveChat: socket.emitLeaveChat,
+    emitSkipPartner: socket.emitSkipPartner,
+    emitStopSearching: socket.emitStopSearching,
+    emitFindPartner: socket.emitFindPartner,
+    emitMessage: socket.emitMessage,
+    emitTypingStart: socket.emitTypingStart,
+    emitTypingStop: socket.emitTypingStop,
+    setCurrentMessage: chatState.setCurrentMessage,
+    interests,
+    authId: auth.authId,
+    username: auth.username
   });
 
-  // ✅ Initialize when socket connects
+  // Auto-search only on initial load, NOT after being skipped or manually stopped
+  useAutoSearch({
+    socket,
+    auth,
+    chatState,
+    interests,
+    initRef,
+    setIsSelfDisconnectedRecently,
+    setIsPartnerLeftRecently,
+    wasSkippedByPartner,
+    didSkipPartner,
+    userManuallyStopped
+  });
+  
+  // Navigation cleanup
   useEffect(() => {
-    if (socket.isConnected && !initRef.current.isInitialized) {
-      console.log('[useChat] 🚀 Initializing chat system');
-      initRef.current.isInitialized = true;
-    }
-  }, [socket.isConnected]);
-
-  // ✅ Chat actions
-  const chatActions: ChatActions = useMemo(() => ({
-    startNewChat: () => {
-      console.log('[useChat] 🔍 Starting new chat');
-      
-      setUserManuallyStopped(false);
+    if (pathname === '/chat') {
+      console.log('[Chat] Route change cleanup');
+      chatState.resetChatState();
+      setIsSelfDisconnectedRecently(false);
+      setIsPartnerLeftRecently(false);
       setWasSkippedByPartner(false);
       setDidSkipPartner(false);
-      
-      chatState.clearMessages();
-      
-      socket.emitFindPartner({
-        chatType: 'text',
-        interests,
-        authId: auth.authId,
-        username: auth.username,
-        manualSearch: true,
-        sessionId: initRef.current.sessionId
-      });
-    },
-
-    stopSearching: () => {
-      console.log('[useChat] 🛑 Stopping search manually');
-      
-      setUserManuallyStopped(true);
-      socket.emitStopSearching();
-    },
-
-    skipPartner: () => {
-      console.log('[useChat] ⏭️ Skipping current partner');
-      
-      if (!chatState.isPartnerConnected) {
-        console.warn('[useChat] No partner to skip');
-        return;
-      }
-      
-      setDidSkipPartner(true);
-      setWasSkippedByPartner(false);
-      
-      socket.emitSkipPartner({
-        chatType: 'text',
-        interests,
-        authId: auth.authId,
-        reason: 'skip'
-      });
-    },
-
-    sendMessage: (message: string) => {
-      console.log('[useChat] 📤 Sending message:', message);
-      
-      if (!message.trim()) {
-        console.warn('[useChat] Empty message not sent');
-        return;
-      }
-      
-      const newMessage: Message = {
-        id: `msg-${Date.now()}-${Math.random()}`,
-        text: message.trim(),
-        sender: 'me',
-        timestamp: new Date(),
-        senderUsername: auth.username ?? undefined,
-        senderAuthId: auth.authId ?? undefined,
-        senderDisplayNameColor: auth.displayNameColor,
-        senderDisplayNameAnimation: auth.displayNameAnimation
-      };
-      
-      chatState.addMessage(newMessage);
-      
-      socket.emitMessage({
-        message: message.trim(),
-        username: auth.username,
-        authId: auth.authId
-      });
-      
-      // Play send sound
-      try {
-        const audioManager = getAudioManager();
-        audioManager.playMessageSent();
-      } catch (error) {
-        console.warn('[useChat] Failed to play send sound:', error);
-      }
-    },
-
-    handleInputChange: (value: string) => {
-      chatState.setCurrentMessage(value);
-      
-      // Handle typing indicators
-      if (value.trim()) {
-        socket.emitTypingStart();
-      } else {
-        socket.emitTypingStop();
-      }
+      setUserManuallyStopped(false);
+      setPartnerInterests([]);
+      initRef.current.autoSearchStarted = false;
     }
-  }), [socket, chatState, auth, interests]);
+  }, [pathname, chatState.resetChatState]);
 
-  // ✅ Processed data
+  // Mount effect
+  useEffect(() => { 
+    console.log('[Chat] Component mounted');
+    setIsMounted(true);
+    initRef.current.isInitialized = true;
+    
+    return () => {
+      console.log('[Chat] Component unmounting');
+      initRef.current.isInitialized = false;
+    };
+  }, []);
+
+  // Username click handler
+  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
+    console.log('[Chat] Username clicked:', authId, clickPosition);
+  }, []);
+
+  // Memoized message mapping
   const mappedMessages = useMemo(() => {
     return chatState.messages.map(msg => ({
       id: msg.id,
       content: msg.text,
-      sender: msg.sender,
-      timestamp: msg.timestamp.getTime(),
+      sender: msg.sender === 'me' ? 'self' : msg.sender,
+      timestamp: msg.timestamp?.getTime(),
       senderUsername: msg.senderUsername,
       senderAuthId: msg.senderAuthId,
       senderDisplayNameColor: msg.senderDisplayNameColor,
@@ -439,83 +360,66 @@ export const useChat = (): UseChat => {
     }));
   }, [chatState.messages]);
 
-  const memoizedPartnerInfo = useMemo(() => ({
-    username: chatState.partnerInfo?.username || 'Stranger',
-    displayName: chatState.partnerInfo?.displayName,
-    avatar: chatState.partnerInfo?.avatarUrl || '',
-    displayNameColor: chatState.partnerInfo?.displayNameColor,
-    displayNameAnimation: chatState.partnerInfo?.displayNameAnimation,
-    rainbowSpeed: chatState.partnerInfo?.rainbowSpeed,
-    authId: chatState.partnerInfo?.authId,
-    status: chatState.partnerInfo?.status || 'offline'
-  }), [chatState.partnerInfo]);
+  // Memoized partner info
+  const memoizedPartnerInfo = useMemo(() => {
+    if (!chatState.partnerInfo) return undefined;
+    
+    return {
+      username: chatState.partnerInfo.username,
+      displayName: chatState.partnerInfo.displayName,
+      avatar: chatState.partnerInfo.avatarUrl || '/default-avatar.png',
+      displayNameColor: chatState.partnerInfo.displayNameColor,
+      displayNameAnimation: chatState.partnerInfo.displayNameAnimation,
+      rainbowSpeed: chatState.partnerInfo.rainbowSpeed,
+      authId: chatState.partnerInfo.authId
+    };
+  }, [chatState.partnerInfo]);
 
+  // Memoized own info
   const memoizedOwnInfo = useMemo(() => ({
-    username: auth.username || 'You',
+    username: auth.username || "You",
     authId: auth.authId,
     displayNameColor: auth.displayNameColor,
     displayNameAnimation: auth.displayNameAnimation
-  }), [auth]);
+  }), [auth.username, auth.authId, auth.displayNameColor, auth.displayNameAnimation]);
 
-  // ✅ Loading and error states
-  const isLoading = auth.isLoading || (!socket.isConnected && !socket.connectionError);
-  const hasConnectionError = !!socket.connectionError;
-
-  // ✅ Username click handler
-  const handleUsernameClick = useCallback((authId: string, clickPosition: { x: number; y: number }) => {
-    console.log('[useChat] Username clicked:', authId, clickPosition);
-    // This would integrate with profile popup system
-  }, []);
+  // Loading and error states
+  const isLoading = !isMounted || auth.isLoading || (socket.isConnecting && !socket.isConnected);
+  const hasConnectionError = !!socket.connectionError && !socket.isConnected && !socket.isConnecting;
 
   return {
-    // Auth state
-    auth,
-    
-    // Socket state
-    socket: {
-      isConnected: socket.isConnected,
-      isConnecting: socket.isConnecting,
-      connectionError: socket.connectionError,
-      reconnect: socket.reconnect
-    },
-    
-    // Chat state
-    chatState: {
-      messages: chatState.messages,
-      isPartnerConnected: chatState.isPartnerConnected,
-      isFindingPartner: chatState.isFindingPartner,
-      partnerInfo: chatState.partnerInfo,
-      isPartnerTyping: chatState.isPartnerTyping,
-      currentMessage: chatState.currentMessage
-    },
-    
-    // UI state
-    isMobile,
+    // State
+    isMounted,
     isScrollEnabled,
-    chatWindowStyle,
+    isSelfDisconnectedRecently,
+    isPartnerLeftRecently,
+    wasSkippedByPartner,
+    didSkipPartner,
+    partnerInterests,
+    interests,
+    
+    // Computed values
     pinkThemeActive,
     effectivePageTheme,
+    isMobile,
+    chatWindowStyle,
     
-    // Loading states
-    isLoading,
-    hasConnectionError,
-    isMounted,
-    
-    // Processed data
-    mappedMessages,
-    memoizedPartnerInfo,
-    memoizedOwnInfo,
-    interests,
+    // Chat state
+    chatState,
+    auth,
+    socket,
     
     // Actions
     chatActions,
-    
-    // Event handlers
     handleUsernameClick,
     
-    // Notification states
-    wasSkippedByPartner,
-    didSkipPartner,
-    userManuallyStopped
+    // Data
+    mappedMessages,
+    memoizedPartnerInfo,
+    memoizedOwnInfo,
+    
+    // Loading states
+    isLoading,
+    hasConnectionError
   };
 };

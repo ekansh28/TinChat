@@ -1,20 +1,11 @@
-// src/app/chat/hooks/useAutoSearch.ts - COMPLETELY FIXED AUTO-SEARCH LOGIC
+// src/app/chat/hooks/useAutoSearch.ts - FIXED TO PREVENT AUTO-SEARCH AFTER MANUAL STOP
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 
 interface UseAutoSearchProps {
-  socket: {
-    isConnected: boolean;
-    emitFindPartner: (data: any) => void;
-  };
-  auth: {
-    authId: string | null;
-    username: string | null;
-  };
-  chatState: {
-    isPartnerConnected: boolean;
-    isFindingPartner: boolean;
-  };
+  socket: any;
+  auth: any;
+  chatState: any;
   interests: string[];
   initRef: React.MutableRefObject<{
     isInitialized: boolean;
@@ -23,9 +14,9 @@ interface UseAutoSearchProps {
   }>;
   setIsSelfDisconnectedRecently: (value: boolean) => void;
   setIsPartnerLeftRecently: (value: boolean) => void;
-  wasSkippedByPartner: boolean;
-  didSkipPartner: boolean;
-  userManuallyStopped: boolean;
+  wasSkippedByPartner?: boolean;
+  didSkipPartner?: boolean;
+  userManuallyStopped?: boolean; // ✅ NEW: Track if user manually stopped
 }
 
 export const useAutoSearch = ({
@@ -36,191 +27,157 @@ export const useAutoSearch = ({
   initRef,
   setIsSelfDisconnectedRecently,
   setIsPartnerLeftRecently,
-  wasSkippedByPartner,
-  didSkipPartner,
-  userManuallyStopped
+  wasSkippedByPartner = false,
+  didSkipPartner = false,
+  userManuallyStopped = false // ✅ NEW: Default to false
 }: UseAutoSearchProps) => {
   
-  const lastAutoSearchRef = useRef<number>(0);
-  const autoSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isAutoSearchingRef = useRef(false);
-
-  // ✅ CRITICAL: Auto-search logic that respects all user states
-  const performAutoSearch = useCallback(() => {
-    const now = Date.now();
-    
-    // Prevent spam
-    if (now - lastAutoSearchRef.current < 500) {
-      console.log('[AutoSearch] 🚫 Auto-search throttled');
-      return;
-    }
-
-    // Don't auto-search if user manually stopped or was skipped
-    if (userManuallyStopped) {
-      console.log('[AutoSearch] 🚫 User manually stopped - no auto-search');
-      return;
-    }
-
-    if (wasSkippedByPartner) {
-      console.log('[AutoSearch] 🚫 Was skipped by partner - no auto-search');
-      return;
-    }
-
-    // Don't auto-search if already connected or searching
-    if (chatState.isPartnerConnected) {
-      console.log('[AutoSearch] 🚫 Already connected to partner');
-      return;
-    }
-
-    if (chatState.isFindingPartner) {
-      console.log('[AutoSearch] 🚫 Already searching for partner');
-      return;
-    }
-
-    // Don't auto-search if socket not ready
-    if (!socket.isConnected) {
-      console.log('[AutoSearch] 🚫 Socket not connected');
-      return;
-    }
-
-    // Don't auto-search if not initialized
-    if (!initRef.current.isInitialized) {
-      console.log('[AutoSearch] 🚫 Not initialized yet');
-      return;
-    }
-
-    console.log('[AutoSearch] 🔍 Starting auto-search...');
-    
-    isAutoSearchingRef.current = true;
-    lastAutoSearchRef.current = now;
-    
-    // Clear any previous states
-    setIsSelfDisconnectedRecently(false);
-    setIsPartnerLeftRecently(false);
-    
-    // Emit search with current user data
-    socket.emitFindPartner({
-      interests: interests || [],
+  // ✅ CRITICAL FIX: Only auto-search on initial load, NOT after being skipped or manually stopped
+  useEffect(() => {
+    console.log('[AutoSearch] Effect triggered:', {
+      autoSearchStarted: initRef.current.autoSearchStarted,
+      isConnected: socket.isConnected,
+      authLoading: auth.isLoading,
+      isPartnerConnected: chatState.isPartnerConnected,
+      isFindingPartner: chatState.isFindingPartner,
       authId: auth.authId,
-      username: auth.username,
-      autoSearch: true,
-      sessionId: initRef.current.sessionId
+      connectionError: socket.connectionError,
+      isConnecting: socket.isConnecting,
+      wasSkippedByPartner,
+      didSkipPartner,
+      userManuallyStopped // ✅ NEW: Log manual stop state
     });
 
-  }, [
-    socket,
-    auth,
-    chatState,
-    interests,
-    initRef,
-    setIsSelfDisconnectedRecently,
-    setIsPartnerLeftRecently,
-    userManuallyStopped,
-    wasSkippedByPartner
-  ]);
-
-  // ✅ CRITICAL: Initial auto-search when component loads
-  useEffect(() => {
-    if (!socket.isConnected || !initRef.current.isInitialized) {
+    // ✅ CRITICAL: Prevent auto-search if user was skipped
+    if (wasSkippedByPartner) {
+      console.log('[AutoSearch] User was skipped, preventing auto-search');
       return;
     }
 
-    // Only auto-search once on initial load
-    if (initRef.current.autoSearchStarted) {
-      return;
-    }
-
-    // Don't auto-search if already connected or searching
-    if (chatState.isPartnerConnected || chatState.isFindingPartner) {
-      return;
-    }
-
-    // Don't auto-search if user manually stopped
+    // ✅ CRITICAL: Prevent auto-search if user manually stopped after skipping
     if (userManuallyStopped) {
+      console.log('[AutoSearch] User manually stopped searching, preventing auto-search');
       return;
     }
 
-    console.log('[AutoSearch] 🚀 Initial auto-search trigger');
-    
-    // Add small delay to ensure everything is ready
-    autoSearchTimeoutRef.current = setTimeout(() => {
-      initRef.current.autoSearchStarted = true;
-      performAutoSearch();
-    }, 100);
-
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
-    };
-  }, [
-    socket.isConnected,
-    initRef.current.isInitialized,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner,
-    performAutoSearch,
-    userManuallyStopped
-  ]);
-
-  // ✅ CRITICAL: Auto-search after YOU skip someone (server should handle this but backup)
-  useEffect(() => {
-    if (!didSkipPartner) return;
-    if (wasSkippedByPartner) return; // Don't auto-search if we were skipped
-    if (userManuallyStopped) return;
-    if (!socket.isConnected) return;
-    if (chatState.isPartnerConnected) return;
-    if (chatState.isFindingPartner) return; // Server should already be searching
-
-    console.log('[AutoSearch] 🔄 Auto-search after skipping partner');
-    
-    // Small delay to let server start auto-search first
-    autoSearchTimeoutRef.current = setTimeout(() => {
-      if (!chatState.isFindingPartner && !chatState.isPartnerConnected) {
-        console.log('[AutoSearch] 🔄 Server didnt start auto-search, starting manually');
-        performAutoSearch();
-      }
-    }, 1000);
-
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
-    };
-  }, [
-    didSkipPartner,
-    wasSkippedByPartner,
-    userManuallyStopped,
-    socket.isConnected,
-    chatState.isPartnerConnected,
-    chatState.isFindingPartner,
-    performAutoSearch
-  ]);
-
-  // ✅ Reset auto-search state when partner found
-  useEffect(() => {
-    if (chatState.isPartnerConnected) {
-      isAutoSearchingRef.current = false;
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
-        autoSearchTimeoutRef.current = null;
-      }
+    // ✅ CRITICAL: Prevent auto-search if user already skipped someone
+    if (didSkipPartner) {
+      console.log('[AutoSearch] User skipped someone, server should handle auto-search');
+      return;
     }
-  }, [chatState.isPartnerConnected]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSearchTimeoutRef.current) {
-        clearTimeout(autoSearchTimeoutRef.current);
+    if (initRef.current.autoSearchStarted) {
+      console.log('[AutoSearch] Already started, skipping');
+      return;
+    }
+
+    // ✅ CRITICAL FIX: Enhanced readiness checks with proper delays
+    const isSocketReady = socket.isConnected && !socket.connectionError && !socket.isConnecting;
+    const isAuthReady = !auth.isLoading && auth.authId !== undefined;
+    const isChatReady = !chatState.isPartnerConnected && !chatState.isFindingPartner;
+
+    console.log('[AutoSearch] Readiness check:', {
+      isSocketReady,
+      isAuthReady, 
+      isChatReady,
+      overall: isSocketReady && isAuthReady && isChatReady
+    });
+
+    if (!isSocketReady || !isAuthReady || !isChatReady) {
+      console.log('[AutoSearch] Conditions not met - waiting...');
+      return;
+    }
+
+    // ✅ CRITICAL FIX: Add delay to prevent race conditions
+    const delayedStart = setTimeout(() => {
+      // ✅ TRIPLE-CHECK: Make sure conditions haven't changed during delay
+      if (wasSkippedByPartner) {
+        console.log('[AutoSearch] User was skipped during delay, cancelling auto-search');
+        return;
       }
-      isAutoSearchingRef.current = false;
-    };
-  }, []);
 
-  return {
-    performAutoSearch,
-    isAutoSearching: isAutoSearchingRef.current
-  };
+      if (userManuallyStopped) {
+        console.log('[AutoSearch] User manually stopped during delay, cancelling auto-search');
+        return;
+      }
+
+      if (didSkipPartner) {
+        console.log('[AutoSearch] User skipped someone during delay, cancelling auto-search');
+        return;
+      }
+
+      if (!initRef.current.autoSearchStarted && socket.isConnected) {
+        console.log('[AutoSearch] ✅ Starting delayed auto-search for partner');
+        initRef.current.autoSearchStarted = true;
+        
+        chatState.setIsFindingPartner(true);
+        chatState.addSystemMessage('Searching for a partner...');
+        setIsSelfDisconnectedRecently(false);
+        setIsPartnerLeftRecently(false);
+        
+        // ✅ ENHANCED: More robust partner search
+        const success = socket.emitFindPartner({
+          chatType: 'text',
+          interests,
+          authId: auth.authId,
+          sessionId: initRef.current.sessionId,
+          timestamp: Date.now()
+        });
+        
+        if (!success) {
+          console.error('[AutoSearch] Failed to emit findPartner');
+          chatState.setIsFindingPartner(false);
+          chatState.addSystemMessage('Failed to start partner search. Please try again.');
+          initRef.current.autoSearchStarted = false;
+        } else {
+          console.log('[AutoSearch] ✅ findPartner emitted successfully');
+        }
+      }
+    }, 1000); // ✅ 1 second delay to ensure everything is ready
+
+    return () => {
+      clearTimeout(delayedStart);
+    };
+  }, [
+    socket.isConnected,
+    socket.connectionError,
+    socket.isConnecting,
+    auth.isLoading,
+    auth.authId,
+    chatState.isPartnerConnected,
+    chatState.isFindingPartner,
+    interests,
+    wasSkippedByPartner,
+    didSkipPartner,
+    userManuallyStopped // ✅ NEW: Include manual stop state in dependencies
+  ]);
+
+  // ✅ IMPROVED: Reset auto-search flag when conditions change
+  useEffect(() => {
+    const shouldReset = chatState.isPartnerConnected || 
+                       !socket.isConnected || 
+                       socket.connectionError ||
+                       socket.isConnecting ||
+                       wasSkippedByPartner ||
+                       userManuallyStopped; // ✅ NEW: Reset if user manually stopped
+
+    if (shouldReset && initRef.current.autoSearchStarted) {
+      console.log('[AutoSearch] Resetting auto-search flag due to state change:', {
+        isPartnerConnected: chatState.isPartnerConnected,
+        isConnected: socket.isConnected,
+        connectionError: socket.connectionError,
+        isConnecting: socket.isConnecting,
+        wasSkippedByPartner,
+        userManuallyStopped
+      });
+      initRef.current.autoSearchStarted = false;
+    }
+  }, [
+    chatState.isPartnerConnected, 
+    socket.isConnected, 
+    socket.connectionError, 
+    socket.isConnecting,
+    wasSkippedByPartner,
+    userManuallyStopped // ✅ NEW: Include manual stop state
+  ]);
 };

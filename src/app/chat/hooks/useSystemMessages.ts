@@ -1,16 +1,17 @@
-// src/app/chat/hooks/useSystemMessages.ts - COMPLETELY FIXED SYSTEM MESSAGES
+// src/app/chat/hooks/useSystemMessages.ts - COMPLETE FIXED VERSION
+import { useEffect, useRef } from 'react';
+import { Message } from '../utils/ChatHelpers';
 
-import { useEffect, useRef, useCallback } from 'react';
+const SYS_MSG_SEARCHING_PARTNER = 'Searching for a partner...';
+const SYS_MSG_STOPPED_SEARCHING = 'Stopped searching for a partner.';
+const SYS_MSG_CONNECTED_PARTNER = 'Connected with a partner. You can start chatting!';
+const SYS_MSG_YOU_DISCONNECTED = 'You have disconnected.';
+const SYS_MSG_PARTNER_DISCONNECTED = 'Your partner has disconnected.';
+const SYS_MSG_YOU_SKIPPED = 'You skipped the partner. Searching for a new one...';
+const SYS_MSG_PARTNER_SKIPPED = 'Your partner skipped you. Click "Find" to search for a new partner.';
+const SYS_MSG_COMMON_INTERESTS_PREFIX = 'You both like ';
 
-interface Message {
-  id: string;
-  text: string;
-  sender: 'me' | 'partner' | 'system';
-  timestamp: Date;
-  type?: 'info' | 'warning' | 'error' | 'success';
-}
-
-interface UseSystemMessagesProps {
+interface SystemMessageState {
   isPartnerConnected: boolean;
   isFindingPartner: boolean;
   connectionError: string | null;
@@ -21,222 +22,136 @@ interface UseSystemMessagesProps {
   partnerInterests: string[];
   interests: string[];
   messages: Message[];
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  setMessages: (messages: Message[]) => void;
 }
 
-export const useSystemMessages = ({
-  isPartnerConnected,
-  isFindingPartner,
-  connectionError,
-  isSelfDisconnectedRecently,
-  isPartnerLeftRecently,
-  wasSkippedByPartner,
-  didSkipPartner,
-  partnerInterests,
-  interests,
-  messages,
-  setMessages
-}: UseSystemMessagesProps) => {
-  
-  const lastStateRef = useRef({
-    isPartnerConnected: false,
-    isFindingPartner: false,
-    connectionError: null as string | null,
-    wasSkippedByPartner: false,
-    didSkipPartner: false,
-    isPartnerLeftRecently: false,
-    isSelfDisconnectedRecently: false
-  });
+export const useSystemMessages = (state: SystemMessageState) => {
+  const prevIsFindingPartnerRef = useRef(false);
+  const prevIsPartnerConnectedRef = useRef(false);
+  const prevIsSelfDisconnectedRecentlyRef = useRef(false);
+  const prevIsPartnerLeftRecentlyRef = useRef(false);
+  const prevWasSkippedByPartnerRef = useRef(false);
+  const prevDidSkipPartnerRef = useRef(false);
 
-  const addedMessagesRef = useRef(new Set<string>());
+  useEffect(() => {
+    const {
+      isPartnerConnected,
+      isFindingPartner,
+      connectionError,
+      isSelfDisconnectedRecently,
+      isPartnerLeftRecently,
+      wasSkippedByPartner,
+      didSkipPartner,
+      partnerInterests,
+      interests,
+      messages,
+      setMessages
+    } = state;
 
-  const addSystemMessage = useCallback((text: string, type: 'info' | 'warning' | 'error' | 'success' = 'info') => {
-    const messageKey = `${type}-${text}`;
+    let updatedMessages = [...messages];
     
-    // Prevent duplicate system messages
-    if (addedMessagesRef.current.has(messageKey)) {
-      return;
-    }
+    const filterSystemMessagesFrom = (msgs: Message[], textPattern: string): Message[] => 
+      msgs.filter(msg => !(msg.sender === 'system' && msg.text.toLowerCase().includes(textPattern.toLowerCase())));
     
-    addedMessagesRef.current.add(messageKey);
-    
-    const systemMessage: Message = {
-      id: `system-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
-      text,
-      sender: 'system',
-      timestamp: new Date(),
-      type
+    const addSystemMessageIfNotPresentIn = (msgs: Message[], text: string, idSuffix: string): Message[] => {
+      const lowerText = text.toLowerCase();
+      if (!msgs.some(msg => msg.sender === 'system' && msg.text.toLowerCase().includes(lowerText))) {
+        return [...msgs, { 
+          id: `${Date.now()}-${idSuffix}`, 
+          text, 
+          sender: 'system', 
+          timestamp: new Date() 
+        }];
+      }
+      return msgs;
     };
 
-    setMessages(prev => [...prev, systemMessage]);
-    
-    // Clean up old message keys after a delay
-    setTimeout(() => {
-      addedMessagesRef.current.delete(messageKey);
-    }, 5000);
-
-    console.log('[SystemMessages] Added:', text);
-  }, [setMessages]);
-
-  // ✅ CRITICAL: Handle partner connection established
-  useEffect(() => {
-    if (isPartnerConnected && !lastStateRef.current.isPartnerConnected) {
-      console.log('[SystemMessages] 🎉 Partner connected');
-      
-      // Show connection message with interests if available
-      let connectionMessage = "You're now connected with a stranger!";
-      
-      if (partnerInterests.length > 0) {
-        const commonInterests = interests.filter(interest => 
-          partnerInterests.some(pInterest => 
-            pInterest.toLowerCase() === interest.toLowerCase()
-          )
-        );
+    // Handle skip scenarios properly
+    if (wasSkippedByPartner && !prevWasSkippedByPartnerRef.current) {
+      // User was just skipped by partner - NO auto-search
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_SKIPPED.toLowerCase());
+      updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_PARTNER_SKIPPED, 'partner-skipped');
+    } else if (didSkipPartner && !prevDidSkipPartnerRef.current) {
+      // User just skipped someone - auto-search should start
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_SKIPPED.toLowerCase());
+      updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_YOU_SKIPPED, 'you-skipped');
+    } else if (isSelfDisconnectedRecently && !wasSkippedByPartner && !didSkipPartner) { 
+      // Regular self-disconnect (not skip-related)
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_SKIPPED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_SKIPPED.toLowerCase());
+      if (isFindingPartner) {
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_SEARCHING_PARTNER, 'search-after-disconnect');
+      } else {
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_YOU_DISCONNECTED, 'you-disconnected');
+      }
+    } else if (isPartnerLeftRecently && !wasSkippedByPartner && !didSkipPartner) { 
+      // Regular partner left (not skip-related)
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_SKIPPED.toLowerCase());
+      updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_SKIPPED.toLowerCase());
+      updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED, 'partner-left');
+    } else if (isFindingPartner && !wasSkippedByPartner) { 
+      // Only show searching message if user wasn't skipped
+      if (!prevIsFindingPartnerRef.current || 
+          (prevIsSelfDisconnectedRecentlyRef.current && !wasSkippedByPartner) || 
+          (prevIsPartnerLeftRecentlyRef.current && !wasSkippedByPartner)) {
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_SKIPPED.toLowerCase());
+        // Don't remove "you skipped" message when auto-searching after skip
+        if (!didSkipPartner) {
+          updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_SKIPPED.toLowerCase());
+        }
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_SEARCHING_PARTNER, 'search');
+      }
+    } else if (isPartnerConnected) { 
+      if (!prevIsPartnerConnectedRef.current) { 
+        // Clear all previous messages when connected
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_STOPPED_SEARCHING.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_DISCONNECTED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_PARTNER_SKIPPED.toLowerCase());
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_YOU_SKIPPED.toLowerCase());
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_CONNECTED_PARTNER, 'connect');
         
-        if (commonInterests.length > 0) {
-          connectionMessage += ` You both like: ${commonInterests.join(', ')}.`;
-        } else {
-          connectionMessage += ` They're interested in: ${partnerInterests.slice(0, 3).join(', ')}.`;
+        // Add common interests message
+        if (interests.length > 0 && partnerInterests.length > 0) {
+          const common = interests.filter(i => partnerInterests.includes(i));
+          if (common.length > 0) {
+            updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, `${SYS_MSG_COMMON_INTERESTS_PREFIX}${common.join(', ')}.`, 'common');
+          }
         }
       }
-      
-      addSystemMessage(connectionMessage, 'success');
-    }
-    
-    lastStateRef.current.isPartnerConnected = isPartnerConnected;
-  }, [isPartnerConnected, partnerInterests, interests, addSystemMessage]);
-
-  // ✅ CRITICAL: Handle being skipped by partner (with clear message)
-  useEffect(() => {
-    if (wasSkippedByPartner && !lastStateRef.current.wasSkippedByPartner) {
-      console.log('[SystemMessages] 😞 User was skipped by partner');
-      
-      addSystemMessage(
-        "Your chat partner skipped you. Click 'New Chat' to find someone new!",
-        'warning'
-      );
-    }
-    
-    lastStateRef.current.wasSkippedByPartner = wasSkippedByPartner;
-  }, [wasSkippedByPartner, addSystemMessage]);
-
-  // ✅ CRITICAL: Handle skipping a partner (with confirmation message)
-  useEffect(() => {
-    if (didSkipPartner && !lastStateRef.current.didSkipPartner) {
-      console.log('[SystemMessages] ✅ User skipped partner');
-      
-      addSystemMessage(
-        "Looking for your next chat partner...",
-        'info'
-      );
-    }
-    
-    lastStateRef.current.didSkipPartner = didSkipPartner;
-  }, [didSkipPartner, addSystemMessage]);
-
-  // ✅ Handle partner leaving normally
-  useEffect(() => {
-    if (isPartnerLeftRecently && !lastStateRef.current.isPartnerLeftRecently) {
-      console.log('[SystemMessages] 👋 Partner left normally');
-      
-      addSystemMessage(
-        "Your chat partner has left the conversation.",
-        'info'
-      );
-    }
-    
-    lastStateRef.current.isPartnerLeftRecently = isPartnerLeftRecently;
-  }, [isPartnerLeftRecently, addSystemMessage]);
-
-  // ✅ Handle self disconnection
-  useEffect(() => {
-    if (isSelfDisconnectedRecently && !lastStateRef.current.isSelfDisconnectedRecently) {
-      console.log('[SystemMessages] 🔌 Self disconnected');
-      
-      addSystemMessage(
-        "You left the conversation.",
-        'info'
-      );
-    }
-    
-    lastStateRef.current.isSelfDisconnectedRecently = isSelfDisconnectedRecently;
-  }, [isSelfDisconnectedRecently, addSystemMessage]);
-
-  // ✅ Handle searching for partner
-  useEffect(() => {
-    if (isFindingPartner && !lastStateRef.current.isFindingPartner && !isPartnerConnected) {
-      console.log('[SystemMessages] 🔍 Started searching for partner');
-      
-      let searchMessage = "Looking for someone to chat with...";
-      
-      if (interests.length > 0) {
-        searchMessage += ` Matching based on your interests: ${interests.slice(0, 3).join(', ')}.`;
+    } else if (prevIsFindingPartnerRef.current && !isFindingPartner && !isPartnerConnected && !connectionError && !isPartnerLeftRecently && !isSelfDisconnectedRecently && !wasSkippedByPartner && !didSkipPartner) {
+      // Only show stopped searching for manual stops (not skip-related)
+      if (updatedMessages.some(msg => msg.sender === 'system' && msg.text.toLowerCase().includes(SYS_MSG_SEARCHING_PARTNER.toLowerCase()))) {
+        updatedMessages = filterSystemMessagesFrom(updatedMessages, SYS_MSG_SEARCHING_PARTNER.toLowerCase());
+        updatedMessages = addSystemMessageIfNotPresentIn(updatedMessages, SYS_MSG_STOPPED_SEARCHING, 'stopsearch');
       }
-      
-      addSystemMessage(searchMessage, 'info');
     }
-    
-    lastStateRef.current.isFindingPartner = isFindingPartner;
-  }, [isFindingPartner, isPartnerConnected, interests, addSystemMessage]);
 
-  // ✅ Handle connection errors
-  useEffect(() => {
-    if (connectionError && connectionError !== lastStateRef.current.connectionError) {
-      console.log('[SystemMessages] ❌ Connection error:', connectionError);
-      
-      let errorMessage = "Connection issue occurred.";
-      
-      if (connectionError.includes('timeout')) {
-        errorMessage = "Connection timed out. Please check your internet and try again.";
-      } else if (connectionError.includes('refused')) {
-        errorMessage = "Unable to connect to chat servers. Please try again later.";
-      } else if (connectionError.includes('network')) {
-        errorMessage = "Network error. Please check your connection and refresh the page.";
-      }
-      
-      addSystemMessage(errorMessage, 'error');
+    // Update messages only if they actually changed
+    if (updatedMessages.length !== messages.length || !updatedMessages.every((v, i) => v.id === messages[i]?.id && v.text === messages[i]?.text)) {
+      setMessages(updatedMessages);
     }
-    
-    lastStateRef.current.connectionError = connectionError;
-  }, [connectionError, addSystemMessage]);
 
-  // ✅ Welcome message on first load (only if no messages exist)
-  useEffect(() => {
-    if (messages.length === 0 && !isFindingPartner && !isPartnerConnected) {
-      console.log('[SystemMessages] 👋 Showing welcome message');
-      
-      let welcomeMessage = "Welcome to the chat! Click 'New Chat' to find someone to talk with.";
-      
-      if (interests.length > 0) {
-        welcomeMessage += ` Your interests: ${interests.join(', ')}.`;
-      }
-      
-      addSystemMessage(welcomeMessage, 'info');
-    }
-  }, [messages.length, isFindingPartner, isPartnerConnected, interests, addSystemMessage]);
-
-  // ✅ Cleanup old system messages
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessages(prev => {
-        const cutoffTime = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
-        return prev.filter(msg => 
-          msg.sender !== 'system' || msg.timestamp > cutoffTime
-        );
-      });
-    }, 60000); // Clean every minute
-
-    return () => clearInterval(interval);
-  }, [setMessages]);
-
-  // ✅ Reset message tracking when messages are cleared
-  useEffect(() => {
-    if (messages.length === 0) {
-      addedMessagesRef.current.clear();
-    }
-  }, [messages.length]);
-
-  return {
-    addSystemMessage
-  };
+    // Update all previous state refs
+    prevIsFindingPartnerRef.current = isFindingPartner;
+    prevIsPartnerConnectedRef.current = isPartnerConnected;
+    prevIsSelfDisconnectedRecentlyRef.current = isSelfDisconnectedRecently;
+    prevIsPartnerLeftRecentlyRef.current = isPartnerLeftRecently;
+    prevWasSkippedByPartnerRef.current = wasSkippedByPartner;
+    prevDidSkipPartnerRef.current = didSkipPartner;
+  }, [state]);
 };

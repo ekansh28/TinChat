@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEvents.ts - COMPLETELY FIXED WITH ALL SERVER EVENTS
+// src/app/chat/hooks/useSocketEvents.ts - FIXED SKIP EVENT HANDLING
 
 import { useCallback, useRef } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -8,16 +8,12 @@ interface SocketHandlers {
   onPartnerFound: (data: any) => void;
   onPartnerLeft: () => void;
   onPartnerSkipped: (data: any) => void;
-  onSkipConfirmed: (data: any) => void;
-  onSearchStarted: (data: any) => void;
-  onSearchStopped: (data: any) => void;
+  onSkipConfirmed: (data: any) => void; // ✅ NEW: Handle skip confirmation
   onStatusChange: (status: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
-  onWaiting: (data: any) => void;
-  onCooldown: (data: any) => void;
-  onAlreadySearching: (data: any) => void;
-  onSearchError: (data: any) => void;
+  onWaiting: () => void;
+  onCooldown: () => void;
   onWebRTCSignal?: (data: any) => void;
 }
 
@@ -35,10 +31,9 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
     });
     eventListenersRef.current = [];
 
-    // ===== CHAT & MATCHING EVENTS =====
-    
+    // Chat events
     const handlePartnerFound = (data: any) => {
-      console.log('[SocketEvents] 🎉 Partner found:', data.partnerId);
+      console.log('[SocketEvents] Partner found:', data.partnerId);
       if (data?.roomId) {
         roomIdRef.current = data.roomId;
       }
@@ -46,97 +41,80 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
     };
 
     const handleReceiveMessage = (data: any) => {
-      console.log('[SocketEvents] 📨 Message received from partner');
+      console.log('[SocketEvents] Message received');
       handlersRef.current.onMessage(data);
     };
 
     const handlePartnerLeft = () => {
-      console.log('[SocketEvents] 👋 Partner left normally');
+      console.log('[SocketEvents] Partner left normally');
       roomIdRef.current = null;
       handlersRef.current.onPartnerLeft();
     };
 
     // ✅ CRITICAL: Handle being skipped by partner (NO AUTO-SEARCH)
-    const handlePartnerSkippedYou = (data: any) => {
-      console.log('[SocketEvents] 😞 You were skipped by partner:', data);
-      roomIdRef.current = null;
-      handlersRef.current.onPartnerSkipped(data);
-    };
-
-    // ✅ CRITICAL: Handle skip confirmation when YOU skip someone
     const handlePartnerSkipped = (data: any) => {
-      console.log('[SocketEvents] ✅ You skipped someone - server response:', data);
+      console.log('[SocketEvents] You were skipped by partner:', data);
       roomIdRef.current = null;
-      handlersRef.current.onSkipConfirmed(data);
+      
+      // ✅ CRITICAL: The skipped user should NOT auto-search
+      // They must manually click "Find" to search again
+      handlersRef.current.onPartnerSkipped?.(data);
     };
 
-    // ===== SEARCH STATE EVENTS =====
-    
-    const handleSearchStarted = (data: any) => {
-      console.log('[SocketEvents] 🔍 Search started confirmed:', data);
-      handlersRef.current.onSearchStarted(data);
+    // ✅ NEW: Handle skip confirmation when YOU skip someone (AUTO-SEARCH)
+    const handleSkipConfirmed = (data: any) => {
+      console.log('[SocketEvents] Skip confirmed - you skipped someone:', data);
+      
+      // ✅ CRITICAL: When you skip someone, the server should auto-search for you
+      if (data?.autoSearchStarted) {
+        console.log('[SocketEvents] Auto-search started after you skipped someone');
+        handlersRef.current.onWaiting?.(); // Trigger "waiting" state
+      }
+      
+      // ✅ NEW: If server found immediate match after skip
+      if (data?.immediateMatch) {
+        console.log('[SocketEvents] Immediate match found after skip');
+        handlePartnerFound(data.immediateMatch);
+      }
     };
 
-    const handleSearchStopped = (data: any) => {
-      console.log('[SocketEvents] 🛑 Search stopped confirmed:', data);
-      handlersRef.current.onSearchStopped(data);
-    };
-
-    const handleWaitingForPartner = (data: any) => {
-      console.log('[SocketEvents] ⏳ Waiting for partner:', data);
-      handlersRef.current.onWaiting(data);
-    };
-
-    const handleAlreadySearching = (data: any) => {
-      console.log('[SocketEvents] ⚠️ Already searching:', data);
-      handlersRef.current.onAlreadySearching(data);
-    };
-
-    const handleSearchError = (data: any) => {
-      console.log('[SocketEvents] ❌ Search error:', data);
-      handlersRef.current.onSearchError(data);
-    };
-
-    const handleFindPartnerCooldown = (data: any) => {
-      console.log('[SocketEvents] ⏰ Find partner cooldown:', data);
-      handlersRef.current.onCooldown(data);
-    };
-
-    // ===== PARTNER STATUS & INTERACTION EVENTS =====
-    
     const handlePartnerStatusChanged = (data: any) => {
       if (data?.status) {
-        console.log('[SocketEvents] 📊 Partner status changed:', data.status);
         handlersRef.current.onStatusChange(data.status);
       }
     };
 
-    const handleTypingStart = () => {
-      console.log('[SocketEvents] ⌨️ Partner started typing');
-      handlersRef.current.onTypingStart();
-    };
-
-    const handleTypingStop = () => {
-      console.log('[SocketEvents] ⌨️ Partner stopped typing');
-      handlersRef.current.onTypingStop();
-    };
-
-    // ===== WEBRTC EVENTS =====
-    
     const handleWebRTCSignal = (data: any) => {
       if (handlersRef.current.onWebRTCSignal && data?.signalData) {
-        console.log('[SocketEvents] 🎥 WebRTC signal received');
         handlersRef.current.onWebRTCSignal(data.signalData);
       }
     };
 
-    // ===== BATCH MESSAGE PROCESSING =====
-    
+    const handleTypingStart = () => handlersRef.current.onTypingStart();
+    const handleTypingStop = () => handlersRef.current.onTypingStop();
+    const handleWaitingForPartner = () => {
+      console.log('[SocketEvents] Waiting for partner');
+      handlersRef.current.onWaiting();
+    };
+    const handleFindPartnerCooldown = () => {
+      console.log('[SocketEvents] Find partner cooldown');
+      handlersRef.current.onCooldown();
+    };
+
+    // ✅ NEW: Handle automatic partner search events
+    const handleAutoSearchStarted = (data: any) => {
+      console.log('[SocketEvents] Auto-search started:', data);
+      handlersRef.current.onWaiting?.();
+    };
+
+    const handleAutoSearchFailed = (data: any) => {
+      console.log('[SocketEvents] Auto-search failed:', data);
+      // Could show error message or allow manual retry
+    };
+
     const handleBatchedMessages = (messages: Array<{ event: string; data: any }>) => {
       if (!Array.isArray(messages)) return;
 
-      console.log('[SocketEvents] 📦 Processing batched messages:', messages.length);
-      
       messages.forEach(({ event, data }) => {
         try {
           switch (event) {
@@ -152,11 +130,11 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
             case 'partner_typing_stop':
               handleTypingStop();
               break;
-            case 'partnerSkippedYou':
-              handlePartnerSkippedYou(data);
-              break;
             case 'partnerSkipped':
               handlePartnerSkipped(data);
+              break;
+            case 'skipConfirmed':
+              handleSkipConfirmed(data);
               break;
             case 'webrtcSignal':
               if (handlersRef.current.onWebRTCSignal) {
@@ -164,16 +142,14 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
               }
               break;
             default:
-              console.log('[SocketEvents] 🤷 Unknown batched event:', event);
+              console.log('[SocketEvents] Unknown batched event:', event);
           }
         } catch (error) {
-          console.error('[SocketEvents] ❌ Error processing batched message:', error);
+          console.error('[SocketEvents] Error processing batched message:', error);
         }
       });
     };
 
-    // ===== CONNECTION & HEALTH EVENTS =====
-    
     const handleHeartbeat = (data: any) => {
       if (data?.timestamp) {
         socket.emit('heartbeat_response', {
@@ -184,7 +160,7 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
     };
 
     const handleConnectionWarning = (data: any) => {
-      console.warn('[SocketEvents] ⚠️ Connection warning:', data);
+      console.warn('[SocketEvents] Connection warning:', data);
       if (data?.type === 'stale_connection') {
         socket.emit('connection_health', {
           latency: Date.now() - (data.timestamp || Date.now()),
@@ -193,166 +169,100 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
       }
     };
 
-    const handleConnect = () => {
-      console.log('[SocketEvents] 🔌 Socket connected successfully');
-    };
-
-    const handleDisconnect = (reason: string) => {
-      console.log('[SocketEvents] 🔌 Socket disconnected:', reason);
-      roomIdRef.current = null;
-    };
-
-    const handleConnected = (data: any) => {
-      console.log('[SocketEvents] ✅ Connected event received:', data);
-    };
-
-    // ===== ERROR HANDLING =====
-    
     const handleError = (error: any) => {
-      console.error('[SocketEvents] ❌ Socket error:', error);
+      console.error('[SocketEvents] Socket error:', error);
     };
 
+    // ✅ NEW: Handle skip-related errors
     const handleSkipError = (error: any) => {
-      console.error('[SocketEvents] ❌ Skip error:', error);
+      console.error('[SocketEvents] Skip error:', error);
+      // Could show toast notification about skip failure
     };
 
-    // ===== ROOM MANAGEMENT =====
-    
+    // ✅ NEW: Handle room management events
     const handleRoomJoined = (data: any) => {
-      console.log('[SocketEvents] 🏠 Joined room:', data.roomId);
+      console.log('[SocketEvents] Joined room:', data.roomId);
       if (data?.roomId) {
         roomIdRef.current = data.roomId;
       }
     };
 
     const handleRoomLeft = (data: any) => {
-      console.log('[SocketEvents] 🏠 Left room:', data.roomId);
+      console.log('[SocketEvents] Left room:', data.roomId);
       roomIdRef.current = null;
     };
 
-    // ===== MATCHMAKING & QUEUE EVENTS =====
-    
+    // ✅ NEW: Handle connection status events that might help with "Connecting..." issue
+    const handleConnected = () => {
+      console.log('[SocketEvents] Socket connected successfully');
+    };
+
+    const handleConnect = () => {
+      console.log('[SocketEvents] Socket connect event');
+    };
+
+    const handleDisconnect = (reason: string) => {
+      console.log('[SocketEvents] Socket disconnected:', reason);
+      roomIdRef.current = null;
+    };
+
+    // ✅ NEW: Handle server-side matchmaking updates
     const handleMatchmakingUpdate = (data: any) => {
-      console.log('[SocketEvents] 🎯 Matchmaking update:', data);
+      console.log('[SocketEvents] Matchmaking update:', data);
       if (data?.status === 'searching') {
-        handlersRef.current.onWaiting(data);
+        handlersRef.current.onWaiting?.();
       }
     };
 
-    const handleQueueStatsUpdate = (data: any) => {
-      console.log('[SocketEvents] 📊 Queue stats updated:', data);
-    };
-
-    const handleOnlineUserCountUpdate = (count: number) => {
-      console.log('[SocketEvents] 👥 Online users count:', count);
-    };
-
-    // ===== STATUS UPDATE EVENTS =====
-    
-    const handleStatusUpdate = (data: any) => {
-      console.log('[SocketEvents] 📊 Status update:', data);
-      
-      // Handle different status updates
-      if (data.status === 'in_chat' && data.roomId) {
-        roomIdRef.current = data.roomId;
-      } else if (data.status === 'idle') {
-        roomIdRef.current = null;
-      }
-    };
-
-    const handleDisconnectConfirmed = (data: any) => {
-      console.log('[SocketEvents] ✅ Disconnect confirmed:', data);
-      roomIdRef.current = null;
-    };
-
-    const handleAutoSearchFailed = (data: any) => {
-      console.log('[SocketEvents] ❌ Auto-search failed:', data);
-      handlersRef.current.onSearchError(data);
-    };
-
-    const handleCleanupComplete = (data: any) => {
-      console.log('[SocketEvents] 🧹 Cleanup complete:', data);
-      roomIdRef.current = null;
-    };
-
-    // ===== EVENT REGISTRATION =====
-    
+    // Store event handlers for cleanup
     const eventHandlers = [
-      // Connection events
-      { event: 'connect', handler: handleConnect },
-      { event: 'connected', handler: handleConnected },
-      { event: 'disconnect', handler: handleDisconnect },
-      
-      // Chat and matching events
+      { event: 'connect', handler: handleConnect }, // ✅ NEW
+      { event: 'connected', handler: handleConnected }, // ✅ NEW
+      { event: 'disconnect', handler: handleDisconnect }, // ✅ NEW
       { event: 'partnerFound', handler: handlePartnerFound },
       { event: 'receiveMessage', handler: handleReceiveMessage },
       { event: 'partnerLeft', handler: handlePartnerLeft },
-      
-      // Skip events (CRITICAL FOR SKIP LOGIC)
-      { event: 'partnerSkippedYou', handler: handlePartnerSkippedYou }, // You got skipped (no auto-search)
-      { event: 'partnerSkipped', handler: handlePartnerSkipped }, // You skipped someone (auto-search)
-      
-      // Search state events
-      { event: 'searchStarted', handler: handleSearchStarted },
-      { event: 'searchStopped', handler: handleSearchStopped },
-      { event: 'waitingForPartner', handler: handleWaitingForPartner },
-      { event: 'alreadySearching', handler: handleAlreadySearching },
-      { event: 'searchError', handler: handleSearchError },
-      { event: 'findPartnerCooldown', handler: handleFindPartnerCooldown },
-      { event: 'autoSearchFailed', handler: handleAutoSearchFailed },
-      
-      // Partner interaction events
+      { event: 'partnerSkipped', handler: handlePartnerSkipped }, // ✅ Being skipped (no auto-search)
+      { event: 'skipConfirmed', handler: handleSkipConfirmed }, // ✅ You skipped someone (auto-search)
+      { event: 'autoSearchStarted', handler: handleAutoSearchStarted }, // ✅ NEW
+      { event: 'autoSearchFailed', handler: handleAutoSearchFailed }, // ✅ NEW
+      { event: 'matchmakingUpdate', handler: handleMatchmakingUpdate }, // ✅ NEW
       { event: 'partnerStatusChanged', handler: handlePartnerStatusChanged },
       { event: 'partner_typing_start', handler: handleTypingStart },
       { event: 'partner_typing_stop', handler: handleTypingStop },
-      
-      // WebRTC events
-      { event: 'webrtcSignal', handler: handleWebRTCSignal },
-      
-      // System events
-      { event: 'heartbeat', handler: handleHeartbeat },
-      { event: 'connectionWarning', handler: handleConnectionWarning },
+      { event: 'waitingForPartner', handler: handleWaitingForPartner },
+      { event: 'findPartnerCooldown', handler: handleFindPartnerCooldown },
       { event: 'batchedMessages', handler: handleBatchedMessages },
-      
-      // Room events
-      { event: 'roomJoined', handler: handleRoomJoined },
-      { event: 'roomLeft', handler: handleRoomLeft },
-      
-      // Status events
-      { event: 'statusUpdate', handler: handleStatusUpdate },
-      { event: 'disconnectConfirmed', handler: handleDisconnectConfirmed },
-      { event: 'cleanupComplete', handler: handleCleanupComplete },
-      
-      // Matchmaking events
-      { event: 'matchmakingUpdate', handler: handleMatchmakingUpdate },
-      { event: 'queueStatsUpdate', handler: handleQueueStatsUpdate },
-      { event: 'onlineUserCountUpdate', handler: handleOnlineUserCountUpdate },
-      
-      // Error events
-      { event: 'error', handler: handleError },
-      { event: 'skipError', handler: handleSkipError }
+      { event: 'heartbeat', handler: handleHeartbeat },
+      { event: 'connection_warning', handler: handleConnectionWarning },
+      { event: 'skipError', handler: handleSkipError }, // ✅ NEW
+      { event: 'roomJoined', handler: handleRoomJoined }, // ✅ NEW
+      { event: 'roomLeft', handler: handleRoomLeft }, // ✅ NEW
+      { event: 'error', handler: handleError }
     ];
 
-    // Register all event handlers
+    // Add WebRTC signal handler if needed
+    if (handlersRef.current.onWebRTCSignal) {
+      eventHandlers.push({ event: 'webrtcSignal', handler: handleWebRTCSignal });
+    }
+
+    // Attach all event listeners
     eventHandlers.forEach(({ event, handler }) => {
       socket.on(event, handler);
       eventListenersRef.current.push({ event, handler });
     });
 
-    console.log('[SocketEvents] ✅ All event handlers registered:', eventHandlers.length);
+    console.log('[SocketEvents] Registered', eventHandlers.length, 'event handlers');
 
+    // Return cleanup function
+    return () => {
+      eventListenersRef.current.forEach(({ event, handler }) => {
+        socket.off(event, handler);
+      });
+      eventListenersRef.current = [];
+      console.log('[SocketEvents] Cleaned up all event handlers');
+    };
   }, []);
 
-  const cleanupEvents = useCallback((socket: Socket) => {
-    eventListenersRef.current.forEach(({ event, handler }) => {
-      socket.off(event, handler);
-    });
-    eventListenersRef.current = [];
-    console.log('[SocketEvents] 🧹 Event handlers cleaned up');
-  }, []);
-
-  return {
-    setupEvents,
-    cleanupEvents
-  };
+  return { setupEvents };
 };

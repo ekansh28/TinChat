@@ -1,4 +1,4 @@
-// src/app/chat/hooks/useSocketEmitters.ts - COMPLETELY FIXED WITH CHATTYPE
+// src/app/chat/hooks/useSocketEmitters.ts - FIXED WITH STOP SEARCH EMIT
 
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -7,37 +7,21 @@ export const useSocketEmitters = (
   socket: Socket | null, 
   roomIdRef: React.MutableRefObject<string | null>
 ) => {
-  // ✅ CRITICAL FIX: Updated emitFindPartner to properly handle chatType
   const emitFindPartner = useCallback((payload: {
-    chatType?: 'text' | 'video';
+    chatType: 'text' | 'video';
     interests: string[];
     authId?: string | null;
-    username?: string | null;
     sessionId?: string;
     timestamp?: number;
-    autoSearch?: boolean;
-    manualSearch?: boolean;
   }) => {
     if (!socket?.connected) {
       console.warn('[SocketEmitters] Not connected to server');
       return false;
     }
     
-    // ✅ CRITICAL FIX: Ensure chatType is always included
-    const emitPayload = {
-      chatType: payload.chatType || 'text', // ✅ Default to 'text' if not provided
-      interests: payload.interests || [],
-      authId: payload.authId,
-      username: payload.username,
-      sessionId: payload.sessionId,
-      timestamp: payload.timestamp || Date.now(),
-      autoSearch: payload.autoSearch || false,
-      manualSearch: payload.manualSearch || false
-    };
-    
-    console.log('[SocketEmitters] Finding partner with payload:', emitPayload);
+    console.log('[SocketEmitters] Finding partner with payload:', payload);
     try {
-      socket.emit('findPartner', emitPayload);
+      socket.emit('findPartner', payload);
       return true;
     } catch (error) {
       console.error('[SocketEmitters] Error emitting findPartner:', error);
@@ -69,10 +53,10 @@ export const useSocketEmitters = (
     }
   }, [socket]);
 
-  // ✅ CRITICAL: Skip partner emit function - Updated to match ChatActions interface
+  // ✅ CRITICAL: Skip partner emit function - ONLY auto-searches for the skipper
   const emitSkipPartner = useCallback((payload: {
-    chatType?: 'text' | 'video';
-    interests?: string[];
+    chatType: 'text' | 'video';
+    interests: string[];
     authId?: string | null;
     reason?: string;
   }) => {
@@ -91,8 +75,8 @@ export const useSocketEmitters = (
       // ✅ CRITICAL: Emit skip event that auto-searches for the skipper only
       socket.emit('skipPartner', {
         roomId: roomIdRef.current,
-        chatType: payload.chatType || 'text', // ✅ Ensure chatType is included
-        interests: payload.interests || [],
+        chatType: payload.chatType,
+        interests: payload.interests,
         authId: payload.authId,
         reason: payload.reason || 'skip',
         autoSearchForSkipper: true, // ✅ Only auto-search for the person who skipped
@@ -110,7 +94,7 @@ export const useSocketEmitters = (
   }, [socket, roomIdRef]);
 
   const emitMessage = useCallback((payload: {
-    roomId?: string;
+    roomId: string;
     message: string;
     username?: string | null;
     authId?: string | null;
