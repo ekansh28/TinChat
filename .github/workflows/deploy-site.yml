@@ -24,7 +24,38 @@ jobs:
           ssh-private-key: ${{ secrets.VPS_DEPLOY_KEY }}
 
       - name: 🧠 Add VPS Host to Known Hosts
-        run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          echo "🔍 Adding VPS host to known hosts..."
+          echo "  - VPS_HOST length: ${#VPS_HOST}"
+          
+          if [[ -z "$VPS_HOST" ]]; then
+            echo "❌ VPS_HOST is empty!"
+            exit 1
+          fi
+          
+          echo "🔍 Testing connectivity to $VPS_HOST..."
+          if timeout 10 ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts; then
+            echo "✅ Successfully added $VPS_HOST to known hosts"
+          else
+            echo "⚠️ ssh-keyscan failed, trying alternative ports..."
+            
+            # Try common SSH ports
+            for port in 22 2222 2200; do
+              echo "🔍 Trying port $port..."
+              if timeout 10 ssh-keyscan -p $port -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+                echo "✅ Successfully connected on port $port"
+                break
+              else
+                echo "❌ Port $port failed"
+              fi
+            done
+            
+            # If all fails, continue anyway (some servers block ssh-keyscan)
+            echo "⚠️ ssh-keyscan failed on all ports, continuing anyway..."
+            echo "This might be normal if the server blocks ssh-keyscan"
+          fi
 
       - name: 🔍 Verify Environment Variables
         env:
@@ -49,7 +80,26 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Required environment variables are present."
+          echo "✅ Required environment variables are present"
+
+      - name: 🔗 Test VPS Connectivity
+        env:
+          VPS_USER: root
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          echo "🔍 Testing SSH connectivity to VPS..."
+          
+          if timeout 30 ssh -o BatchMode=yes -o ConnectTimeout=10 $VPS_USER@$VPS_HOST 'echo "✅ SSH connection successful"'; then
+            echo "✅ VPS is reachable and SSH key works"
+          else
+            echo "❌ Failed to connect to VPS"
+            echo "🔍 Debugging info:"
+            echo "  - VPS_HOST: $VPS_HOST"
+            echo "  - VPS_USER: $VPS_USER"
+            echo "🔍 Trying to ping the host..."
+            ping -c 3 $VPS_HOST || echo "❌ Host is not reachable via ping"
+            exit 1
+          fi
 
       - name: 🚀 Deploy & Restart on VPS
         env:
