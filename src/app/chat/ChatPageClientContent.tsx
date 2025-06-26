@@ -223,23 +223,6 @@ const ChatPageClientContent: React.FC = () => {
               </div>
             )}
 
-            {/* ✅ NEW: Search status display */}
-            {chat.chatState.isFindingPartner && (
-              <div className="bg-blue-100 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 px-3 py-2 text-sm flex-shrink-0 flex items-center justify-between">
-                <span>
-                  {chat.interests.length > 0 
-                    ? `Searching for someone with interests: ${chat.interests.slice(0, 2).join(', ')}...`
-                    : 'Searching for someone to chat with...'
-                  }
-                </span>
-                <button 
-                  onClick={chat.chatActions.stopSearching}
-                  className="ml-2 px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white text-xs rounded transition-colors"
-                >
-                  Stop
-                </button>
-              </div>
-            )}
           </div>
         </div>
         
