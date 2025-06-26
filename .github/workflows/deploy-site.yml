@@ -249,7 +249,7 @@ jobs:
             if npm run typecheck >/dev/null 2>&1; then
               echo '✅ TypeScript check passed'
             else
-              echo '⚠️ TypeScript errors found, but continuing with build...'
+              echo '⚠️ TypeScript errors found, but continuing with build....'
             fi
             
             # Attempt the build using direct path to next
