@@ -49,7 +49,7 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Required environment variables are present"
+          echo "✅ Required environment variables are present."
 
       - name: 🚀 Deploy & Restart on VPS
         env:
