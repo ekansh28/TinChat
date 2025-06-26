@@ -75,18 +75,52 @@ jobs:
           CLEAN_PATH=$(echo "$SERVER_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
           echo "  - CLEAN_PATH: $CLEAN_PATH"
           
-          # First-time setup check
+          # First-time setup check with proper permissions
           echo "🛠️ Checking if project directory exists..."
           ssh $SERVER_USER@$SERVER_HOST "
-            if [ ! -d '$CLEAN_PATH' ]; then
-              echo '🛠️ First-time setup: Creating project directory...'
-              mkdir -p '$CLEAN_PATH'
-              echo '📥 Cloning repository...'
-              git clone https://github.com/ekansh28/TinChat.git '$CLEAN_PATH'
-              echo '✅ Repository cloned successfully'
+            echo '🔍 Current user: \$(whoami)'
+            echo '🔍 Home directory: \$HOME'
+            echo '🔍 Current working directory: \$(pwd)'
+            
+            # Use a safe directory path that the user has access to
+            if [[ '$CLEAN_PATH' == /home/* ]]; then
+              # If path starts with /home/, make sure we use the user's home
+              PROJECT_DIR=\"\$HOME/\$(basename '$CLEAN_PATH')\"
             else
-              echo '✅ Project directory already exists'
+              PROJECT_DIR='$CLEAN_PATH'
             fi
+            
+            echo '🔍 Target project directory: '\$PROJECT_DIR
+            
+            if [ ! -d \"\$PROJECT_DIR\" ]; then
+              echo '🛠️ First-time setup: Creating project directory...'
+              mkdir -p \"\$PROJECT_DIR\" || {
+                echo '❌ Cannot create directory '\$PROJECT_DIR
+                echo '🔍 Trying to create in home directory instead...'
+                PROJECT_DIR=\"\$HOME/TinChat\"
+                mkdir -p \"\$PROJECT_DIR\" || {
+                  echo '❌ Cannot create directory in home either'
+                  echo '🔍 Available space and permissions:'
+                  df -h \$HOME
+                  ls -la \$HOME
+                  exit 1
+                }
+              }
+              
+              echo '📥 Cloning repository to '\$PROJECT_DIR'...'
+              git clone https://github.com/ekansh28/TinChat.git \"\$PROJECT_DIR\" || {
+                echo '❌ Git clone failed'
+                echo '🔍 Checking git availability:'
+                which git || echo 'Git not found'
+                exit 1
+              }
+              echo '✅ Repository cloned successfully to '\$PROJECT_DIR
+            else
+              echo '✅ Project directory already exists at '\$PROJECT_DIR
+            fi
+            
+            # Export the final project directory for the main deployment
+            echo \"export FINAL_PROJECT_DIR=\\\"\$PROJECT_DIR\\\"\" > /tmp/project_path.sh
           "
           
           # Pass environment variables to SSH session for server
@@ -99,9 +133,24 @@ jobs:
             
             set -e
             
+            # Load the correct project directory
+            if [ -f /tmp/project_path.sh ]; then
+              source /tmp/project_path.sh
+              echo '🔍 Using project directory: '\$FINAL_PROJECT_DIR
+            else
+              # Fallback to home directory
+              FINAL_PROJECT_DIR=\"\$HOME/TinChat\"
+              echo '🔍 Fallback to home directory: '\$FINAL_PROJECT_DIR
+            fi
+            
             echo '📂 Changing to project directory...'
-            cd '$CLEAN_PATH' || { echo '❌ Directory missing'; exit 1; }
-            echo '✅ Current directory: \$(pwd)'
+            cd \"\$FINAL_PROJECT_DIR\" || { 
+              echo '❌ Directory missing: '\$FINAL_PROJECT_DIR
+              echo '🔍 Available directories in home:'
+              ls -la \$HOME
+              exit 1
+            }
+            echo '✅ Current directory: '\$(pwd)
             
             echo '🔄 Force updating repository...'
             git fetch --all
