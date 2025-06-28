@@ -23,6 +23,20 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SERVER_DEPLOY_KEY }}
 
+      - name: 🔧 Configure SSH (Skip Host Key Verification)
+        run: |
+          mkdir -p ~/.ssh
+          cat >> ~/.ssh/config << 'EOF'
+          Host *
+              StrictHostKeyChecking no
+              UserKnownHostsFile /dev/null
+              ConnectTimeout 30
+              ServerAliveInterval 60
+              LogLevel ERROR
+          EOF
+          chmod 600 ~/.ssh/config
+          echo "✅ SSH configured to skip host key verification"
+          
       - name: 🔍 Verify Environment Variables
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
