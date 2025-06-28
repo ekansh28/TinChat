@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - WITH ADD FRIEND AND BLOCK USER
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH CORRECT API ENDPOINTS
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -18,6 +18,9 @@ interface FriendshipStatus {
   status: 'none' | 'friends' | 'pending_sent' | 'pending_received' | 'blocked' | 'blocked_by';
   since?: string;
 }
+
+// ✅ SIMPLIFIED: Use NEXT_PUBLIC_SOCKET_SERVER_URL directly
+const API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
 
 function getDefaultAvatar() {
   return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
@@ -78,21 +81,44 @@ export function ProfilePopup({
     const loadFriendshipStatus = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/friends/status', {
+        console.log('🔍 Loading friendship status...', {
+          apiUrl: `${API_BASE_URL}/api/friends/status`,
+          currentUser: currentUserAuthId,
+          targetUser: profile.id
+        });
+
+        const response = await fetch(`${API_BASE_URL}/api/friends/status`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
           body: JSON.stringify({
             user1AuthId: currentUserAuthId,
             user2AuthId: profile.id
           })
         });
 
+        console.log('📡 Friendship status response:', {
+          status: response.status,
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
+        console.log('✅ Friendship status data:', data);
+
         if (data.success && isMounted) {
           setFriendshipStatus(data.status);
+        } else {
+          console.error('❌ Friendship status failed:', data.message);
         }
       } catch (error) {
-        console.error('Failed to load friendship status:', error);
+        console.error('❌ Failed to load friendship status:', error);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -169,34 +195,54 @@ export function ProfilePopup({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showContextMenu]);
 
-  // ✅ Friend action handlers
+  // ✅ FIXED: Friend action handlers with correct API endpoints
   const handleSendFriendRequest = useCallback(async () => {
     if (!profile?.id || !currentUserAuthId) return;
 
     setActionLoading('add_friend');
     try {
-      const response = await fetch('/api/friends/send-request', {
+      console.log('📤 Sending friend request...', {
+        apiUrl: `${API_BASE_URL}/api/friends/send-request`,
+        sender: currentUserAuthId,
+        receiver: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/send-request`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           senderAuthId: currentUserAuthId,
           receiverAuthId: profile.id
         })
       });
 
+      console.log('📡 Friend request response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
+      console.log('✅ Friend request data:', data);
+
       if (data.success) {
         setFriendshipStatus({ 
           status: data.autoAccepted ? 'friends' : 'pending_sent' 
         });
         
         // Show success message
-        console.log('Friend request sent successfully');
+        console.log('✅ Friend request sent successfully');
       } else {
-        console.error('Failed to send friend request:', data.message);
+        console.error('❌ Failed to send friend request:', data.message);
       }
     } catch (error) {
-      console.error('Error sending friend request:', error);
+      console.error('❌ Error sending friend request:', error);
     } finally {
       setActionLoading(null);
     }
@@ -207,24 +253,37 @@ export function ProfilePopup({
 
     setActionLoading('remove_friend');
     try {
-      const response = await fetch('/api/friends/remove', {
+      console.log('💔 Removing friend...', {
+        apiUrl: `${API_BASE_URL}/api/friends/remove`,
+        user1: currentUserAuthId,
+        user2: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/remove`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           user1AuthId: currentUserAuthId,
           user2AuthId: profile.id
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
       if (data.success) {
         setFriendshipStatus({ status: 'none' });
-        console.log('Friend removed successfully');
+        console.log('✅ Friend removed successfully');
       } else {
-        console.error('Failed to remove friend:', data.message);
+        console.error('❌ Failed to remove friend:', data.message);
       }
     } catch (error) {
-      console.error('Error removing friend:', error);
+      console.error('❌ Error removing friend:', error);
     } finally {
       setActionLoading(null);
     }
@@ -237,24 +296,37 @@ export function ProfilePopup({
     setShowContextMenu(false);
     
     try {
-      const response = await fetch('/api/friends/block', {
+      console.log('🚫 Blocking user...', {
+        apiUrl: `${API_BASE_URL}/api/friends/block`,
+        blocker: currentUserAuthId,
+        blocked: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/block`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
           blockedAuthId: profile.id
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
       if (data.success) {
         setFriendshipStatus({ status: 'blocked' });
-        console.log('User blocked successfully');
+        console.log('✅ User blocked successfully');
       } else {
-        console.error('Failed to block user:', data.message);
+        console.error('❌ Failed to block user:', data.message);
       }
     } catch (error) {
-      console.error('Error blocking user:', error);
+      console.error('❌ Error blocking user:', error);
     } finally {
       setActionLoading(null);
     }
@@ -265,24 +337,37 @@ export function ProfilePopup({
 
     setActionLoading('unblock_user');
     try {
-      const response = await fetch('/api/friends/unblock', {
+      console.log('🔓 Unblocking user...', {
+        apiUrl: `${API_BASE_URL}/api/friends/unblock`,
+        blocker: currentUserAuthId,
+        blocked: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/unblock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
           blockedAuthId: profile.id
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
       if (data.success) {
         setFriendshipStatus({ status: 'none' });
-        console.log('User unblocked successfully');
+        console.log('✅ User unblocked successfully');
       } else {
-        console.error('Failed to unblock user:', data.message);
+        console.error('❌ Failed to unblock user:', data.message);
       }
     } catch (error) {
-      console.error('Error unblocking user:', error);
+      console.error('❌ Error unblocking user:', error);
     } finally {
       setActionLoading(null);
     }
@@ -509,6 +594,15 @@ export function ProfilePopup({
                 >
                   💬 Send Message
                 </button>
+              </div>
+            )}
+
+            {/* Debug Info (only in development) */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-3 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                <div>API Base: {API_BASE_URL}</div>
+                <div>Status: {friendshipStatus.status}</div>
+                <div>Loading: {actionLoading || 'none'}</div>
               </div>
             )}
 
