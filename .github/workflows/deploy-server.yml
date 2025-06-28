@@ -16,15 +16,7 @@ jobs:
 
     steps:
       - name: ⬇️ Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: 🔐 Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SERVER_DEPLOY_KEY }}
-
-      - name: 🧠 Add Server Host to Known Hosts
-        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        uses: actions/checkout@v4
 
       - name: 🔍 Verify Environment Variables
         env:
@@ -33,26 +25,74 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           echo "🔍 Checking environment variables for server deployment:"
-          echo "  - SERVER_HOST length: ${#SERVER_HOST}"
-          echo "  - SERVER_PROJECT_PATH length: ${#SERVER_PROJECT_PATH}"
-          echo "  - SERVER_USER length: ${#SERVER_USER}"
           
           if [[ -z "$SERVER_HOST" ]]; then
-            echo "❌ SERVER_HOST is empty!"
+            echo "❌ SERVER_HOST is empty or not set!"
+            echo "Please set the SERVER_HOST secret in your repository settings."
             exit 1
           fi
           
           if [[ -z "$SERVER_PROJECT_PATH" ]]; then
-            echo "❌ SERVER_PROJECT_PATH is empty!"
+            echo "❌ SERVER_PROJECT_PATH is empty or not set!"
+            echo "Please set the SERVER_PROJECT_PATH secret in your repository settings."
             exit 1
           fi
           
           if [[ -z "$SERVER_USER" ]]; then
-            echo "❌ SERVER_USER is empty!"
+            echo "❌ SERVER_USER is empty or not set!"
+            echo "Please set the SERVER_USER secret in your repository settings."
             exit 1
           fi
           
+          echo "✅ SERVER_HOST: $SERVER_HOST"
+          echo "✅ SERVER_USER: $SERVER_USER"
+          echo "✅ SERVER_PROJECT_PATH: $SERVER_PROJECT_PATH"
           echo "✅ Required environment variables are present"
+
+      - name: 🔐 Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_DEPLOY_KEY }}
+
+      - name: 🧠 Add Server Host to Known Hosts
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          echo "🔍 Adding $SERVER_HOST to known hosts..."
+          
+          # Remove any existing entries for this host
+          ssh-keygen -R "$SERVER_HOST" 2>/dev/null || true
+          
+          # Add the host key
+          if ! ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts; then
+            echo "❌ Failed to scan SSH keys for $SERVER_HOST"
+            echo "Please verify that:"
+            echo "1. The SERVER_HOST secret is correctly set"
+            echo "2. The host is reachable"
+            echo "3. SSH service is running on the host"
+            exit 1
+          fi
+          
+          echo "✅ Successfully added $SERVER_HOST to known hosts"
+
+      - name: 🔍 Test SSH Connection
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          echo "🔍 Testing SSH connection to $SERVER_USER@$SERVER_HOST..."
+          
+          if ssh -o ConnectTimeout=10 -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" 'echo "SSH connection successful"'; then
+            echo "✅ SSH connection test passed"
+          else
+            echo "❌ SSH connection test failed"
+            echo "Please verify that:"
+            echo "1. SERVER_USER and SERVER_HOST secrets are correct"
+            echo "2. SERVER_DEPLOY_KEY is the correct private key"
+            echo "3. The corresponding public key is in ~/.ssh/authorized_keys on the server"
+            echo "4. The server allows SSH connections"
+            exit 1
+          fi
 
       - name: 🚀 Deploy Server on VPS
         env:
@@ -65,260 +105,132 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           echo "🔍 Starting server deployment process..."
-          echo "📋 Environment variables check:"
-          echo "  - SERVER_HOST: $SERVER_HOST"
-          echo "  - SERVER_USER: $SERVER_USER"
-          echo "  - SERVER_PROJECT_PATH: $SERVER_PROJECT_PATH"
-          echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
           
           # Trim whitespace and newlines from path (safety check)
-          CLEAN_PATH=$(echo "$SERVER_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
-          echo "  - CLEAN_PATH: $CLEAN_PATH"
+          CLEAN_PATH=$(echo "$SERVER_PROJECT_PATH" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          echo "🔍 Clean project path: $CLEAN_PATH"
           
-          # First-time setup check with proper permissions
-          echo "🛠️ Checking if project directory exists..."
-          ssh $SERVER_USER@$SERVER_HOST "
-            echo '🔍 Current user: \$(whoami)'
-            echo '🔍 Home directory: \$HOME'
-            echo '🔍 Current working directory: \$(pwd)'
+          # Deploy to server
+          ssh "$SERVER_USER@$SERVER_HOST" << 'EOF'
+            set -e
             
-            # Use a safe directory path that the user has access to
-            if [[ '$CLEAN_PATH' == /home/* ]]; then
-              # If path starts with /home/, make sure we use the user's home
-              PROJECT_DIR=\"\$HOME/\$(basename '$CLEAN_PATH')\"
+            # Set up environment variables
+            export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"
+            export NEXT_PUBLIC_SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+            export SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}"
+            export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL}"
+            
+            echo "🔍 Current user: $(whoami)"
+            echo "🔍 Home directory: $HOME"
+            
+            # Determine project directory
+            if [[ "$CLEAN_PATH" == /home/* ]]; then
+              PROJECT_DIR="$HOME/$(basename "$CLEAN_PATH")"
+            elif [[ "$CLEAN_PATH" == /* ]]; then
+              PROJECT_DIR="$CLEAN_PATH"
             else
-              PROJECT_DIR='$CLEAN_PATH'
+              PROJECT_DIR="$HOME/$CLEAN_PATH"
             fi
             
-            echo '🔍 Target project directory: '\$PROJECT_DIR
+            echo "🔍 Target project directory: $PROJECT_DIR"
             
-            if [ ! -d \"\$PROJECT_DIR\" ]; then
-              echo '🛠️ First-time setup: Creating project directory...'
-              mkdir -p \"\$PROJECT_DIR\" || {
-                echo '❌ Cannot create directory '\$PROJECT_DIR
-                echo '🔍 Trying to create in home directory instead...'
-                PROJECT_DIR=\"\$HOME/TinChat\"
-                mkdir -p \"\$PROJECT_DIR\" || {
-                  echo '❌ Cannot create directory in home either'
-                  echo '🔍 Available space and permissions:'
-                  df -h \$HOME
-                  ls -la \$HOME
+            # Create project directory if it doesn't exist
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "🛠️ Creating project directory..."
+              mkdir -p "$PROJECT_DIR" || {
+                echo "❌ Cannot create directory $PROJECT_DIR"
+                PROJECT_DIR="$HOME/TinChat"
+                echo "🔍 Trying fallback directory: $PROJECT_DIR"
+                mkdir -p "$PROJECT_DIR" || {
+                  echo "❌ Cannot create fallback directory"
                   exit 1
                 }
               }
               
-              echo '📥 Cloning repository to '\$PROJECT_DIR'...'
-              git clone https://github.com/ekansh28/TinChat.git \"\$PROJECT_DIR\" || {
-                echo '❌ Git clone failed'
-                echo '🔍 Checking git availability:'
-                which git || echo 'Git not found'
+              echo "📥 Cloning repository..."
+              git clone https://github.com/ekansh28/TinChat.git "$PROJECT_DIR" || {
+                echo "❌ Git clone failed"
                 exit 1
               }
-              echo '✅ Repository cloned successfully to '\$PROJECT_DIR
-            else
-              echo '✅ Project directory already exists at '\$PROJECT_DIR
             fi
             
-            # Export the final project directory for the main deployment
-            echo \"export FINAL_PROJECT_DIR=\\\"\$PROJECT_DIR\\\"\" > /tmp/project_path.sh
-          "
-          
-          # Pass environment variables to SSH session for server
-          echo "🚀 Starting main server deployment process..."
-          ssh $SERVER_USER@$SERVER_HOST "
-            export NEXT_PUBLIC_SUPABASE_URL='$NEXT_PUBLIC_SUPABASE_URL'
-            export NEXT_PUBLIC_SUPABASE_ANON_KEY='$NEXT_PUBLIC_SUPABASE_ANON_KEY'
-            export SUPABASE_SERVICE_ROLE_KEY='$SUPABASE_SERVICE_ROLE_KEY'
-            export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
-            
-            set -e
-            
-            # Load the correct project directory
-            if [ -f /tmp/project_path.sh ]; then
-              source /tmp/project_path.sh
-              echo '🔍 Using project directory: '\$FINAL_PROJECT_DIR
-            else
-              # Fallback to home directory
-              FINAL_PROJECT_DIR=\"\$HOME/TinChat\"
-              echo '🔍 Fallback to home directory: '\$FINAL_PROJECT_DIR
-            fi
-            
-            echo '📂 Changing to project directory...'
-            cd \"\$FINAL_PROJECT_DIR\" || { 
-              echo '❌ Directory missing: '\$FINAL_PROJECT_DIR
-              echo '🔍 Available directories in home:'
-              ls -la \$HOME
+            echo "📂 Changing to project directory..."
+            cd "$PROJECT_DIR" || {
+              echo "❌ Cannot access project directory"
               exit 1
             }
-            echo '✅ Current directory: '\$(pwd)
             
-            echo '🔄 Force updating repository...'
+            echo "🔄 Updating repository..."
             git fetch --all
             git reset --hard origin/main
             git clean -fd
-            echo '✅ Repository updated successfully'
             
-            echo '🔧 Creating server .env.local file...'
+            echo "🔧 Setting up environment file..."
+            cat > .env.local << ENV_EOF
+            NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+            SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+            NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+            NODE_ENV=production
+            ENV_EOF
+            chmod 600 .env.local          
+            echo "✅ Environment file created"
             
-            # Create .env.local file for server with environment variables
-            echo \"NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL\" > .env.local
-            echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\$NEXT_PUBLIC_SUPABASE_ANON_KEY\" >> .env.local
-            echo \"SUPABASE_SERVICE_ROLE_KEY=\$SUPABASE_SERVICE_ROLE_KEY\" >> .env.local
-            echo \"NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL\" >> .env.local
-            echo \"NEXT_PUBLIC_SOCKET_SERVER_URL=\$NEXT_PUBLIC_SOCKET_SERVER_URL\" >> .env.local
-            echo \"UPSTASH_REDIS_REST_URL=\$UPSTASH_REDIS_REST_URL\" >> .env.local
-            echo \"UPSTASH_REDIS_REST_TOKEN=\$UPSTASH_REDIS_REST_TOKEN\" >> .env.local
-            echo \"NODE_ENV=production\" >> .env.local
-            
-            echo '✅ Server environment file created'
-            echo '🔍 Environment file contents (redacted):'
-            sed 's/=.*/=***REDACTED***/g' .env.local
-            
-            echo '🔍 Checking server directory...'
-            if [ -d \"server\" ]; then
-              echo '✅ Server directory found'
-              ls -la server/
-            else
-              echo '❌ Server directory not found!'
-              echo '🔍 Available directories:'
+            # Check for server directory
+            if [ ! -d "server" ]; then
+              echo "❌ Server directory not found!"
               ls -la
               exit 1
             fi
             
-            echo '📦 Installing server dependencies...'
+            echo "📦 Installing dependencies..."
             
-            # Check if server has its own package.json
-            if [ -f \"server/package.json\" ]; then
-              echo '📦 Installing server-specific dependencies...'
+            # Install server dependencies
+            if [ -f "server/package.json" ]; then
               cd server
-              
-              # Clean install for server
               rm -rf node_modules package-lock.json
-              npm cache clean --force 2>/dev/null || true
-              
-              npm install --no-audit --no-fund || {
-                echo '❌ Server npm install failed, trying alternatives...'
-                npm install --legacy-peer-deps --no-audit --no-fund || {
-                  echo '❌ Server dependency installation failed'
-                  echo '🔍 Node and npm versions:'
-                  node --version
-                  npm --version
-                  echo '🔍 Server package.json:'
-                  cat package.json | head -20
-                  exit 1
-                }
+              npm install --production --no-audit --no-fund || {
+                echo "❌ Server dependency installation failed"
+                exit 1
               }
-              
-              echo '✅ Server dependencies installed'
               cd ..
             else
-              echo '📦 Installing root project dependencies for server...'
-              
-              # Clean install for root project
               rm -rf node_modules package-lock.json
-              npm cache clean --force 2>/dev/null || true
-              
-              npm install --no-audit --no-fund || {
-                echo '❌ Root npm install failed, trying alternatives...'
-                npm install --legacy-peer-deps --no-audit --no-fund || {
-                  echo '❌ Root dependency installation failed'
-                  exit 1
-                }
-              }
-              
-              echo '✅ Root dependencies installed'
-            fi
-            
-            echo '🔍 Checking for TypeScript compilation...'
-            if [ -f \"server/tsconfig.json\" ] || grep -q '\"tsx\"' package.json 2>/dev/null; then
-              echo '🔧 TypeScript detected, checking if compilation is needed...'
-              if [ -f \"server/dist\" ] || npm run --silent server:build >/dev/null 2>&1; then
-                echo '✅ TypeScript compilation successful or not needed'
-              else
-                echo '⚠️ TypeScript compilation skipped or failed, continuing...'
-              fi
-            else
-              echo '✅ No TypeScript compilation needed'
-            fi
-            
-            echo '🔍 Checking current PM2 status...'
-            pm2 list || echo 'PM2 not initialized yet'
-            
-            echo '🚀 Managing server PM2 process...'
-            
-            # Check if there's a specific server start script
-            if grep -q '\"server:' package.json 2>/dev/null; then
-              echo '🔍 Found server scripts in package.json'
-              
-              # Kill existing server process if running
-              if pm2 describe tinchat-server > /dev/null 2>&1; then
-                echo '🔄 Stopping existing server process...'
-                pm2 delete tinchat-server || echo 'Failed to delete existing process'
-              fi
-              
-              # Start new server process
-              echo '🆕 Starting new server process...'
-              if npm run server:dev >/dev/null 2>&1 &
-              then
-                echo '✅ Server started with npm run server:dev'
-                
-                # Try to register with PM2 for monitoring
-                pm2 start \"npm run server:dev\" --name \"tinchat-server\" || {
-                  echo '⚠️ PM2 registration failed, but server might be running'
-                }
-              else
-                echo '❌ Failed to start server'
+              npm install --production --no-audit --no-fund || {
+                echo "❌ Root dependency installation failed"
                 exit 1
-              fi
-              
-            elif [ -f \"server/index.js\" ] || [ -f \"server/index.ts\" ]; then
-              echo '🔍 Found server entry point'
-              
-              if pm2 describe tinchat-server > /dev/null 2>&1; then
-                echo '🔄 Restarting existing PM2 server process...'
-                pm2 restart tinchat-server
-              else
-                echo '🆕 Starting new PM2 server process...'
-                if [ -f \"server/index.ts\" ]; then
-                  pm2 start server/index.ts --name 'tinchat-server' --interpreter tsx
-                else
-                  pm2 start server/index.js --name 'tinchat-server'
-                fi
-              fi
+              }
+            fi
+            
+            echo "🚀 Managing PM2 process..."
+            
+            # Install PM2 if not available
+            if ! command -v pm2 &> /dev/null; then
+              echo "📦 Installing PM2..."
+              npm install -g pm2
+            fi
+            
+            # Stop existing process
+            pm2 delete tinchat-server 2>/dev/null || echo "No existing process to delete"
+            
+            # Start server
+            if [ -f "server/index.js" ]; then
+              pm2 start server/index.js --name "tinchat-server"
+            elif [ -f "server/index.ts" ]; then
+              pm2 start server/index.ts --name "tinchat-server" --interpreter tsx
+            elif grep -q '"server:' package.json 2>/dev/null; then
+              pm2 start "npm run server:start" --name "tinchat-server"
             else
-              echo '❌ No server entry point found!'
-              echo '🔍 Server directory contents:'
-              ls -la server/
+              echo "❌ No server entry point found"
               exit 1
             fi
             
-            echo '💾 Saving PM2 configuration...'
             pm2 save
             
-            echo '🔍 Final PM2 status:'
+            echo "🔍 PM2 Status:"
             pm2 list
             
-            echo '🔍 Checking PM2 server logs (last 10 lines):'
-            pm2 logs tinchat-server --lines 10 --nostream || echo 'No server logs available yet'
+            echo "✅ Server deployment completed!"
+            EOF
             
-            echo '🔍 Testing server response...'
-            sleep 5  # Give the server time to start
-            
-            # Test common server ports
-            for port in 3001 8080 8000 5000 4000; do
-              if curl -f -s http://localhost:\$port > /dev/null; then
-                echo '✅ Server is responding on port '\$port
-                break
-              else
-                echo '⚠️ No response on port '\$port
-              fi
-            done
-            
-            echo '🔍 Network status (server ports):'
-            netstat -tlnp | grep -E ':(3001|8080|8000|5000|4000)' || echo 'No server services found on common ports'
-            
-            echo '🔍 PM2 server process memory/CPU usage:'
-            pm2 show tinchat-server || echo 'Cannot show server PM2 details'
-            
-            echo '✅ Server deployment completed successfully!'
-          "
+            echo "✅ Deployment script completed successfully!"
