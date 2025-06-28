@@ -27,6 +27,7 @@ export default function SideLinks({ isMobile }: SideLinksProps) {
           width={isMobile ? 32 : 88}
           height={isMobile ? 32 : 31}
           className="transition-opacity hover:opacity-80"
+          unoptimized // ← add this!
         />
       </Link>
 
