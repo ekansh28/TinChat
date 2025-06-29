@@ -70,14 +70,14 @@
 /* Main card z-index */
 .cardZIndex {
   position: relative;
-  z-index: 10;
+  z-index: 0;
   width: 100%;
 }
 
 /* Side links positioning - exactly like old design */
 .sideLinkLeft {
   position: absolute;
-  z-index: 10;
+  z-index: 0;
   transition: transform 0.2s ease;
   left: 0;
   top: 50%;
@@ -86,7 +86,7 @@
 
 .sideLinkRight {
   position: absolute;
-  z-index: 10;
+  z-index: 0;
   transition: transform 0.2s ease;
   right: 0;
   top: 50%;

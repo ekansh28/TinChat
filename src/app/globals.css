@@ -41,6 +41,30 @@ body {
   box-sizing: inherit;
 }
 
+/* Add to src/app/globals.css */
+/* Add this to globals.css */
+/* Add this to your globals.css */
+.auth-modal-backdrop {
+  z-index: 9999 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  /* Ensure it's above everything */
+  isolation: isolate !important;
+}
+
+.window.w-full.max-w-md.relative {
+  z-index: 10000 !important; /* Higher than backdrop */
+  position: relative !important;
+}
+
 /* Add specific styles for interactive elements using the accent color */
 button.accent, a.accent {
   color: var(--accent-purple);

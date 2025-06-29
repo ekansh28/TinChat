@@ -1,0 +1,6 @@
+{
+  "databaseURL": "https://Ekansh-Sharma-s-workspace-e5q1mm.eu-central-1.xata.sh/db/tinchat",
+  "codegen": {
+    "output": "src/xata.ts"
+  }
+}
