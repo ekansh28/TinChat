@@ -1,8 +1,8 @@
-// src/components/AuthModal.tsx - COMPLETE WITH ONBOARDING
+// src/components/AuthModal.tsx - UPDATED FOR XATA DATABASE
 'use client';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useSignIn, useSignUp } from '@clerk/nextjs';
+import { useSignIn, useSignUp, useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
@@ -29,9 +29,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [displayName, setDisplayName] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
 
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
+  const { user } = useUser();
 
   // 🔥 CRITICAL: Ensure component is mounted before rendering portal
   useEffect(() => {
@@ -66,6 +68,84 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen]);
 
+  // ✅ NEW: Check if user profile exists in Xata database
+  const checkUserProfileExists = async (userId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/profiles/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.success && data.data;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking user profile:', error);
+      return false;
+    }
+  };
+
+  // ✅ NEW: Create user profile in Xata database
+  const createUserProfile = async (userId: string, username: string, displayName: string, avatarData?: string): Promise<boolean> => {
+    try {
+      const profileData: any = {
+        username,
+        display_name: displayName,
+        profile_complete: true,
+        status: 'online',
+        is_online: true,
+        last_seen: new Date().toISOString(),
+        display_name_color: '#667eea',
+        display_name_animation: 'none',
+        rainbow_speed: 3,
+        badges: [],
+        bio: '',
+        pronouns: '',
+        blocked_users: [],
+        profile_card_css: '',
+        easy_customization_data: {}
+      };
+
+      if (avatarData) {
+        profileData.avatar_url = avatarData;
+      }
+
+      const response = await fetch(`/api/profiles/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.success;
+      }
+      
+      const errorData = await response.json();
+      console.error('Profile creation failed:', errorData);
+      
+      // Handle specific errors
+      if (errorData.error === 'Username taken') {
+        setError('Username is already taken. Please choose another one.');
+      } else {
+        setError(errorData.message || 'Failed to create profile');
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+      setError('Failed to create profile. Please try again.');
+      return false;
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
@@ -83,22 +163,38 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (isSignUp) {
         if (!signUpLoaded || !signUp) return;
 
+        // ✅ FIXED: Create signup with all required fields including username
         const result = await signUp.create({
           emailAddress: email,
           password,
-          username: authUsername,
+          username: authUsername, // This fixes the missing_requirements error
         });
 
         console.log('SignUp result:', result.status, result);
 
         if (result.status === 'complete') {
-          // Sign up successful, show onboarding
-          setDisplayName(authUsername); // Pre-fill with username
-          setCurrentStep('onboarding');
+          // Sign up successful, check if profile exists in Xata
+          const userId = result.createdUserId;
+          setCreatedUserId(userId);
+          
+          if (userId) {
+            const profileExists = await checkUserProfileExists(userId);
+            
+            if (!profileExists) {
+              // Profile doesn't exist in Xata, show onboarding
+              setDisplayName(authUsername); // Pre-fill with username
+              setCurrentStep('onboarding');
+            } else {
+              // Profile exists in Xata, just close modal and reload
+              onClose();
+              window.location.reload();
+            }
+          }
+          
           setLoading(false);
         } else if (result.status === 'missing_requirements') {
           console.log('Missing requirements:', result.missingFields);
-          setError(`Missing required fields: ${result.missingFields.join(', ')}`);
+          setError(`Missing required fields: ${result.missingFields?.join(', ') || 'Unknown'}`);
           setLoading(false);
         } else {
           // Email verification needed
@@ -120,6 +216,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
 
         if (result.status === 'complete') {
+          await setActive({ session: result.createdSessionId });
+          
+          // Check if user profile exists in Xata after successful sign in
+          if (result.createdUserId) {
+            const profileExists = await checkUserProfileExists(result.createdUserId);
+            
+            if (!profileExists) {
+              // User signed in but no profile exists in Xata, show onboarding
+              setCreatedUserId(result.createdUserId);
+              setDisplayName(email.split('@')[0]); // Use email prefix as default
+              setCurrentStep('onboarding');
+              setLoading(false);
+              return;
+            }
+          }
+          
           onClose();
           window.location.reload();
         } else if (result.status === 'needs_second_factor') {
@@ -168,6 +280,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return;
     }
 
+    if (!createdUserId) {
+      setError('User ID not found. Please try signing up again.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -182,25 +299,26 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
       }
 
-      // TODO: Save profile data to your backend API here
-      // This is where you'd call your backend to save:
-      // - username: authUsername
-      // - displayName: displayName  
-      // - avatar: avatarData
-      
-      console.log('Profile data to save:', {
-        username: authUsername,
+      // ✅ FIXED: Save profile data to Xata database
+      const success = await createUserProfile(
+        createdUserId,
+        authUsername,
         displayName,
-        avatar: avatarData ? 'Has avatar' : 'No avatar'
-      });
+        avatarData as string
+      );
 
-      // For now, just complete the onboarding
-      onClose();
-      window.location.reload();
+      if (success) {
+        console.log('Profile created successfully in Xata!');
+        onClose();
+        window.location.reload();
+      } else {
+        // Error is already set in createUserProfile function
+        setLoading(false);
+      }
       
     } catch (err: any) {
+      console.error('Onboarding error:', err);
       setError('Failed to save profile. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -213,14 +331,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (isSignUp && signUpLoaded) {
         await signUp.authenticateWithRedirect({
           strategy: provider,
-          redirectUrl: window.location.origin,
-          redirectUrlComplete: window.location.origin,
+          redirectUrl: window.location.origin + '/auth/callback',
+          redirectUrlComplete: window.location.origin + '/auth/complete',
         });
       } else if (signInLoaded) {
         await signIn.authenticateWithRedirect({
           strategy: provider,
-          redirectUrl: window.location.origin,
-          redirectUrlComplete: window.location.origin,
+          redirectUrl: window.location.origin + '/auth/callback',
+          redirectUrlComplete: window.location.origin + '/auth/complete',
         });
       }
     } catch (err: any) {
@@ -229,6 +347,31 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setLoading(false);
     }
   };
+
+  // Reset state when switching between sign in/up
+  useEffect(() => {
+    setError(null);
+    setEmail('');
+    setPassword('');
+    setAuthUsername('');
+    setCurrentStep('auth');
+  }, [isSignUp]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setError(null);
+      setEmail('');
+      setPassword('');
+      setAuthUsername('');
+      setDisplayName('');
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setCreatedUserId(null);
+      setCurrentStep('auth');
+      setLoading(false);
+    }
+  }, [isOpen]);
 
   // 🔥 CRITICAL: Don't render until mounted (prevents SSR issues)
   if (!mounted || !isOpen) return null;
@@ -468,6 +611,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
                     @{authUsername}
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">This will be saved to the database.</p>
                 </div>
 
                 {error && (
@@ -491,7 +635,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     disabled={loading}
                     className="flex-1"
                   >
-                    {loading ? 'Saving...' : 'Complete Setup'}
+                    {loading ? 'Saving to Database...' : 'Complete Setup'}
                   </Button>
                 </div>
               </form>
