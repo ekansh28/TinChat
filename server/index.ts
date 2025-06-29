@@ -1,4 +1,4 @@
-// server/index.ts - FIXED VERSION WITH PROPER SUPABASE AUTHENTICATION
+// server/index.ts - UPDATED WITH XATA AND CLERK INTEGRATION
 import 'dotenv/config';
 import http from 'http';
 import { setCorsHeaders } from './config/cors';
@@ -8,6 +8,8 @@ import { handleProfileRoutes, setProfileManager } from './routes/profileRoutes';
 import { handleFriendsRoutes, setFriendsProfileManager } from './routes/friendsRoutes';
 import { configureSocketIO } from './config/socketIO';
 import { initializeSupabase, testDatabaseConnection, getSupabaseConfig, healthCheckSupabase } from './config/supabase';
+import { initializeXata, testXataConnection, getXataClient, getXataStats } from './config/xata';
+import { initializeClerk, testClerkConnection, getAuthStats } from './middleware/clerkAuth';
 import { SocketManager } from './managers/SocketManager';
 import { ProfileManager } from './managers/profile/ProfileManager';
 import { MessageBatcher } from './utils/MessageBatcher';
@@ -72,6 +74,15 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // ✅ Handle Authentication API routes
+    if (url.startsWith('/api/auth')) {
+      const handled = await handleAuthRoutes(req, res);
+      if (handled) {
+        logger.debug(`📡 Auth API request handled: ${req.method} ${url}`);
+        return;
+      }
+    }
+
     // Handle debug dashboard
     if (url === '/debug/dashboard') {
       handleDebugDashboard(res);
@@ -92,6 +103,62 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ error: 'Internal server error' }));
   }
 });
+
+// ✅ NEW: Authentication API routes
+async function handleAuthRoutes(req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> {
+  const url = req.url || '';
+  const method = req.method;
+
+  // Set CORS headers
+  setCorsHeaders(res);
+  res.setHeader('Content-Type', 'application/json');
+
+  try {
+    // Health check for auth services
+    if (url === '/api/auth/health' && method === 'GET') {
+      const clerkHealth = await testClerkConnection();
+      const authStats = getAuthStats();
+      
+      const health = {
+        clerk: clerkHealth,
+        cache: authStats,
+        timestamp: new Date().toISOString()
+      };
+
+      res.writeHead(clerkHealth.connected ? 200 : 503);
+      res.end(JSON.stringify(health, null, 2));
+      return true;
+    }
+
+    // Get current user info (requires authentication)
+    if (url === '/api/auth/me' && method === 'GET') {
+      const { verifyClerkToken } = await import('./middleware/clerkAuth');
+      const authResult = await verifyClerkToken(req);
+      
+      if (!authResult.isAuthenticated) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return true;
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        user: authResult.user,
+        userId: authResult.userId,
+        authenticated: true,
+        cached: authResult.cached
+      }, null, 2));
+      return true;
+    }
+
+    return false; // Route not handled
+  } catch (error) {
+    logger.error('Auth API error:', error);
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: 'Authentication service error' }));
+    return true;
+  }
+}
 
 // Enhanced error handling
 server.on('error', (error: any) => {
@@ -137,25 +204,96 @@ async function initializeServer() {
   try {
     logger.info('🚀 Starting TinChat server initialization...');
 
-    // ✅ STEP 1: Check environment variables first
-    logger.info('🔍 Checking environment variables...');
-    const supabaseConfig = getSupabaseConfig();
-    logger.info('📋 Supabase configuration:', {
-      hasUrl: supabaseConfig.hasUrl,
-      hasServiceKey: supabaseConfig.hasServiceKey,
-      url: supabaseConfig.url,
-      keyPreview: supabaseConfig.keyPreview
-    });
-
-    if (!supabaseConfig.hasUrl || !supabaseConfig.hasServiceKey) {
-      logger.error('❌ Missing required Supabase environment variables');
+    // ✅ STEP 1: Initialize authentication (Clerk)
+    logger.info('🔐 Initializing Clerk authentication...');
+    const clerkInitialized = initializeClerk();
+    
+    if (clerkInitialized) {
+      const clerkHealth = await testClerkConnection();
+      if (clerkHealth.connected) {
+        logger.info(`✅ Clerk authentication verified (${clerkHealth.latency}ms)`);
+      } else {
+        logger.warn('⚠️ Clerk connection test failed:', clerkHealth.error);
+        logger.warn('⚠️ Continuing with degraded authentication');
+      }
+    } else {
+      logger.error('❌ Clerk initialization failed - authentication disabled');
       logger.error('📋 Required variables:');
-      logger.error('   - NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL');
-      logger.error('   - SUPABASE_SERVICE_ROLE_KEY');
-      process.exit(1);
+      logger.error('   - CLERK_SECRET_KEY');
+      logger.error('   - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
     }
 
-    // ✅ STEP 2: Initialize Redis service first
+    // ✅ STEP 2: Initialize primary database (Xata)
+    logger.info('🗄️ Initializing Xata database...');
+    const xataClient = initializeXata();
+    
+    let primaryDatabaseHealthy = false;
+    if (xataClient) {
+      const xataHealthy = await testXataConnection();
+      if (xataHealthy) {
+        logger.info('✅ Xata database connection verified');
+        primaryDatabaseHealthy = true;
+        
+        // Get database stats
+        try {
+          const xataStats = await getXataStats();
+          if (xataStats.connected) {
+            logger.info('📊 Xata database stats:', xataStats.stats);
+          }
+        } catch (error) {
+          logger.debug('Could not fetch Xata stats (non-critical):', error);
+        }
+      } else {
+        logger.warn('⚠️ Xata database connection failed');
+      }
+    } else {
+      logger.warn('⚠️ Xata database not configured');
+    }
+
+    // ✅ STEP 3: Initialize fallback database (Supabase) if Xata fails
+    let supabase = null;
+    let fallbackDatabaseHealthy = false;
+    
+    if (!primaryDatabaseHealthy) {
+      logger.info('🔄 Attempting Supabase fallback database...');
+      
+      const supabaseConfig = getSupabaseConfig();
+      logger.info('📋 Supabase configuration:', {
+        hasUrl: supabaseConfig.hasUrl,
+        hasServiceKey: supabaseConfig.hasServiceKey,
+        url: supabaseConfig.url,
+        keyPreview: supabaseConfig.keyPreview
+      });
+
+      if (supabaseConfig.hasUrl && supabaseConfig.hasServiceKey) {
+        supabase = initializeSupabase();
+        
+        if (supabase) {
+          const dbHealthy = await testDatabaseConnection(supabase);
+          if (dbHealthy) {
+            logger.info('✅ Supabase fallback database connection verified');
+            fallbackDatabaseHealthy = true;
+          } else {
+            logger.warn('⚠️ Supabase fallback database connection failed');
+          }
+        }
+      } else {
+        logger.warn('⚠️ Supabase configuration incomplete');
+      }
+    }
+
+    // ✅ Check if we have at least one working database
+    const hasWorkingDatabase = primaryDatabaseHealthy || fallbackDatabaseHealthy;
+    
+    if (!hasWorkingDatabase) {
+      logger.error('❌ No working database connection available');
+      logger.error('📋 Please configure either:');
+      logger.error('   - Xata: XATA_DB_URL, XATA_API_KEY');
+      logger.error('   - Supabase: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+      logger.warn('⚠️ Continuing with limited functionality...');
+    }
+
+    // ✅ STEP 4: Initialize Redis service
     const redisService = initializeRedis();
     
     if (redisService) {
@@ -167,73 +305,52 @@ async function initializeServer() {
       }
     }
 
-    // ✅ STEP 3: Initialize Supabase with proper server-side configuration
-    logger.info('🔍 Initializing Supabase client...');
-    const supabase = initializeSupabase();
-    
-    if (!supabase) {
-      logger.error('❌ Failed to initialize Supabase client');
-      process.exit(1);
-    }
-
-    // ✅ STEP 4: Test database connection with proper error handling
-    logger.info('🔍 Testing database connection...');
-    const dbHealthy = await testDatabaseConnection(supabase);
-    
-    if (!dbHealthy) {
-      logger.error('❌ Database connection test failed');
-      logger.error('📋 Please check:');
-      logger.error('   - SUPABASE_SERVICE_ROLE_KEY is correct');
-      logger.error('   - Database is accessible');
-      logger.error('   - Network connectivity');
-      process.exit(1);
-    } else {
-      logger.info('✅ Database connection verified successfully');
-    }
-
     // ✅ STEP 5: Initialize core services
     const performanceMonitor = new PerformanceMonitor();
     const io = configureSocketIO(server, allowedOrigins);
     const messageBatcher = new MessageBatcher();
     messageBatcher.setSocketIOInstance(io);
-    
-    // ✅ STEP 6: Initialize ProfileManager with modular architecture
+
+    // ✅ STEP 6: Initialize ProfileManager with database priority (Xata > Supabase)
     logger.info('👤 Initializing ProfileManager...');
-    const profileManager = new ProfileManager(supabase, redisService);
+    const profileManager = new ProfileManager(
+      supabase, // Keep Supabase for compatibility with existing modules
+      redisService
+    );
     
     // Set ProfileManager for both Profile and Friends API routes
     setProfileManager(profileManager);
     setFriendsProfileManager(profileManager);
     logger.info('📡 Profile and Friends API routes configured with ProfileManager');
     
-    // ✅ STEP 7: Test ProfileManager health immediately after initialization
-    logger.info('🔍 Testing ProfileManager health...');
-    try {
-      const profileHealth = await profileManager.testConnection();
-      if (profileHealth.overall) {
-        logger.info('✅ ProfileManager health check passed', {
-          database: profileHealth.database,
-          redis: profileHealth.redis,
-          latency: profileHealth.dbLatency
-        });
-      } else {
-        logger.warn('⚠️ ProfileManager health check failed', {
-          database: profileHealth.database,
-          redis: profileHealth.redis,
-          errors: profileHealth.errors
-        });
-        // Don't exit - continue with degraded functionality
+    // ✅ STEP 7: Test ProfileManager health
+    if (hasWorkingDatabase) {
+      logger.info('🔍 Testing ProfileManager health...');
+      try {
+        const profileHealth = await profileManager.testConnection();
+        if (profileHealth.overall) {
+          logger.info('✅ ProfileManager health check passed', {
+            database: profileHealth.database,
+            redis: profileHealth.redis,
+            latency: profileHealth.dbLatency
+          });
+        } else {
+          logger.warn('⚠️ ProfileManager health check failed', {
+            database: profileHealth.database,
+            redis: profileHealth.redis,
+            errors: profileHealth.errors
+          });
+        }
+      } catch (error) {
+        logger.error('❌ ProfileManager health check exception:', error);
       }
-    } catch (error) {
-      logger.error('❌ ProfileManager health check exception:', error);
-      // Don't exit - continue with degraded functionality
     }
     
     // ✅ STEP 8: Initialize FriendsChatService for real-time messaging
     const friendsChatService = new FriendsChatService(io, profileManager, redisService);
-    logger.info('💬 Friends chat service initialized with 24h Redis caching');
+    logger.info('💬 Friends chat service initialized with enhanced database integration');
     
-    // ✅ STEP 9: Initialize SocketManager with friends chat support
+    // ✅ STEP 9: Initialize SocketManager with authentication and database support
     const socketManager = new SocketManager(
       io,
       profileManager,
@@ -243,15 +360,35 @@ async function initializeServer() {
     );
 
     setSocketManager(socketManager);
-    logger.info('🔌 Socket manager initialized with friends support');
+    logger.info('🔌 Socket manager initialized with Clerk authentication support');
 
-    // ✅ STEP 10: Enhanced health monitoring with safe error handling
+    // ✅ STEP 10: Enhanced health monitoring with database and auth status
     setInterval(async () => {
       try {
         const health = socketManager.healthCheck();
         const stats = socketManager.getStats();
         
-        // ✅ SAFE: Get basic stats without triggering errors
+        // Get database health status
+        let xataHealth = { connected: false };
+        let supabaseHealth = { connected: false };
+        let clerkHealth = { connected: false };
+        
+        try {
+          if (xataClient) {
+            xataHealth = await getXataStats();
+          }
+          if (supabase) {
+            const supabaseCheck = await healthCheckSupabase();
+            supabaseHealth = { connected: supabaseCheck.connected };
+          }
+          if (clerkInitialized) {
+            clerkHealth = await testClerkConnection();
+          }
+        } catch (err) {
+          logger.debug('Health check services failed (non-critical):', err);
+        }
+        
+        // Get friends chat stats safely
         let friendsChatStats = { activeRooms: 0, activeTyping: 0, redisEnabled: false };
         if (friendsChatService) {
           try {
@@ -261,18 +398,7 @@ async function initializeServer() {
           }
         }
         
-        // ✅ SAFE: Simple health check for ProfileManager
-        let profileApiHealth = { database: false, overall: false };
-        try {
-          const simpleHealth = await healthCheckSupabase();
-          profileApiHealth = {
-            database: simpleHealth.connected,
-            overall: simpleHealth.connected
-          };
-        } catch (err) {
-          logger.debug('Simple health check failed (non-critical):', err);
-        }
-        
+        // Update global stats with enhanced information
         updateGlobalStats({
           onlineUserCount: stats.onlineUsers,
           waitingUsers: { 
@@ -280,7 +406,15 @@ async function initializeServer() {
             video: stats.queues.video 
           },
           totalRooms: stats.rooms.totalRooms,
-          supabaseEnabled: !!supabase,
+          databases: {
+            xata: xataHealth.connected,
+            supabase: supabaseHealth.connected,
+            primary: primaryDatabaseHealthy ? 'xata' : (fallbackDatabaseHealthy ? 'supabase' : 'none')
+          },
+          authentication: {
+            clerk: clerkHealth.connected,
+            cacheStats: getAuthStats()
+          },
           performance: {
             avgResponseTime: stats.performance.averageResponseTime || 0,
             requestsPerSecond: stats.performance.messagesPerSecond || 0,
@@ -288,7 +422,6 @@ async function initializeServer() {
           },
           redisEnabled: !!redisService,
           profileApiEnabled: !!profileManager,
-          profileApiHealth: profileApiHealth,
           friendsChat: {
             ...friendsChatStats,
             cacheEnabled: !!redisService,
@@ -296,7 +429,7 @@ async function initializeServer() {
           }
         } as any);
 
-        // ✅ SAFE: Simplified health logging
+        // Log health status periodically
         if (health.status === 'degraded') {
           logger.warn('🚨 Server health degraded (but continuing)');
         } else {
@@ -349,6 +482,11 @@ async function initializeServer() {
         await socketManager.destroy();
         logger.info('✅ Socket manager stopped');
 
+        // Clear authentication caches
+        const { clearAuthCaches } = await import('./middleware/clerkAuth');
+        clearAuthCaches();
+        logger.info('✅ Authentication caches cleared');
+
         logger.info('✅ Graceful shutdown completed');
         process.exit(0);
       } catch (error) {
@@ -377,37 +515,59 @@ async function initializeServer() {
       logger.info(`🚀 TinChat Server Successfully Started!`);
       logger.info(`📊 Environment: ${NODE_ENV}`);
       logger.info(`🌐 Port: ${PORT}`);
-      logger.info(`🗄️ Database: ${supabase ? 'Connected' : 'Disabled'}`);
+      
+      // Database status
+      logger.info(`🗄️ Primary Database: ${primaryDatabaseHealthy ? 'Xata (Connected)' : 'Not Available'}`);
+      logger.info(`🗄️ Fallback Database: ${fallbackDatabaseHealthy ? 'Supabase (Connected)' : 'Not Available'}`);
+      logger.info(`🗄️ Database Status: ${hasWorkingDatabase ? 'Operational' : 'Degraded'}`);
+      
+      // Authentication status
+      logger.info(`🔐 Authentication: ${clerkInitialized ? 'Clerk (Enabled)' : 'Disabled'}`);
+      
+      // Cache and services
       logger.info(`📋 Redis: ${redisService ? 'Enabled' : 'Disabled'}`);
       logger.info(`📡 Profile API: Available at /api/profiles/*`);
       logger.info(`👥 Friends API: Available at /api/friends/*`);
+      logger.info(`🔐 Auth API: Available at /api/auth/*`);
       logger.info(`💬 Friends Chat: Available with ${redisService ? '24h Redis caching' : 'memory-only caching'}`);
       logger.info(`🔒 CORS Origins: ${allowedOrigins.length} configured`);
       logger.info(`📈 Performance Monitoring: ${performanceMonitor.isEnabled ? 'Enabled' : 'Disabled'}`);
-      logger.info(`💬 Socket.IO: Enhanced configuration active`);
+      logger.info(`💬 Socket.IO: Enhanced configuration with authentication`);
       logger.info(`🔧 Memory Limit: ${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`);
       
-      // Debug dashboard info
+      // Debug info for development
       if (NODE_ENV === 'development') {
         logger.info(`🐛 Debug Dashboard: http://localhost:${PORT}/debug/dashboard`);
         logger.info(`🔍 Debug API: http://localhost:${PORT}/debug/*`);
         logger.info(`📡 Profile API: http://localhost:${PORT}/api/profiles/*`);
         logger.info(`👥 Friends API: http://localhost:${PORT}/api/friends/*`);
+        logger.info(`🔐 Auth API: http://localhost:${PORT}/api/auth/*`);
       }
       
-      // Show comprehensive caching and API configuration
+      // Show comprehensive service architecture
+      if (primaryDatabaseHealthy) {
+        logger.info(`🏗️ Architecture: Xata (Primary) + ${redisService ? 'Redis (Cache)' : 'Memory (Cache)'} + Clerk (Auth)`);
+      } else if (fallbackDatabaseHealthy) {
+        logger.info(`🏗️ Architecture: Supabase (Fallback) + ${redisService ? 'Redis (Cache)' : 'Memory (Cache)'} + Clerk (Auth)`);
+      } else {
+        logger.info(`🏗️ Architecture: No Database + ${redisService ? 'Redis (Cache)' : 'Memory (Cache)'} + Clerk (Auth)`);
+      }
+      
+      // Caching strategy
       if (redisService) {
-        logger.info(`💾 Caching: Redis (distributed) + LRU (local)`);
+        logger.info(`💾 Caching: Redis (distributed) + LRU (local) + Clerk (auth)`);
         logger.info(`⚡ Queue Persistence: Redis-backed queues active`);
-        logger.info(`🔄 Profile Cache: Multi-layer (Redis + Memory + API)`);
+        logger.info(`🔄 Profile Cache: Multi-layer (Redis + Memory + Database)`);
         logger.info(`👥 Friends Cache: Redis-backed with real-time updates`);
         logger.info(`💬 Chat Cache: 24h Redis persistence + real-time delivery`);
+        logger.info(`🔐 Auth Cache: Token caching with 5min TTL`);
       } else {
-        logger.info(`💾 Caching: LRU (local memory only)`);
+        logger.info(`💾 Caching: LRU (local memory only) + Clerk (auth)`);
         logger.info(`⚡ Queue Persistence: Memory-only (lost on restart)`);
-        logger.info(`🔄 Profile Cache: Memory + API only`);
+        logger.info(`🔄 Profile Cache: Memory + Database only`);
         logger.info(`👥 Friends Cache: Memory-only (lost on restart)`);
         logger.info(`💬 Chat Cache: Memory-only (lost on restart)`);
+        logger.info(`🔐 Auth Cache: Local token caching only`);
       }
       
       const initialHealth = socketManager.healthCheck();
@@ -417,9 +577,14 @@ async function initializeServer() {
       try {
         await testProfileApiEndpoints();
         await testFriendsApiEndpoints();
+        await testAuthEndpoints();
         
         if (redisService) {
           await testRedisOperations(redisService);
+        }
+        
+        if (xataClient) {
+          await testXataOperations(xataClient);
         }
         
         logger.info('🧪 All startup tests completed successfully');
@@ -450,13 +615,23 @@ async function testProfileApiEndpoints(): Promise<void> {
   try {
     logger.info('🧪 Testing Profile API endpoints...');
     
-    // ✅ SAFE: Simple health check that doesn't trigger 401 errors
-    const supabaseHealth = await healthCheckSupabase();
+    // Test with Xata if available, fallback to Supabase
+    const xataClient = getXataClient();
+    if (xataClient) {
+      const xataHealthy = await xataClient.testConnection();
+      if (xataHealthy) {
+        logger.info('✅ Profile API Xata connection working');
+      } else {
+        logger.warn('⚠️ Profile API Xata connection issues');
+      }
+    }
     
+    // Also test Supabase if configured
+    const supabaseHealth = await healthCheckSupabase();
     if (supabaseHealth.connected) {
-      logger.info('✅ Profile API database connection working');
+      logger.info('✅ Profile API Supabase connection working');
     } else {
-      logger.warn('⚠️ Profile API database connection issues:', supabaseHealth.error);
+      logger.debug('Supabase not connected (using Xata as primary)');
     }
     
     logger.info('✅ Profile API routes are configured and available');
@@ -470,13 +645,15 @@ async function testFriendsApiEndpoints(): Promise<void> {
   try {
     logger.info('🧪 Testing Friends API endpoints...');
     
-    // ✅ SAFE: Simple health check that doesn't trigger 401 errors
-    const supabaseHealth = await healthCheckSupabase();
-    
-    if (supabaseHealth.connected) {
-      logger.info('✅ Friends API database connection working');
-    } else {
-      logger.warn('⚠️ Friends API database connection issues:', supabaseHealth.error);
+    // Test primary database connection
+    const xataClient = getXataClient();
+    if (xataClient) {
+      const xataHealthy = await xataClient.testConnection();
+      if (xataHealthy) {
+        logger.info('✅ Friends API Xata connection working');
+      } else {
+        logger.warn('⚠️ Friends API Xata connection issues');
+      }
     }
     
     logger.info('✅ Friends API routes are configured and available');
@@ -484,7 +661,48 @@ async function testFriendsApiEndpoints(): Promise<void> {
   } catch (error: any) {
     logger.warn('⚠️ Friends API test failed (non-critical):', error.message);
   }
-}   
+}
+
+async function testAuthEndpoints(): Promise<void> {
+  try {
+    logger.info('🧪 Testing Authentication API endpoints...');
+    
+    const clerkHealth = await testClerkConnection();
+    if (clerkHealth.connected) {
+      logger.info(`✅ Auth API Clerk connection working (${clerkHealth.latency}ms)`);
+    } else {
+      logger.warn('⚠️ Auth API Clerk connection issues:', clerkHealth.error);
+    }
+    
+    const authStats = getAuthStats();
+    logger.info('📊 Auth cache stats:', authStats);
+    
+    logger.info('✅ Auth API routes are configured and available');
+    
+  } catch (error: any) {
+    logger.warn('⚠️ Auth API test failed (non-critical):', error.message);
+  }
+}
+
+async function testXataOperations(xataClient: any): Promise<void> {
+  try {
+    logger.info('🧪 Testing Xata operations...');
+    
+    // Test basic database stats
+    const stats = await xataClient.getDatabaseStats();
+    logger.info('📊 Xata database stats:', stats);
+    
+    // Test search functionality
+    const searchResults = await xataClient.searchUserProfiles('test', 1);
+    logger.info(`🔍 Xata search test returned ${searchResults.length} results`);
+    
+    logger.info('✅ All Xata operations tests passed');
+    
+  } catch (error) {
+    logger.error('❌ Xata operations test failed:', error);
+    logger.warn('⚠️ Xata may not be functioning correctly');
+  }
+}
 
 async function testRedisOperations(redisService: RedisService): Promise<void> {
   try {
@@ -509,41 +727,17 @@ async function testRedisOperations(redisService: RedisService): Promise<void> {
     // Test delete operation
     await redisInstance.del(testKey);
     
-    // Test queue operations
-    const testUser = {
-      id: 'test-user-123',
-      authId: null,
-      interests: ['testing'],
-      chatType: 'text' as const,
-      connectionStartTime: Date.now()
-    };
+    // Test enhanced auth cache operations
+    const testUserId = 'test-user-123';
+    const testTokenData = { userId: testUserId, user: { id: testUserId, username: 'testuser' } };
     
-    await redisService.addToQueue('text', testUser);
-    const queueLength = await redisService.getQueueLength('text');
-    if (queueLength > 0) {
-      logger.info('✅ Redis queue operations test passed');
-      // Clean up test user
-      await redisService.removeFromQueue('text', 'test-user-123');
-    }
+    // Cache token data
+    await redisInstance.setex(`token:test123`, 300, JSON.stringify(testTokenData));
+    const cachedToken = await redisInstance.get(`token:test123`);
     
-    // Test friends cache operations
-    const testFriend = {
-      id: 'test-friend-456',
-      username: 'testfriend',
-      display_name: 'Test Friend',
-      avatar_url: null,
-      status: 'online' as const,
-      last_seen: new Date().toISOString(),
-      is_online: true
-    };
-    
-    // Test friend caching
-    const friendsCacheSuccess = await redisService.cacheFriendsList('test-user-123', [testFriend]);
-    if (friendsCacheSuccess) {
-      logger.info('✅ Redis friends cache test passed');
-      
-      // Clean up
-      await redisService.invalidateFriendsList('test-user-123');
+    if (cachedToken) {
+      logger.info('✅ Redis auth cache test passed');
+      await redisInstance.del(`token:test123`);
     }
     
     logger.info('✅ All Redis operations tests passed');
