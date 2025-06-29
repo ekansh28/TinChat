@@ -41,30 +41,246 @@ body {
   box-sizing: inherit;
 }
 
-/* Add to src/app/globals.css */
-/* Add this to globals.css */
-/* Add this to your globals.css */
-.auth-modal-backdrop {
-  z-index: 9999 !important;
+
+/* ===== PORTAL-BASED AUTH MODAL STYLES ===== */
+/* Add this to your globals.css file - REPLACE the old .auth-modal-backdrop styles */
+
+/* 🔥 CRITICAL: Portal-rendered modal backdrop - GUARANTEED to be on top */
+.auth-modal-backdrop-fixed {
+  /* Positioning - Fixed to viewport, not parent */
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  
+  /* Layout */
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   padding: 1rem !important;
-  background-color: rgba(0, 0, 0, 0.5) !important;
-  /* Ensure it's above everything */
+  
+  /* Visual Effects */
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  
+  /* 🔥 MAXIMUM Z-INDEX - Higher than any possible element */
+  z-index: 2147483647 !important; /* Maximum safe z-index value */
+  
+  /* 🔥 FORCE NEW STACKING CONTEXT */
   isolation: isolate !important;
+  transform: translateZ(0) !important;
+  will-change: transform !important;
+  
+  /* Performance optimizations */
+  contain: layout style paint !important;
+  
+  /* Prevent interaction with background */
+  pointer-events: auto !important;
+  
+  /* Smooth appearance */
+  animation: authModalFadeIn 0.2s ease-out !important;
 }
 
-.window.w-full.max-w-md.relative {
-  z-index: 10000 !important; /* Higher than backdrop */
+/* Modal window container */
+.auth-modal-window {
+  /* Layout */
   position: relative !important;
+  z-index: 2147483647 !important; /* Same as backdrop but will stack on top due to DOM order */
+  
+  /* Sizing */
+  width: 100% !important;
+  max-width: 24rem !important; /* 384px */
+  max-height: 90vh !important;
+  
+  /* Visual */
+  background: white !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  
+  /* Ensure it can't be affected by parent styles */
+  transform: translateZ(0) !important;
+  contain: layout style paint !important;
+  
+  /* Prevent any inheritance issues */
+  font-family: inherit !important;
+  color: inherit !important;
+  
+  /* Animation */
+  animation: authModalSlideIn 0.3s ease-out !important;
 }
 
+/* Modal body styling */
+.auth-modal-body {
+  padding: 1.5rem !important;
+  overflow-y: auto !important;
+  max-height: calc(90vh - 60px) !important; /* Account for title bar */
+}
+
+/* 🔥 ANIMATIONS */
+@keyframes authModalFadeIn {
+  from {
+    opacity: 0 !important;
+    backdrop-filter: blur(0px) !important;
+    -webkit-backdrop-filter: blur(0px) !important;
+  }
+  to {
+    opacity: 1 !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
+}
+
+@keyframes authModalSlideIn {
+  from {
+    opacity: 0 !important;
+    transform: translateY(-20px) scale(0.95) translateZ(0) !important;
+  }
+  to {
+    opacity: 1 !important;
+    transform: translateY(0) scale(1) translateZ(0) !important;
+  }
+}
+
+/* 🔥 MOBILE RESPONSIVE */
+@media (max-width: 768px) {
+  .auth-modal-backdrop-fixed {
+    padding: 0.5rem !important;
+  }
+  
+  .auth-modal-window {
+    max-width: calc(100vw - 1rem) !important;
+    max-height: 95vh !important;
+  }
+  
+  .auth-modal-body {
+    padding: 1rem !important;
+    max-height: calc(95vh - 60px) !important;
+  }
+}
+
+/* 🔥 DARK MODE SUPPORT */
+@media (prefers-color-scheme: dark) {
+  .auth-modal-window {
+    background: #1f2937 !important; /* dark gray */
+    color: white !important;
+  }
+}
+
+/* 🔥 THEME-SPECIFIC OVERRIDES */
+.theme-98 .auth-modal-window {
+  border-radius: 0 !important;
+  border: 2px outset #c0c0c0 !important;
+  background: #c0c0c0 !important;
+  color: black !important;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.theme-7 .auth-modal-window {
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+
+.oauth-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem; /* Space between icon and text */
+  width: 100%;
+  justify-content: center;
+}
+
+.discord-button::before {
+  content: "";
+  display: inline-block;
+  width: 15px; /* Adjust size as needed */
+  height: 15px;
+  background-image: url("https://cdn.sekansh21.workers.dev/Auth/discord.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.discord-button .button-content::before {
+  background-image: url("https://cdn.sekansh21.workers.dev/Auth/discord.png");
+}
+.google-button::before {
+  content: "";
+  display: inline-block;
+  width: 15px; /* Adjust size as needed */
+  height: 15px;
+  background-image: url("https://cdn.sekansh21.workers.dev/Auth/google.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.google-button .button-content::before {
+  background-image: url("https://cdn.sekansh21.workers.dev/Auth/google.png");
+}
+
+
+/* 🔥 REMOVE OLD MODAL STYLES - These should be deleted/commented out */
+/*
+.auth-modal-backdrop {
+  // DELETE THIS ENTIRE BLOCK - Replace with .auth-modal-backdrop-fixed above
+}
+*/
+
+/* 🔥 FORCE OVERRIDE ANY CONFLICTING STYLES */
+body:has(.auth-modal-backdrop-fixed) {
+  overflow: hidden !important; /* Prevent body scroll when modal is open */
+}
+/* ===== ENSURE OTHER ELEMENTS DON'T INTERFERE ===== */
+
+/* Lower the online users panel z-index to be below modal */
+.online-users-responsive {
+  z-index: 9998 !important; /* Below modal */
+}
+
+/* Lower any other high z-index elements */
+.win7-customizer-wrapper {
+  z-index: 9998 !important; /* Below modal */
+}
+
+/* Ensure settings panels are below modal */
+.chat-page-container .window.fixed[style*="z-index: 999999"] {
+  z-index: 9998 !important; /* Below modal */
+}
+
+/* ===== MOBILE RESPONSIVE FIXES ===== */
+@media (max-width: 768px) {
+  .auth-modal-backdrop {
+    padding: 0.5rem !important;
+  }
+  
+  .auth-modal-backdrop .window {
+    max-width: 95vw !important;
+    max-height: 95vh !important;
+    width: 100% !important;
+  }
+  
+  .auth-modal-backdrop .window-body {
+    padding: 1rem !important; /* Smaller padding on mobile */
+  }
+}
+
+/* ===== ADDITIONAL DEBUG STYLES (Remove after testing) ===== */
+/* Uncomment these to visually debug the modal layering */
+/*
+.auth-modal-backdrop {
+  border: 3px solid red !important;
+}
+
+.auth-modal-backdrop .window {
+  border: 3px solid blue !important;
+}
+*/
 /* Add specific styles for interactive elements using the accent color */
 button.accent, a.accent {
   color: var(--accent-purple);
