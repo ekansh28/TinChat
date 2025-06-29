@@ -1,8 +1,8 @@
-// src/components/AuthModal.tsx - UPDATED FOR XATA DATABASE
+// src/components/AuthModal.tsx - COMPLETE FIXED VERSION WITH AUTHENTICATION TOKENS
 'use client';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useSignIn, useSignUp, useUser } from '@clerk/nextjs';
+import { useSignIn, useSignUp, useAuth, useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
@@ -33,6 +33,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
+  const { getToken } = useAuth();
   const { user } = useUser();
 
   // 🔥 CRITICAL: Ensure component is mounted before rendering portal
@@ -68,14 +69,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen]);
 
-  // ✅ NEW: Check if user profile exists in Xata database
+  // ✅ FIXED: Check if user profile exists in database with authentication
   const checkUserProfileExists = async (userId: string): Promise<boolean> => {
     try {
+      const token = await getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add auth token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`/api/profiles/${userId}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (response.ok) {
@@ -90,9 +99,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   };
 
-  // ✅ NEW: Create user profile in Xata database
+  // ✅ FIXED: Create user profile in database with authentication
   const createUserProfile = async (userId: string, username: string, displayName: string, avatarData?: string): Promise<boolean> => {
     try {
+      const token = await getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add auth token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const profileData: any = {
         username,
         display_name: displayName,
@@ -117,9 +136,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
       const response = await fetch(`/api/profiles/${userId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(profileData),
       });
 
@@ -132,7 +149,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       console.error('Profile creation failed:', errorData);
       
       // Handle specific errors
-      if (errorData.error === 'Username taken') {
+      if (errorData.error === 'Username taken' || errorData.error?.includes('Username')) {
+        setError('Username is already taken. Please choose another one.');
+      } else if (errorData.error?.includes('unique') || errorData.error?.includes('duplicate')) {
         setError('Username is already taken. Please choose another one.');
       } else {
         setError(errorData.message || 'Failed to create profile');
@@ -173,25 +192,33 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         console.log('SignUp result:', result.status, result);
 
         if (result.status === 'complete') {
-          // Sign up successful, check if profile exists in Xata
+          // Sign up successful, set session
+          if (result.createdSessionId) {
+            await setActive({ session: result.createdSessionId });
+          }
+          
           const userId = result.createdUserId;
           setCreatedUserId(userId);
           
           if (userId) {
-            const profileExists = await checkUserProfileExists(userId);
-            
-            if (!profileExists) {
-              // Profile doesn't exist in Xata, show onboarding
-              setDisplayName(authUsername); // Pre-fill with username
-              setCurrentStep('onboarding');
-            } else {
-              // Profile exists in Xata, just close modal and reload
-              onClose();
-              window.location.reload();
-            }
+            // Wait a moment for the session to be fully established
+            setTimeout(async () => {
+              const profileExists = await checkUserProfileExists(userId);
+              
+              if (!profileExists) {
+                // Profile doesn't exist in database, show onboarding
+                setDisplayName(authUsername); // Pre-fill with username
+                setCurrentStep('onboarding');
+              } else {
+                // Profile exists in database, just close modal and reload
+                onClose();
+                window.location.reload();
+              }
+              setLoading(false);
+            }, 1000);
+          } else {
+            setLoading(false);
           }
-          
-          setLoading(false);
         } else if (result.status === 'missing_requirements') {
           console.log('Missing requirements:', result.missingFields);
           setError(`Missing required fields: ${result.missingFields?.join(', ') || 'Unknown'}`);
@@ -200,9 +227,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           // Email verification needed
           try {
             await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-            setError('Please check your email for a verification code and try again');
+            setError('Please check your email for a verification code and complete the verification process');
           } catch (emailError) {
-            setError('Please check your email for a verification link');
+            setError('Please check your email for a verification link and complete the verification process');
           }
           setLoading(false);
         }
@@ -218,34 +245,50 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         if (result.status === 'complete') {
           await setActive({ session: result.createdSessionId });
           
-          // Check if user profile exists in Xata after successful sign in
-          if (result.createdUserId) {
-            const profileExists = await checkUserProfileExists(result.createdUserId);
-            
-            if (!profileExists) {
-              // User signed in but no profile exists in Xata, show onboarding
-              setCreatedUserId(result.createdUserId);
-              setDisplayName(email.split('@')[0]); // Use email prefix as default
-              setCurrentStep('onboarding');
-              setLoading(false);
-              return;
+          // Wait a moment for the session to be established
+          setTimeout(async () => {
+            // Check if user profile exists in database after successful sign in
+            if (result.createdUserId) {
+              const profileExists = await checkUserProfileExists(result.createdUserId);
+              
+              if (!profileExists) {
+                // User signed in but no profile exists in database, show onboarding
+                setCreatedUserId(result.createdUserId);
+                setDisplayName(email.split('@')[0]); // Use email prefix as default
+                setAuthUsername(email.split('@')[0]); // Set a default username
+                setCurrentStep('onboarding');
+                setLoading(false);
+                return;
+              }
             }
-          }
-          
-          onClose();
-          window.location.reload();
+            
+            onClose();
+            window.location.reload();
+          }, 1000);
         } else if (result.status === 'needs_second_factor') {
           setError('Two-factor authentication required');
+          setLoading(false);
         } else {
           setError('Sign in failed. Please check your credentials.');
+          setLoading(false);
         }
-        setLoading(false);
       }
     } catch (err: any) {
       console.error('Auth error:', err);
       
       if (err.errors && err.errors.length > 0) {
-        setError(err.errors[0].message);
+        const errorMessage = err.errors[0].message;
+        
+        // Handle specific Clerk error messages
+        if (errorMessage.includes('identifier already exists')) {
+          setError('An account with this email already exists. Please sign in instead.');
+        } else if (errorMessage.includes('password')) {
+          setError('Password must be at least 8 characters long.');
+        } else if (errorMessage.includes('username')) {
+          setError('Username is already taken or invalid.');
+        } else {
+          setError(errorMessage);
+        }
       } else {
         setError(isSignUp ? 'Failed to create account' : 'Failed to sign in');
       }
@@ -263,7 +306,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return;
     }
     
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file.');
+      return;
+    }
+    
     setAvatarFile(file);
+    setError(null); // Clear any previous error
     
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -275,7 +324,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const handleOnboardingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!displayName) {
+    if (!displayName.trim()) {
       setError('Display name is required');
       return;
     }
@@ -283,6 +332,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (!createdUserId) {
       setError('User ID not found. Please try signing up again.');
       return;
+    }
+
+    // Generate username if not set (for sign-in users)
+    let finalUsername = authUsername;
+    if (!finalUsername) {
+      finalUsername = displayName
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 20)
+        .padEnd(3, '0');
     }
 
     setLoading(true);
@@ -293,22 +352,23 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       let avatarData = null;
       if (avatarFile) {
         const reader = new FileReader();
-        avatarData = await new Promise((resolve) => {
+        avatarData = await new Promise((resolve, reject) => {
           reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read avatar file'));
           reader.readAsDataURL(avatarFile);
         });
       }
 
-      // ✅ FIXED: Save profile data to Xata database
+      // ✅ FIXED: Save profile data to database
       const success = await createUserProfile(
         createdUserId,
-        authUsername,
-        displayName,
+        finalUsername,
+        displayName.trim(),
         avatarData as string
       );
 
       if (success) {
-        console.log('Profile created successfully in Xata!');
+        console.log('✅ Profile created successfully in database!');
         onClose();
         window.location.reload();
       } else {
@@ -328,13 +388,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLoading(true);
 
     try {
-      if (isSignUp && signUpLoaded) {
+      if (isSignUp && signUpLoaded && signUp) {
         await signUp.authenticateWithRedirect({
           strategy: provider,
           redirectUrl: window.location.origin + '/auth/callback',
           redirectUrlComplete: window.location.origin + '/auth/complete',
         });
-      } else if (signInLoaded) {
+      } else if (signInLoaded && signIn) {
         await signIn.authenticateWithRedirect({
           strategy: provider,
           redirectUrl: window.location.origin + '/auth/callback',
@@ -343,19 +403,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       }
     } catch (err: any) {
       console.error('OAuth error:', err);
-      setError('OAuth authentication failed');
+      setError('OAuth authentication failed. Please try again.');
       setLoading(false);
     }
   };
 
   // Reset state when switching between sign in/up
   useEffect(() => {
-    setError(null);
-    setEmail('');
-    setPassword('');
-    setAuthUsername('');
-    setCurrentStep('auth');
-  }, [isSignUp]);
+    if (mounted) {
+      setError(null);
+      setEmail('');
+      setPassword('');
+      setAuthUsername('');
+      setCurrentStep('auth');
+      setLoading(false);
+    }
+  }, [isSignUp, mounted]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -370,6 +433,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setCreatedUserId(null);
       setCurrentStep('auth');
       setLoading(false);
+      setIsSignUp(false);
     }
   }, [isOpen]);
 
@@ -500,7 +564,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 </div>
 
                 {error && (
-                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                  <div className="text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
                     {error}
                   </div>
                 )}
@@ -531,8 +595,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   variant="outline" 
                   onClick={() => handleOAuth('oauth_google')} 
                   disabled={loading}
-                  className="w-full"
+                  className="w-full flex items-center justify-center gap-2"
                 >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
                   Continue with Google
                 </Button>
                 <Button
@@ -540,8 +610,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   variant="outline"
                   onClick={() => handleOAuth('oauth_discord')}
                   disabled={loading}
-                  className="w-full"
+                  className="w-full flex items-center justify-center gap-2"
                 >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419-.0002 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9554 2.4189-2.1568 2.4189Z"/>
+                  </svg>
                   Continue with Discord
                 </Button>
               </div>
@@ -587,6 +660,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       className="hidden"
                     />
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, or GIF. Max 2MB.</p>
                 </div>
 
                 {/* Display Name */}
@@ -607,15 +681,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                 {/* Show username being used */}
                 <div>
-                  <Label>Username (from signup)</Label>
+                  <Label>Username {authUsername ? '(from signup)' : '(auto-generated)'}</Label>
                   <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
-                    @{authUsername}
+                    @{authUsername || (displayName
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_]/g, '')
+                      .slice(0, 20)
+                      .padEnd(3, '0')) || 'username'}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">This will be saved to the database.</p>
                 </div>
 
                 {error && (
-                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                  <div className="text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
                     {error}
                   </div>
                 )}
@@ -632,7 +710,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={loading}
+                    disabled={loading || !displayName.trim()}
                     className="flex-1"
                   >
                     {loading ? 'Saving to Database...' : 'Complete Setup'}

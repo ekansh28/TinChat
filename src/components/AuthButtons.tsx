@@ -1,4 +1,4 @@
-// src/components/AuthButtons.tsx - UPDATED WITH USERNAME DISPLAY FROM DATABASE
+// src/components/AuthButtons.tsx - FIXED WITH PROPER AUTHENTICATION
 'use client';
 import { useState, useCallback, useEffect } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/nextjs';
@@ -21,7 +21,7 @@ interface UserProfile {
 
 export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false }: AuthButtonsProps) {
   const { user, isLoaded: userLoaded } = useUser();
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  const { isSignedIn, isLoaded: authLoaded, getToken } = useAuth();
   const { signOut } = useClerk();
   
   const [signingOut, setSigningOut] = useState(false);
@@ -30,14 +30,23 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
   const [profileExists, setProfileExists] = useState<boolean | null>(null);
   const [checkingProfile, setCheckingProfile] = useState(false);
 
-  // ✅ NEW: Fetch user profile from your database
+  // ✅ FIXED: Fetch user profile with authentication token
   const fetchUserProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
+      // Get authentication token
+      const token = await getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add auth token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`/api/profiles/${userId}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (response.ok) {
@@ -45,6 +54,8 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
         if (data.success && data.data) {
           return data.data as UserProfile;
         }
+      } else if (response.status === 401) {
+        console.warn('Authentication required for profile fetch');
       }
       
       return null;
@@ -52,9 +63,9 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
       console.error('Error fetching user profile:', error);
       return null;
     }
-  }, []);
+  }, [getToken]);
 
-  // ✅ NEW: Check if user profile exists and fetch it
+  // ✅ FIXED: Check if user profile exists and fetch it
   const checkAndFetchProfile = useCallback(async () => {
     if (!user?.id || checkingProfile) return;
 
@@ -78,7 +89,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   }, [user?.id, checkingProfile, fetchUserProfile]);
 
-  // ✅ NEW: Check profile when user changes
+  // ✅ Check profile when user changes
   useEffect(() => {
     if (isSignedIn && user?.id) {
       checkAndFetchProfile();
@@ -88,7 +99,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   }, [isSignedIn, user?.id, checkAndFetchProfile]);
 
-  // ✅ NEW: Auto-show modal if user is signed in but has no profile
+  // ✅ Auto-show modal if user is signed in but has no profile
   useEffect(() => {
     if (isSignedIn && user && profileExists === false && !showAuthModal) {
       setShowAuthModal(true);
@@ -118,7 +129,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   }, [onOpenProfileCustomizer]);
 
-  // ✅ NEW: Handle modal close with profile recheck
+  // ✅ Handle modal close with profile recheck
   const handleModalClose = useCallback(() => {
     setShowAuthModal(false);
     // Recheck profile after modal closes
@@ -131,7 +142,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     }
   }, [user?.id, checkAndFetchProfile]);
 
-  // ✅ NEW: Function to get display name with priority: database display_name > database username > Clerk data
+  // ✅ Function to get display name with priority: database display_name > database username > Clerk data
   const getDisplayName = useCallback(() => {
     // Priority 1: Database display_name
     if (userProfile?.display_name) {
@@ -169,7 +180,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
     );
   }
 
-  // ✅ ENHANCED: Show authenticated user UI with database username/display name
+  // ✅ Show authenticated user UI with database username/display name
   if (isSignedIn && user && profileExists && userProfile) {
     const displayName = getDisplayName();
     
@@ -194,7 +205,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
           </Button>
         )}
 
-        {/* ✅ ENHANCED: Display Name with username from database */}
+        {/* ✅ Display Name with username from database */}
         <span 
           className="text-xs hidden sm:inline truncate max-w-[100px] sm:max-w-[150px] text-white" 
           title={`${displayName}${userProfile.username ? ` (@${userProfile.username})` : ''}`}
@@ -202,7 +213,7 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
           {displayName}
         </span>
 
-        {/* ✅ NEW: Show username badge if different from display name */}
+        {/* ✅ Show username badge if different from display name */}
         {userProfile.username && userProfile.display_name && userProfile.username !== userProfile.display_name && (
           <span className="text-xs text-gray-400 hidden md:inline">
             @{userProfile.username}
