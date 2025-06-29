@@ -1,4 +1,4 @@
-// src/components/AuthModal.tsx - UPDATED WITH PORTAL
+// src/components/AuthModal.tsx - COMPLETE WITH ONBOARDING
 'use client';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -6,6 +6,7 @@ import { useSignIn, useSignUp } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
+import Image from 'next/image';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -13,12 +14,21 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const [currentStep, setCurrentStep] = useState<'auth' | 'onboarding'>('auth');
   const [isSignUp, setIsSignUp] = useState(false);
+  
+  // Auth state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState(''); // Username for Clerk auth
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Onboarding state
+  const [displayName, setDisplayName] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
@@ -56,9 +66,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+    
+    // Check username for sign up
+    if (isSignUp && (!authUsername || authUsername.length < 3)) {
+      setError('Username must be at least 3 characters');
+      return;
+    }
     
     setError(null);
     setLoading(true);
@@ -70,17 +86,32 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         const result = await signUp.create({
           emailAddress: email,
           password,
+          username: authUsername,
         });
 
+        console.log('SignUp result:', result.status, result);
+
         if (result.status === 'complete') {
-          onClose();
-          window.location.reload();
+          // Sign up successful, show onboarding
+          setDisplayName(authUsername); // Pre-fill with username
+          setCurrentStep('onboarding');
+          setLoading(false);
         } else if (result.status === 'missing_requirements') {
-          setError('Please complete all required fields');
+          console.log('Missing requirements:', result.missingFields);
+          setError(`Missing required fields: ${result.missingFields.join(', ')}`);
+          setLoading(false);
         } else {
-          setError('Please check your email for a verification link');
+          // Email verification needed
+          try {
+            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+            setError('Please check your email for a verification code and try again');
+          } catch (emailError) {
+            setError('Please check your email for a verification link');
+          }
+          setLoading(false);
         }
       } else {
+        // Sign in logic
         if (!signInLoaded || !signIn) return;
 
         const result = await signIn.create({
@@ -96,6 +127,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         } else {
           setError('Sign in failed. Please check your credentials.');
         }
+        setLoading(false);
       }
     } catch (err: any) {
       console.error('Auth error:', err);
@@ -105,6 +137,69 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       } else {
         setError(isSignUp ? 'Failed to create account' : 'Failed to sign in');
       }
+      setLoading(false);
+    }
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+
+    const file = e.target.files[0];
+    
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image too large. Please select an image smaller than 2MB.');
+      return;
+    }
+    
+    setAvatarFile(file);
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOnboardingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!displayName) {
+      setError('Display name is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Convert avatar to base64 if provided
+      let avatarData = null;
+      if (avatarFile) {
+        const reader = new FileReader();
+        avatarData = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(avatarFile);
+        });
+      }
+
+      // TODO: Save profile data to your backend API here
+      // This is where you'd call your backend to save:
+      // - username: authUsername
+      // - displayName: displayName  
+      // - avatar: avatarData
+      
+      console.log('Profile data to save:', {
+        username: authUsername,
+        displayName,
+        avatar: avatarData ? 'Has avatar' : 'No avatar'
+      });
+
+      // For now, just complete the onboarding
+      onClose();
+      window.location.reload();
+      
+    } catch (err: any) {
+      setError('Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -140,18 +235,33 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const modalContent = (
     <div 
-      className="auth-modal-backdrop-fixed"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        zIndex: 9999
+      }}
       onClick={onClose}
     >
       {/* Modal Window */}
       <div 
-        className="auth-modal-window"
+        className="window w-full max-w-md relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
-            {isSignUp ? 'Create Account' : 'Sign In'}
+            {currentStep === 'auth' 
+              ? (isSignUp ? 'Create Account' : 'Sign In')
+              : 'Complete Your Profile'
+            }
           </div>
           <div className="title-bar-controls">
             <button aria-label="Close" onClick={onClose}></button>
@@ -159,118 +269,234 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         </div>
 
         {/* Window Body */}
-        <div className="window-body auth-modal-body">
-          {/* Tab Switcher */}
-          <div className="flex mb-4 border-b">
-            <button
-              type="button"
-              className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-                !isSignUp 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => {
-                setIsSignUp(false);
-                setError(null);
-              }}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-                isSignUp 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => {
-                setIsSignUp(true);
-                setError(null);
-              }}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
-                disabled={loading}
-                autoComplete="email"
-                placeholder="Enter your email"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="password">
-                Password {isSignUp && '(min. 8 characters)'}
-              </Label>
-              <Input 
-                id="password" 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
-                minLength={isSignUp ? 8 : undefined}
-                disabled={loading}
-                autoComplete={isSignUp ? "new-password" : "current-password"}
-                placeholder="Enter your password"
-              />
-            </div>
-
-            {error && (
-              <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
-                {error}
+        <div className="window-body p-6">
+          {currentStep === 'auth' ? (
+            <>
+              {/* Tab Switcher */}
+              <div className="flex mb-4 border-b">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                    !isSignUp 
+                      ? 'border-blue-500 text-blue-600' 
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setError(null);
+                  }}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                    isSignUp 
+                      ? 'border-blue-500 text-blue-600' 
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setError(null);
+                  }}
+                >
+                  Sign Up
+                </button>
               </div>
-            )}
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={loading}
-            >
-              {loading 
-                ? (isSignUp ? 'Creating Account...' : 'Signing In...') 
-                : (isSignUp ? 'Create Account' : 'Sign In')
-              }
-            </Button>
-          </form>
-          
-          {/* Divider */}
-          <div className="flex items-center my-4">
-            <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
-            <span className="mx-2 text-xs text-gray-500 dark:text-gray-400">OR</span>
-            <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
-          </div>
-          
-          {/* OAuth Buttons */}
-          <div className="flex flex-col gap-2">
-            <Button 
-              type="button"
-              variant="outline" 
-              onClick={() => handleOAuth('oauth_google')} 
-              disabled={loading}
-              className="oauth-button google-button"
-            >
-              Continue with Google
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOAuth('oauth_discord')}
-              disabled={loading}
-              className="oauth-button discord-button"
-            >
-              Continue with Discord
-            </Button>
-          </div>
+              {/* Auth Form */}
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                    disabled={loading}
+                    autoComplete="email"
+                    placeholder="Enter your email"
+                  />
+                </div>
+
+                {/* Username field - only for sign up */}
+                {isSignUp && (
+                  <div>
+                    <Label htmlFor="username">Username</Label>
+                    <Input 
+                      id="username" 
+                      type="text" 
+                      value={authUsername} 
+                      onChange={(e) => setAuthUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20))} 
+                      required 
+                      minLength={3}
+                      maxLength={20}
+                      disabled={loading}
+                      placeholder="Enter username"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">3-20 characters. Letters, numbers, and underscores only.</p>
+                  </div>
+                )}
+                
+                <div>
+                  <Label htmlFor="password">
+                    Password {isSignUp && '(min. 8 characters)'}
+                  </Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    minLength={isSignUp ? 8 : undefined}
+                    disabled={loading}
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                {error && (
+                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={loading}
+                >
+                  {loading 
+                    ? (isSignUp ? 'Creating Account...' : 'Signing In...') 
+                    : (isSignUp ? 'Create Account' : 'Sign In')
+                  }
+                </Button>
+              </form>
+              
+              {/* Divider */}
+              <div className="flex items-center my-4">
+                <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+                <span className="mx-2 text-xs text-gray-500 dark:text-gray-400">OR</span>
+                <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+              </div>
+              
+              {/* OAuth Buttons */}
+              <div className="flex flex-col gap-2">
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  onClick={() => handleOAuth('oauth_google')} 
+                  disabled={loading}
+                  className="w-full"
+                >
+                  Continue with Google
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOAuth('oauth_discord')}
+                  disabled={loading}
+                  className="w-full"
+                >
+                  Continue with Discord
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Onboarding Form */}
+              <form onSubmit={handleOnboardingSubmit} className="space-y-4">
+                {/* Avatar Upload */}
+                <div>
+                  <Label>Profile Picture (Optional)</Label>
+                  <div className="mt-2 flex items-center space-x-4">
+                    <div className="h-16 w-16 rounded-full overflow-hidden bg-gray-100 border">
+                      {avatarPreview ? (
+                        <Image 
+                          src={avatarPreview} 
+                          alt="Avatar preview" 
+                          width={64} 
+                          height={64} 
+                          className="object-cover h-full w-full" 
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-gray-400">
+                          <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="outline"
+                      onClick={() => document.getElementById('avatar-input')?.click()}
+                      disabled={loading}
+                    >
+                      Choose Image
+                    </Button>
+                    <input
+                      id="avatar-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Display Name */}
+                <div>
+                  <Label htmlFor="displayName">Display Name</Label>
+                  <Input
+                    id="displayName"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value.slice(0, 30))}
+                    required
+                    maxLength={30}
+                    disabled={loading}
+                    placeholder="Enter display name"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This will be shown in chats.</p>
+                </div>
+
+                {/* Show username being used */}
+                <div>
+                  <Label>Username (from signup)</Label>
+                  <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
+                    @{authUsername}
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCurrentStep('auth')}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    {loading ? 'Saving...' : 'Complete Setup'}
+                  </Button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
       </div>
     </div>
