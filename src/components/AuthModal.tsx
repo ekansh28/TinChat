@@ -1,4 +1,4 @@
-// src/components/AuthModal.tsx - UPDATED WITH PORTAL
+// src/components/AuthModal.tsx - UPDATED WITH PORTAL AND USERNAME
 'use client';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,6 +15,7 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +59,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password || (isSignUp && !username)) return;
     
     setError(null);
     setLoading(true);
@@ -69,6 +70,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
         const result = await signUp.create({
           emailAddress: email,
+          username, // Add username to sign up
           password,
         });
 
@@ -176,6 +178,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             >
               Sign In
             </button>
+              <div id="clerk-captcha"></div>
             <button
               type="button"
               className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
@@ -187,6 +190,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 setIsSignUp(true);
                 setError(null);
               }}
+              
             >
               Sign Up
             </button>
@@ -207,6 +211,24 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 placeholder="Enter your email"
               />
             </div>
+
+            {isSignUp && (
+              <div>
+                <Label htmlFor="username">Username</Label>
+                <Input 
+                  id="username" 
+                  type="text" 
+                  value={username} 
+                  onChange={(e) => setUsername(e.target.value)} 
+                  required 
+                  disabled={loading}
+                  autoComplete="username"
+                  placeholder="Choose a username"
+                  minLength={3}
+                  maxLength={30}
+                />
+              </div>
+            )}
             
             <div>
               <Label htmlFor="password">

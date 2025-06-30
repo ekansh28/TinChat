@@ -15,12 +15,12 @@ const nextConfig = {
         https://*.paypal.com https://*.paypalobjects.com
         https://*.googleapis.com https://unpkg.com
         https://static.cloudflareinsights.com https://cdn.jsdelivr.net
-        https://*.clerk.accounts.dev;
+        https://*.clerk.accounts.dev https://challenges.cloudflare.com;
       script-src-elem 'self' 'unsafe-inline' ${cdn}
         https://*.paypal.com https://*.paypalobjects.com
         https://*.googleapis.com https://unpkg.com
         https://static.cloudflareinsights.com https://cdn.jsdelivr.net
-        https://*.clerk.accounts.dev;
+        https://*.clerk.accounts.dev https://challenges.cloudflare.com;
       style-src 'self' 'unsafe-inline' ${cdn} https://fonts.googleapis.com https://unpkg.com;
       font-src 'self' ${cdn} https://fonts.gstatic.com https://unpkg.com;
       img-src 'self' data: blob: *;
@@ -31,12 +31,14 @@ const nextConfig = {
         https://*.clerk.accounts.dev https://clerk-telemetry.com
         https://unpkg.com https://s3-us-east-2.amazonaws.com
         https://static.cloudflareinsights.com;
-      frame-src 'self' ${cdn} https://*.youtube.com https://*.paypal.com;
+      frame-src 'self' ${cdn} https://*.youtube.com https://*.paypal.com https://challenges.cloudflare.com;
       object-src 'none';
       worker-src 'self' ${cdn} blob:;
       manifest-src 'self' ${cdn};
       base-uri 'self';
     `.replace(/\n/g, ' ').trim();
+
+
 
     return [
       {
