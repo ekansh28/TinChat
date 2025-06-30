@@ -1,4 +1,4 @@
-// server/middleware/clerkAuth.ts - ENHANCED CLERK AUTHENTICATION MIDDLEWARE
+// server/middleware/clerkAuth.ts - FIXED CLERK AUTHENTICATION
 import { verifyToken, createClerkClient } from '@clerk/backend';
 import { IncomingMessage } from 'http';
 import { logger } from '../utils/logger';
@@ -34,7 +34,7 @@ export interface AuthResult {
 
 // Cache for verified tokens to reduce API calls
 const tokenCache = new LRUCache<{ userId: string; user?: ClerkUser }>(1000);
-const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes - for reference only, LRUCache handles TTL internally
+const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Initialize Clerk client
 let clerkClient: any = null;
@@ -110,7 +110,7 @@ function extractToken(req: IncomingMessage): string | null {
 }
 
 /**
- * Verify Clerk token and return user information
+ * ✅ FIXED: Use correct verifyToken API (no issuer property needed)
  */
 export async function verifyClerkToken(req: IncomingMessage): Promise<AuthResult> {
   try {
@@ -137,64 +137,130 @@ export async function verifyClerkToken(req: IncomingMessage): Promise<AuthResult
       };
     }
 
-    // Verify token with Clerk using the correct API
-    const payload = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
-    });
-
-    if (!payload || !payload.sub) {
-      return { 
-        userId: null, 
-        isAuthenticated: false, 
-        error: 'Invalid token payload' 
-      };
+    if (!clerkClient) {
+      throw new Error('Clerk client not initialized');
     }
 
-    const userId = payload.sub;
+    // ✅ Method 1: Try session-based verification first (most reliable)
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        const sessionId = payload.sid;
+        
+        if (sessionId) {
+          const session = await clerkClient.sessions.getSession(sessionId);
+          
+          if (session && session.status === 'active') {
+            const userId = session.userId;
+            
+            // Get user details
+            let user: ClerkUser | undefined;
+            try {
+              const clerkUser = await clerkClient.users.getUser(userId);
+              user = {
+                id: clerkUser.id,
+                emailAddresses: clerkUser.emailAddresses.map((email: any) => ({
+                  emailAddress: email.emailAddress,
+                  verification: email.verification
+                })),
+                username: clerkUser.username,
+                firstName: clerkUser.firstName,
+                lastName: clerkUser.lastName,
+                imageUrl: clerkUser.imageUrl,
+                createdAt: clerkUser.createdAt,
+                updatedAt: clerkUser.updatedAt,
+                lastSignInAt: clerkUser.lastSignInAt,
+                banned: clerkUser.banned,
+                locked: clerkUser.locked
+              };
+            } catch (userError) {
+              logger.warn(`Failed to fetch user details for ${userId}:`, userError);
+            }
 
-    // Get user details from Clerk if client is available
-    let user: ClerkUser | undefined;
-    if (clerkClient) {
-      try {
-        const clerkUser = await clerkClient.users.getUser(userId);
-        user = {
-          id: clerkUser.id,
-          emailAddresses: clerkUser.emailAddresses.map((email: any) => ({
-            emailAddress: email.emailAddress,
-            verification: email.verification
-          })),
-          username: clerkUser.username,
-          firstName: clerkUser.firstName,
-          lastName: clerkUser.lastName,
-          imageUrl: clerkUser.imageUrl,
-          createdAt: clerkUser.createdAt,
-          updatedAt: clerkUser.updatedAt,
-          lastSignInAt: clerkUser.lastSignInAt,
-          banned: clerkUser.banned,
-          locked: clerkUser.locked
-        };
-      } catch (userError) {
-        logger.warn(`Failed to fetch user details for ${userId}:`, userError);
+            // Cache the result
+            tokenCache.set(cacheKey, { userId, user });
+
+            logger.debug(`✅ Clerk session verified for user: ${userId}`);
+            
+            return {
+              userId,
+              isAuthenticated: true,
+              user,
+              cached: false
+            };
+          }
+        }
       }
+    } catch (sessionError) {
+      logger.debug('Session verification failed, trying token verification:', sessionError);
     }
 
-    // Cache the result (LRUCache set method takes key, value)
-    tokenCache.set(cacheKey, { userId, user });
+    // ✅ Method 2: Use verifyToken with only required parameters
+    try {
+      const payload = await verifyToken(token, {
+        secretKey: process.env.CLERK_SECRET_KEY!,
+      });
 
-    logger.debug(`✅ Clerk token verified for user: ${userId}`);
-    
-    return {
-      userId,
-      isAuthenticated: true,
-      user,
-      cached: false
-    };
+      if (!payload || !payload.sub) {
+        return { 
+          userId: null, 
+          isAuthenticated: false, 
+          error: 'Invalid token payload' 
+        };
+      }
+
+      const userId = payload.sub;
+
+      // Get user details
+      let user: ClerkUser | undefined;
+      if (clerkClient) {
+        try {
+          const clerkUser = await clerkClient.users.getUser(userId);
+          user = {
+            id: clerkUser.id,
+            emailAddresses: clerkUser.emailAddresses.map((email: any) => ({
+              emailAddress: email.emailAddress,
+              verification: email.verification
+            })),
+            username: clerkUser.username,
+            firstName: clerkUser.firstName,
+            lastName: clerkUser.lastName,
+            imageUrl: clerkUser.imageUrl,
+            createdAt: clerkUser.createdAt,
+            updatedAt: clerkUser.updatedAt,
+            lastSignInAt: clerkUser.lastSignInAt,
+            banned: clerkUser.banned,
+            locked: clerkUser.locked
+          };
+        } catch (userError) {
+          logger.warn(`Failed to fetch user details for ${userId}:`, userError);
+        }
+      }
+
+      // Cache the result
+      tokenCache.set(cacheKey, { userId, user });
+
+      logger.debug(`✅ Clerk token verified for user: ${userId}`);
+      
+      return {
+        userId,
+        isAuthenticated: true,
+        user,
+        cached: false
+      };
+
+    } catch (tokenError) {
+      logger.warn('Token verification also failed:', tokenError);
+      throw tokenError;
+    }
 
   } catch (error: any) {
     logger.warn('Clerk token verification failed:', {
       error: error.message,
       code: error.code,
-      status: error.status
+      status: error.status,
+      type: error.name
     });
     
     return { 
@@ -237,39 +303,7 @@ export async function requireAuth(req: IncomingMessage): Promise<AuthResult> {
 }
 
 /**
- * Check if a user has specific permissions or roles
- */
-export async function checkUserPermissions(userId: string, requiredPermissions: string[]): Promise<boolean> {
-  if (!clerkClient) {
-    logger.warn('Clerk client not available for permission check');
-    return false;
-  }
-
-  try {
-    // Get user's organization memberships and roles
-    const user = await clerkClient.users.getUser(userId);
-    const organizationMemberships = await clerkClient.users.getOrganizationMembershipList({ userId });
-
-    // Check if user has required permissions
-    // This is a simplified example - adjust based on your permission model
-    for (const membership of organizationMemberships) {
-      const role = membership.role;
-      if (role === 'admin' || role === 'moderator') {
-        return true; // Admins and moderators have all permissions
-      }
-    }
-
-    // Check specific permissions
-    // You would implement your own permission logic here
-    return false;
-  } catch (error) {
-    logger.error(`Failed to check permissions for user ${userId}:`, error);
-    return false;
-  }
-}
-
-/**
- * Get user profile information from Clerk
+ * ✅ ENHANCED: Get user profile with better error handling
  */
 export async function getClerkUserProfile(userId: string): Promise<ClerkUser | null> {
   if (!clerkClient) {
@@ -314,117 +348,109 @@ export async function getClerkUserProfile(userId: string): Promise<ClerkUser | n
 }
 
 /**
- * Batch get user profiles for multiple users
+ * ✅ NEW: Check if username exists in Clerk
  */
-export async function getClerkUserProfiles(userIds: string[]): Promise<Record<string, ClerkUser | null>> {
-  if (!clerkClient || userIds.length === 0) {
-    return {};
-  }
-
-  const results: Record<string, ClerkUser | null> = {};
-  const uncachedIds: string[] = [];
-
-  // Check cache first
-  for (const userId of userIds) {
-    const cacheKey = `user:${userId}`;
-    const cached = tokenCache.get(cacheKey);
-    if (cached && cached.user) {
-      results[userId] = cached.user;
-    } else {
-      uncachedIds.push(userId);
-    }
-  }
-
-  // Fetch uncached users
-  if (uncachedIds.length > 0) {
-    try {
-      // Clerk doesn't have a batch get users API, so we fetch individually
-      const promises = uncachedIds.map(async (userId) => {
-        try {
-          const user = await getClerkUserProfile(userId);
-          return { userId, user };
-        } catch (error) {
-          logger.warn(`Failed to fetch user ${userId}:`, error);
-          return { userId, user: null };
-        }
-      });
-
-      const fetchResults = await Promise.allSettled(promises);
-      fetchResults.forEach((result) => {
-        if (result.status === 'fulfilled') {
-          results[result.value.userId] = result.value.user;
-        }
-      });
-
-    } catch (error) {
-      logger.error('Batch user profile fetch failed:', error);
-    }
-  }
-
-  return results;
-}
-
-/**
- * Validate that a user account is in good standing
- */
-export async function validateUserAccount(userId: string): Promise<{
-  valid: boolean;
+export async function checkClerkUsernameAvailability(username: string): Promise<{
+  available: boolean;
   reason?: string;
 }> {
+  if (!clerkClient) {
+    return { available: false, reason: 'Clerk client not available' };
+  }
+
   try {
-    const user = await getClerkUserProfile(userId);
+    // Try to get users with this username
+    const userList = await clerkClient.users.getUserList({
+      username: [username.toLowerCase()]
+    });
+
+    const isAvailable = !userList || userList.length === 0;
+
+    return {
+      available: isAvailable,
+      reason: isAvailable ? undefined : 'Username is already taken'
+    };
+  } catch (error: any) {
+    logger.error(`Failed to check username availability for ${username}:`, error);
     
-    if (!user) {
-      return { valid: false, reason: 'User not found' };
-    }
-
-    if (user.banned) {
-      return { valid: false, reason: 'User account is banned' };
-    }
-
-    if (user.locked) {
-      return { valid: false, reason: 'User account is locked' };
-    }
-
-    // Check if user has verified email
-    const hasVerifiedEmail = user.emailAddresses.some(
-      email => email.verification?.status === 'verified'
-    );
-
-    if (!hasVerifiedEmail) {
-      return { valid: false, reason: 'Email not verified' };
-    }
-
-    return { valid: true };
-  } catch (error) {
-    logger.error(`Failed to validate user account ${userId}:`, error);
-    return { valid: false, reason: 'Validation failed' };
+    // If the API call fails, we can't determine availability
+    return { 
+      available: false, 
+      reason: 'Unable to check username availability' 
+    };
   }
 }
 
 /**
- * Create or update user metadata in Clerk
+ * ✅ ENHANCED: Health check with better error handling
  */
-export async function updateClerkUserMetadata(userId: string, metadata: Record<string, any>): Promise<boolean> {
+export async function testClerkConnection(): Promise<{
+  connected: boolean;
+  latency?: number;
+  error?: string;
+}> {
   if (!clerkClient) {
-    logger.warn('Clerk client not available for metadata update');
-    return false;
+    return {
+      connected: false,
+      error: 'Clerk client not initialized'
+    };
   }
 
   try {
-    await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: metadata
-    });
+    const startTime = Date.now();
+    
+    // Test with a simple API call
+    await clerkClient.users.getUserList({ limit: 1 });
+    
+    const latency = Date.now() - startTime;
+    
+    return {
+      connected: true,
+      latency
+    };
+  } catch (error: any) {
+    return {
+      connected: false,
+      error: error.message || 'Unknown error'
+    };
+  }
+}
 
-    // Invalidate cache for this user
-    const cacheKey = `user:${userId}`;
-    tokenCache.delete(cacheKey);
+/**
+ * ✅ ENHANCED: Extract user information for Socket.IO connections
+ */
+export async function authenticateSocketConnection(socket: any): Promise<AuthResult> {
+  try {
+    // Extract token from handshake
+    const token = socket.handshake.auth?.token || 
+                 socket.handshake.query?.token ||
+                 socket.request.headers?.authorization?.replace('Bearer ', '');
 
-    logger.info(`✅ Updated metadata for user ${userId}`);
-    return true;
+    if (!token) {
+      return {
+        userId: null,
+        isAuthenticated: false,
+        error: 'No token provided for socket connection'
+      };
+    }
+
+    // Create a mock request object for token verification
+    const mockRequest = {
+      headers: {
+        authorization: `Bearer ${token}`,
+        host: socket.request.headers.host || 'localhost'
+      },
+      url: socket.request.url || '/'
+    } as IncomingMessage;
+
+    return await verifyClerkToken(mockRequest);
   } catch (error) {
-    logger.error(`Failed to update metadata for user ${userId}:`, error);
-    return false;
+    logger.error('Socket authentication failed:', error);
+    return {
+      userId: null,
+      isAuthenticated: false,
+      error: 'Socket authentication failed'
+    };
   }
 }
 
@@ -453,80 +479,12 @@ export function clearAuthCaches(): void {
   logger.info('🧹 Cleared authentication caches');
 }
 
-/**
- * Health check for Clerk service
- */
-export async function testClerkConnection(): Promise<{
-  connected: boolean;
-  latency?: number;
-  error?: string;
-}> {
-  if (!clerkClient) {
-    return {
-      connected: false,
-      error: 'Clerk client not initialized'
-    };
-  }
-
-  try {
-    const startTime = Date.now();
-    
-    // Test by getting the current organization (this is a lightweight call)
-    await clerkClient.organizations.getOrganizationList();
-    
-    const latency = Date.now() - startTime;
-    
-    return {
-      connected: true,
-      latency
-    };
-  } catch (error) {
-    return {
-      connected: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
-}
-
-/**
- * Extract user information for Socket.IO connections
- */
-export async function authenticateSocketConnection(socket: any): Promise<AuthResult> {
-  try {
-    // Extract token from handshake
-    const token = socket.handshake.auth?.token || 
-                 socket.handshake.query?.token ||
-                 socket.request.headers?.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return {
-        userId: null,
-        isAuthenticated: false,
-        error: 'No token provided for socket connection'
-      };
-    }
-
-    // Create a mock request object for token verification
-    const mockRequest = {
-      headers: {
-        authorization: `Bearer ${token}`,
-        host: socket.request.headers.host
-      },
-      url: socket.request.url
-    } as IncomingMessage;
-
-    return await verifyClerkToken(mockRequest);
-  } catch (error) {
-    logger.error('Socket authentication failed:', error);
-    return {
-      userId: null,
-      isAuthenticated: false,
-      error: 'Socket authentication failed'
-    };
-  }
-}
-
-// Initialize Clerk on module load
+// ✅ FIXED: Initialize Clerk with environment validation
 if (process.env.CLERK_SECRET_KEY) {
-  initializeClerk();
+  const initialized = initializeClerk();
+  if (!initialized) {
+    logger.error('❌ Failed to initialize Clerk - check environment variables');
+  }
+} else {
+  logger.warn('⚠️ CLERK_SECRET_KEY not found - Clerk authentication disabled');
 }

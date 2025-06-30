@@ -1,5 +1,8 @@
 // server/index.ts - FIXED VERSION WITH PROPER SUPABASE AUTHENTICATION
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+// Load .env from project root (__dirname is server/ in source, dist/ in compiled)
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 import http from 'http';
 import { setCorsHeaders } from './config/cors';
 import { setupRoutes, updateGlobalStats } from './routes/healthRoutes';

@@ -15,8 +15,9 @@
   },
   "dependencies": {
     "@charlietango/use-element-size": "^2.2.0",
+    "@clerk/backend": "^2.3.1",
     "@clerk/clerk-sdk-node": "^4.13.23",
-    "@clerk/nextjs": "^6.23.1",
+    "@clerk/nextjs": "^6.23.2",
     "@genkit-ai/googleai": "^1.6.2",
     "@genkit-ai/next": "^1.6.2",
     "@google-cloud/storage": "^7.11.2",
@@ -64,8 +65,10 @@
     "recharts": "^2.15.1",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",
+    "svix": "^1.68.0",
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
+    "undici": "^7.11.0",
     "uuid": "^11.1.0",
     "webamp": "^1.5.0",
     "zod": "^3.24.2"
