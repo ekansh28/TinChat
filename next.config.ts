@@ -3,11 +3,12 @@ const nextConfig = {
   reactStrictMode: true,
 
   async headers() {
-    const supabaseHostname = "tmxoylgtaexpldsvvqhv.supabase.co";
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucnkpbrmjelpqopncqhc.supabase.co';
+    const supabaseHostname = new URL(supabaseUrl).hostname;
+
     const cdn = "https://cdn.sekansh21.workers.dev";
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'https://chat.tinchat.online';
     const socketWsUrl = socketServerUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-    const socketWssUrl = socketServerUrl.replace('http://', 'wss://').replace('https://', 'wss://');
 
     const cspHeader = `
       default-src 'self' ${cdn};
@@ -26,7 +27,7 @@ const nextConfig = {
       img-src 'self' data: blob: *;
       media-src 'self' blob: *;
       connect-src 'self'
-        ${cdn} ${socketServerUrl} ${socketWsUrl} ${socketWssUrl}
+        ${cdn} ${socketServerUrl} ${socketWsUrl}
         https://${supabaseHostname} wss://${supabaseHostname}
         https://*.clerk.accounts.dev https://clerk-telemetry.com
         https://unpkg.com https://s3-us-east-2.amazonaws.com
@@ -37,8 +38,6 @@ const nextConfig = {
       manifest-src 'self' ${cdn};
       base-uri 'self';
     `.replace(/\n/g, ' ').trim();
-
-
 
     return [
       {

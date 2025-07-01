@@ -1,15 +1,15 @@
-// src/components/ProfileCustomizer/index.tsx - ENHANCED WITH CHANGE DETECTION
+// src/components/ProfileCustomizer/index.tsx - COMPLETE VERSION
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@clerk/nextjs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { CustomizerPanel } from './components/CustomizerPanel';
 import type { UserProfile, Badge } from './types';
 import ProfileCardPreview from './components/ProfileCardPreview';
-import { fastProfileFetcher, profileCache } from '@/lib/fastProfileFetcher';
 
 // Helper function to deep compare objects for change detection
 const isEqual = (obj1: any, obj2: any): boolean => {
@@ -67,16 +67,14 @@ const LoadingSpinner98: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md'
 const LoadingState98: React.FC<{ 
   message: string; 
   progress?: number; 
-  isFromCache?: boolean;
   onCancel?: () => void;
-}> = ({ message, progress, isFromCache, onCancel }) => (
+}> = ({ message, progress, onCancel }) => (
   <div className="window-body">
     <div className="flex flex-col items-center justify-center p-8 space-y-4">
       <LoadingSpinner98 size="lg" />
       <div className="text-center space-y-2">
         <h3 className="text-lg font-bold flex items-center gap-2">
           Loading Profile
-          {isFromCache && <span className="text-xs bg-green-100 px-2 py-1 border border-gray-400 sunken">⚡ Fast</span>}
         </h3>
         <p className="text-gray-700">{message}</p>
         {progress !== undefined && (
@@ -99,49 +97,7 @@ const LoadingState98: React.FC<{
   </div>
 );
 
-// Enhanced auth hook
-const useAuth = () => {
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  useEffect(() => {
-    const getUser = async () => {
-      try {
-        setLoading(true);
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('Auth session error:', error);
-          setError(error.message);
-        } else {
-          setUser(session?.user || null);
-          setError(null);
-        }
-      } catch (error: any) {
-        console.error('Auth session exception:', error);
-        setError(error.message || 'Authentication error');
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    getUser();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state change:', event, !!session);
-      setUser(session?.user || null);
-      setError(null);
-      setLoading(false);
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-  
-  return { user, loading, error };
-};
-
-// Enhanced profile hook with change detection
+// Enhanced profile hook with change detection and Clerk integration
 const useProfileCustomizer = () => {
   const DEFAULT_PROFILE: UserProfile = {
     username: '',
@@ -164,10 +120,9 @@ const useProfileCustomizer = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isFromCache, setIsFromCache] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   
-  // ✅ NEW: Track original state for change detection
+  // Track original state for change detection
   const [originalProfile, setOriginalProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [originalBadges, setOriginalBadges] = useState<Badge[]>([]);
   const [originalCustomCSS, setOriginalCustomCSS] = useState<string>('');
@@ -179,13 +134,10 @@ const useProfileCustomizer = () => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (profile.id) {
-        fastProfileFetcher.cancelRequest(profile.id);
-      }
     };
-  }, [profile.id]);
+  }, []);
 
-  // ✅ NEW: Check if any changes have been made
+  // Check if any changes have been made
   const hasChanges = useMemo(() => {
     const profileChanged = !isEqual(profile, originalProfile);
     const badgesChanged = !isEqual(badges, originalBadges);
@@ -201,53 +153,51 @@ const useProfileCustomizer = () => {
     return profileChanged || badgesChanged || cssChanged;
   }, [profile, originalProfile, badges, originalBadges, customCSS, originalCustomCSS]);
 
-  // Fast profile loading with cache and proper cancellation handling
-  const loadProfile = useCallback(async (userId: string, forceRefresh: boolean = false) => {
-    if (!userId || !mountedRef.current) {
-      console.warn('No user ID provided to loadProfile or component unmounted');
+  // Load profile using clerk_id instead of Supabase user.id
+  const loadProfile = useCallback(async (clerkUserId: string) => {
+    if (!clerkUserId || !mountedRef.current) {
+      console.warn('No Clerk user ID provided to loadProfile or component unmounted');
       return;
     }
 
     const startTime = Date.now();
     setLoading(true);
     setError(null);
-    setLoadingProgress(0);
+    setLoadingProgress(10);
 
     try {
-      console.log(`ProfileCustomizer: Fast loading profile for ${userId}${forceRefresh ? ' (force refresh)' : ''}`);
+      console.log(`ProfileCustomizer: Loading profile for Clerk user ${clerkUserId}`);
       
-      const progressInterval = setInterval(() => {
-        if (!mountedRef.current) {
-          clearInterval(progressInterval);
-          return;
-        }
-        setLoadingProgress(prev => {
-          const next = prev + 15;
-          return next >= 90 ? 90 : next;
-        });
-      }, 100);
+      // Query by clerk_id instead of id
+      const { data: profileData, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('clerk_id', clerkUserId)
+        .single();
 
-      const profileData = await fastProfileFetcher.fetchFullProfile(userId, forceRefresh);
-
-      clearInterval(progressInterval);
-      
       if (!mountedRef.current) {
         console.log('ProfileCustomizer: Component unmounted during fetch');
         return;
       }
 
-      setLoadingProgress(100);
+      setLoadingProgress(60);
 
-      const fetchTime = Date.now() - startTime;
-      setIsFromCache(fetchTime < 200);
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('ProfileCustomizer: Fetch error:', fetchError);
+        throw new Error(fetchError.message || 'Failed to load profile');
+      }
+
+      setLoadingProgress(90);
 
       if (profileData) {
-        console.log(`ProfileCustomizer: Profile loaded in ${fetchTime}ms:`, profileData);
+        console.log(`ProfileCustomizer: Profile loaded:`, profileData);
         
         let parsedBadges: Badge[] = [];
         if (profileData.badges) {
           try {
-            parsedBadges = Array.isArray(profileData.badges) ? profileData.badges : [];
+            parsedBadges = Array.isArray(profileData.badges) 
+              ? profileData.badges 
+              : JSON.parse(profileData.badges);
             parsedBadges = parsedBadges.filter(badge => 
               badge && typeof badge === 'object' && badge.id && badge.url
             );
@@ -259,11 +209,12 @@ const useProfileCustomizer = () => {
 
         const loadedProfile = {
           ...profileData,
+          clerk_id: undefined,
           badges: undefined
         };
         const loadedCSS = profileData.profile_card_css || '';
 
-        // ✅ NEW: Set both current and original state
+        // Set both current and original state
         setProfile(loadedProfile);
         setBadges(parsedBadges);
         setCustomCSS(loadedCSS);
@@ -275,33 +226,37 @@ const useProfileCustomizer = () => {
         
         setError(null);
       } else {
-        console.log('ProfileCustomizer: No profile data returned, using defaults');
-        const defaultProfileWithId = { ...DEFAULT_PROFILE, id: userId };
+        console.log('ProfileCustomizer: No profile found, using defaults');
+        const defaultProfileWithClerk = { 
+          ...DEFAULT_PROFILE, 
+          username: '',
+          display_name: '',
+          avatar_url: ''
+        };
         
-        setProfile(defaultProfileWithId);
+        setProfile(defaultProfileWithClerk);
         setBadges([]);
         setCustomCSS('');
         
-        // Set original state
-        setOriginalProfile(defaultProfileWithId);
+        setOriginalProfile(defaultProfileWithClerk);
         setOriginalBadges([]);
         setOriginalCustomCSS('');
         
         setError(null);
       }
+
+      setLoadingProgress(100);
     } catch (error: any) {
       console.error('ProfileCustomizer: Load error:', error);
-      if (error.message !== 'Request was cancelled' && mountedRef.current) {
-        setError(error.message || 'Failed to load profile');
-      }
-      
       if (mountedRef.current) {
-        const defaultProfileWithId = { ...DEFAULT_PROFILE, id: userId };
-        setProfile(defaultProfileWithId);
+        setError(error.message || 'Failed to load profile');
+        
+        const defaultProfileWithClerk = { ...DEFAULT_PROFILE };
+        setProfile(defaultProfileWithClerk);
         setBadges([]);
         setCustomCSS('');
         
-        setOriginalProfile(defaultProfileWithId);
+        setOriginalProfile(defaultProfileWithClerk);
         setOriginalBadges([]);
         setOriginalCustomCSS('');
       }
@@ -313,23 +268,17 @@ const useProfileCustomizer = () => {
     }
   }, []);
 
-  // Retry with cache invalidation
-  const retryLoadProfile = useCallback((userId: string) => {
-    profileCache.invalidate(userId);
-    loadProfile(userId, true);
-  }, [loadProfile]);
-
-  // Enhanced save with optimistic updates
-  const saveProfile = useCallback(async (userId: string) => {
-    if (!userId || !mountedRef.current) {
-      throw new Error('User ID is required');
+  // Save profile using clerk_id and proper ID handling
+  const saveProfile = useCallback(async (clerkUserId: string) => {
+    if (!clerkUserId || !mountedRef.current) {
+      throw new Error('Clerk User ID is required');
     }
 
     setSaving(true);
     setError(null);
     
     try {
-      console.log('ProfileCustomizer: Saving profile for user:', userId);
+      console.log('ProfileCustomizer: Saving profile for Clerk user:', clerkUserId);
       
       // Enhanced validation
       if (!profile.username?.trim()) {
@@ -360,8 +309,17 @@ const useProfileCustomizer = () => {
         throw new Error('Maximum 10 badges allowed');
       }
 
+      // First, check if profile exists to get the internal ID
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('clerk_id', clerkUserId)
+        .single();
+
       const profileData = {
-        id: userId,
+        // Only include id if updating existing profile
+        ...(existingProfile ? { id: existingProfile.id } : {}),
+        clerk_id: clerkUserId,
         username: profile.username.trim(),
         display_name: profile.display_name?.trim() || null,
         avatar_url: profile.avatar_url?.trim() || null,
@@ -380,10 +338,11 @@ const useProfileCustomizer = () => {
 
       console.log('ProfileCustomizer: Saving profile data:', profileData);
 
+      // Use upsert with clerk_id conflict resolution
       const { error } = await supabase
         .from('user_profiles')
         .upsert(profileData, {
-          onConflict: 'id'
+          onConflict: 'clerk_id'
         });
 
       if (error) {
@@ -393,13 +352,10 @@ const useProfileCustomizer = () => {
 
       console.log('ProfileCustomizer: Profile saved successfully');
       
-      // ✅ NEW: Update original state after successful save
+      // Update original state after successful save
       setOriginalProfile(profile);
       setOriginalBadges([...badges]);
       setOriginalCustomCSS(customCSS);
-      
-      // Update cache with new data
-      profileCache.set(userId, { ...profileData, badges });
       
       setError(null);
     } catch (error: any) {
@@ -426,7 +382,7 @@ const useProfileCustomizer = () => {
     setLoadingProgress(0);
   }, []);
 
-  // ✅ NEW: Discard changes function
+  // Discard changes function
   const discardChanges = useCallback(() => {
     setProfile(originalProfile);
     setBadges([...originalBadges]);
@@ -443,14 +399,12 @@ const useProfileCustomizer = () => {
     saving,
     loading,
     error,
-    isFromCache,
     loadingProgress,
-    hasChanges, // ✅ NEW: Export change detection
+    hasChanges,
     saveProfile,
     loadProfile,
-    retryLoadProfile,
     resetToDefaults,
-    discardChanges // ✅ NEW: Export discard function
+    discardChanges
   };
 };
 
@@ -460,7 +414,8 @@ export interface ProfileCustomizerProps {
 }
 
 export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizerProps) {
-  const { user, loading: authLoading, error: authError } = useAuth();
+  // Use Clerk's useUser hook instead of Supabase auth
+  const { user, isLoaded, isSignedIn } = useUser();
   const { toast } = useToast();
   
   const {
@@ -473,14 +428,12 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     saving,
     loading,
     error,
-    isFromCache,
     loadingProgress,
-    hasChanges, // ✅ NEW: Use change detection
+    hasChanges,
     saveProfile,
     loadProfile,
-    retryLoadProfile,
     resetToDefaults,
-    discardChanges // ✅ NEW: Use discard function
+    discardChanges
   } = useProfileCustomizer();
 
   // Handle avatar upload
@@ -617,15 +570,24 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     });
   };
 
-  // Load profile when component opens
+  // Load profile when component opens with Clerk user ID
   useEffect(() => {
-    if (isOpen && user?.id && !authLoading) {
-      console.log('ProfileCustomizer: Fast loading profile for user:', user.id);
+    if (isOpen && user?.id && isLoaded && isSignedIn) {
+      console.log('ProfileCustomizer: Loading profile for Clerk user:', user.id);
+      
+      // Pre-populate with Clerk user data
+      setProfile(prev => ({
+        ...prev,
+        username: prev.username || user.username || '',
+        display_name: prev.display_name || user.firstName || user.username || '',
+        avatar_url: prev.avatar_url || user.imageUrl || '',
+      }));
+      
       loadProfile(user.id);
     }
-  }, [isOpen, user?.id, authLoading, loadProfile]);
+  }, [isOpen, user?.id, isLoaded, isSignedIn, loadProfile, setProfile]);
 
-  // ✅ NEW: Warn user about unsaved changes when closing
+  // Warn user about unsaved changes when closing
   const handleClose = useCallback(() => {
     if (hasChanges) {
       if (window.confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
@@ -651,7 +613,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
       await saveProfile(user.id);
       toast({
         title: "Profile Saved! ⚡",
-        description: "Your profile has been updated successfully and cached for fast loading!",
+        description: "Your profile has been updated successfully!",
         variant: "default"
       });
     } catch (error: any) {
@@ -673,7 +635,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     });
   }, [resetToDefaults, toast]);
 
-  // ✅ NEW: Handle discard changes
+  // Handle discard changes
   const handleDiscardChanges = useCallback(() => {
     if (window.confirm('Are you sure you want to discard all your changes?')) {
       discardChanges();
@@ -687,9 +649,9 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
   const handleRetry = useCallback(() => {
     if (user?.id) {
-      retryLoadProfile(user.id);
+      loadProfile(user.id);
     }
-  }, [user?.id, retryLoadProfile]);
+  }, [user?.id, loadProfile]);
 
   if (!isOpen) return null;
 
@@ -699,7 +661,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
-            Customize Your Profile ⚡ {isFromCache && <span className="text-xs">- Fast Cache</span>}
+            Customize Your Profile ⚡
             {hasChanges && <span className="text-xs text-red-600"> - Unsaved Changes</span>}
           </div>
           <div className="title-bar-controls">
@@ -709,35 +671,16 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
         {/* Window Body */}
         <div className="window-body" style={{ height: 'calc(100% - 33px)', overflow: 'hidden' }}>
-          {/* Show loading state while auth is loading */}
-          {authLoading && (
+          {/* Show loading state while Clerk is loading */}
+          {!isLoaded && (
             <LoadingState98 
-              message="Authenticating..."
+              message="Loading authentication..."
               progress={50}
             />
           )}
 
-          {/* Show auth error state */}
-          {authError && !authLoading && (
-            <div className="window-body">
-              <div className="flex items-center justify-center p-8">
-                <div className="text-center">
-                  <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">⚠️</span>
-                  </div>
-                  <h3 className="text-lg font-bold text-red-700 mb-2">Authentication Error</h3>
-                  <p className="text-gray-700 mb-4">{authError}</p>
-                  <div className="flex gap-2 justify-center">
-                    <button className="btn" onClick={() => window.location.reload()}>Retry</button>
-                    <button className="btn" onClick={handleClose}>Close</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Show auth required state */}
-          {!user && !authLoading && !authError && (
+          {isLoaded && !isSignedIn && (
             <div className="window-body">
               <div className="flex items-center justify-center p-8">
                 <div className="text-center">
@@ -753,16 +696,15 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           )}
 
           {/* Show loading state during profile fetch */}
-          {user && !authLoading && loading && (
+          {isLoaded && isSignedIn && user && loading && (
             <LoadingState98 
-              message={isFromCache ? "Loading from cache..." : "Fetching your profile data..."}
+              message="Fetching your profile data..."
               progress={loadingProgress}
-              isFromCache={isFromCache}
             />
           )}
 
           {/* Show error state */}
-          {user && !authLoading && !loading && error && (
+          {isLoaded && isSignedIn && user && !loading && error && (
             <div className="window-body">
               <div className="flex items-center justify-center p-8">
                 <div className="text-center">
@@ -781,7 +723,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           )}
 
           {/* Main Content */}
-          {user && !authLoading && !loading && !error && (
+          {isLoaded && isSignedIn && user && !loading && !error && (
             <div className="flex h-full">
               {/* Left Panel - Customization Controls */}
               <div className="flex-1 p-4 overflow-y-auto border-r border-gray-400" style={{ 
@@ -789,19 +731,19 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                 width: '60%',
                 maxWidth: '60%'
               }}>
-                {/* Performance indicator */}
-                {isFromCache && (
+                {/* Welcome message for new users */}
+                {!profile.profile_complete && (
                   <div className="mb-4 p-3 field-row sunken border border-gray-400 bg-green-50">
                     <div className="flex items-center gap-2">
-                      <span className="text-green-700">⚡</span>
+                      <span className="text-green-700">🎉</span>
                       <span className="text-green-800 text-sm font-bold">
-                        Profile loaded instantly from cache
+                        Welcome {user.firstName || user.username}! Let's set up your profile.
                       </span>
                     </div>
                   </div>
                 )}
 
-                {/* ✅ NEW: Changes indicator */}
+                {/* Changes indicator */}
                 {hasChanges && (
                   <div className="mb-4 p-3 field-row sunken border border-gray-400 bg-yellow-50">
                     <div className="flex items-center gap-2">
@@ -840,7 +782,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                 <div className="window">
                   <div className="title-bar">
                     <div className="title-bar-text">
-                      Live Preview {isFromCache && <span className="text-xs">⚡</span>}
+                      Live Preview
                     </div>
                   </div>
                   <div className="window-body">
@@ -880,7 +822,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                                     `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
                                 }}
                                 onClick={(e) => {
-                                  // ✅ NEW: Show profile popup on username click (simulated)
+                                  // Show profile popup preview
                                   e.preventDefault();
                                   alert(`In the actual chat, clicking "${profile.display_name || profile.username || 'Unknown User'}" would show your profile popup with all your customizations, badges, and CSS styling - just like Discord!`);
                                 }}
@@ -896,7 +838,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                         </div>
                       </div>
 
-                      {/* ✅ NEW: Profile popup preview note */}
+                      {/* Profile popup preview note */}
                       <div className="field-row">
                         <div className="sunken border border-gray-400 p-2 bg-blue-50">
                           <div className="text-xs text-blue-800">
@@ -911,6 +853,18 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                           </div>
                         </div>
                       </div>
+
+                      {/* User info display */}
+                      <div className="field-row">
+                        <div className="sunken border border-gray-400 p-2 bg-gray-50">
+                          <div className="text-xs text-gray-600">
+                            <div className="font-bold mb-1">👤 Account Info:</div>
+                            <div>Clerk ID: {user.id}</div>
+                            <div>Email: {user.emailAddresses?.[0]?.emailAddress}</div>
+                            <div>Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -918,8 +872,8 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             </div>
           )}
 
-          {/* ✅ ENHANCED: Footer Controls with change detection */}
-          {user && !authLoading && !loading && !error && (
+          {/* Footer Controls with change detection */}
+          {isLoaded && isSignedIn && user && !loading && !error && (
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gray-200 border-t border-gray-400" style={{ borderStyle: 'inset' }}>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2 items-center">
@@ -931,7 +885,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                     Reset to Defaults
                   </button>
                   
-                  {/* ✅ NEW: Discard changes button (only show when there are changes) */}
+                  {/* Discard changes button (only show when there are changes) */}
                   {hasChanges && (
                     <button
                       className="btn"
@@ -962,7 +916,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                     </div>
                   )}
                   
-                  {/* ✅ NEW: Changes indicator in footer */}
+                  {/* Changes indicator in footer */}
                   {hasChanges && !saving && (
                     <div className="flex items-center gap-1 text-sm text-yellow-700 bg-yellow-100 px-2 py-1 border border-yellow-400">
                       <span>⚠️</span>
@@ -978,7 +932,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                     {hasChanges ? 'Cancel' : 'Close'}
                   </button>
                   
-                  {/* ✅ ENHANCED: Save button only visible when there are changes */}
+                  {/* Save button only visible when there are changes */}
                   {hasChanges && (
                     <button
                       className="btn"
@@ -1036,6 +990,350 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         @keyframes pulse-warning {
           0%, 100% { box-shadow: 0 0 0 2px #fbbf24; }
           50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.5); }
+        }
+
+        /* Custom scrollbar styles */
+        .overflow-y-auto::-webkit-scrollbar {
+          width: 16px;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-track {
+          background: #c0c0c0;
+          border: 1px inset #c0c0c0;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+          background: #808080;
+          border: 1px outset #808080;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+          background: #606060;
+        }
+
+        /* Space utility classes */
+        .space-y-4 > * + * {
+          margin-top: 16px;
+        }
+
+        /* Text utility classes */
+        .text-xs {
+          font-size: 10px;
+        }
+
+        .text-sm {
+          font-size: 11px;
+        }
+
+        .text-lg {
+          font-size: 14px;
+        }
+
+        .font-bold {
+          font-weight: bold;
+        }
+
+        /* Color utility classes */
+        .text-gray-600 {
+          color: #666;
+        }
+
+        .text-gray-700 {
+          color: #555;
+        }
+
+        .text-red-600 {
+          color: #dc2626;
+        }
+
+        .text-red-700 {
+          color: #b91c1c;
+        }
+
+        .text-green-700 {
+          color: #15803d;
+        }
+
+        .text-green-800 {
+          color: #166534;
+        }
+
+        .text-yellow-700 {
+          color: #a16207;
+        }
+
+        .text-yellow-800 {
+          color: #92400e;
+        }
+
+        .text-blue-800 {
+          color: #1e40af;
+        }
+
+        /* Background utility classes */
+        .bg-gray-50 {
+          background-color: #f9fafb;
+        }
+
+        .bg-gray-100 {
+          background-color: #f3f4f6;
+        }
+
+        .bg-gray-200 {
+          background-color: #e5e7eb;
+        }
+
+        .bg-red-100 {
+          background-color: #fee2e2;
+        }
+
+        .bg-green-50 {
+          background-color: #f0fdf4;
+        }
+
+        .bg-yellow-50 {
+          background-color: #fefce8;
+        }
+
+        .bg-yellow-100 {
+          background-color: #fef3c7;
+        }
+
+        .bg-blue-50 {
+          background-color: #eff6ff;
+        }
+
+        .bg-blue-100 {
+          background-color: #dbeafe;
+        }
+
+        /* Border utility classes */
+        .border {
+          border-width: 1px;
+        }
+
+        .border-2 {
+          border-width: 2px;
+        }
+
+        .border-t {
+          border-top-width: 1px;
+        }
+
+        .border-r {
+          border-right-width: 1px;
+        }
+
+        .border-gray-400 {
+          border-color: #9ca3af;
+        }
+
+        .border-yellow-400 {
+          border-color: #fbbf24;
+        }
+
+        /* Flexbox utility classes */
+        .flex {
+          display: flex;
+        }
+
+        .items-center {
+          align-items: center;
+        }
+
+        .items-start {
+          align-items: flex-start;
+        }
+
+        .justify-center {
+          justify-content: center;
+        }
+
+        .justify-between {
+          justify-content: space-between;
+        }
+
+        .gap-1 {
+          gap: 4px;
+        }
+
+        .gap-2 {
+          gap: 8px;
+        }
+
+        .gap-4 {
+          gap: 16px;
+        }
+
+        /* Sizing utility classes */
+        .w-6 {
+          width: 24px;
+        }
+
+        .h-6 {
+          height: 24px;
+        }
+
+        .w-16 {
+          width: 64px;
+        }
+
+        .h-16 {
+          height: 64px;
+        }
+
+        .w-80 {
+          width: 320px;
+        }
+
+        /* Spacing utility classes */
+        .p-2 {
+          padding: 8px;
+        }
+
+        .p-3 {
+          padding: 12px;
+        }
+
+        .p-4 {
+          padding: 16px;
+        }
+
+        .p-8 {
+          padding: 32px;
+        }
+
+        .px-2 {
+          padding-left: 8px;
+          padding-right: 8px;
+        }
+
+        .py-1 {
+          padding-top: 4px;
+          padding-bottom: 4px;
+        }
+
+        .mb-1 {
+          margin-bottom: 4px;
+        }
+
+        .mb-2 {
+          margin-bottom: 8px;
+        }
+
+        .mb-4 {
+          margin-bottom: 16px;
+        }
+
+        .ml-3 {
+          margin-left: 12px;
+        }
+
+        .mt-1 {
+          margin-top: 4px;
+        }
+
+        .mx-auto {
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        /* Position utility classes */
+        .absolute {
+          position: absolute;
+        }
+
+        .relative {
+          position: relative;
+        }
+
+        .fixed {
+          position: fixed;
+        }
+
+        .inset-0 {
+          inset: 0;
+        }
+
+        .bottom-0 {
+          bottom: 0;
+        }
+
+        .left-0 {
+          left: 0;
+        }
+
+        .right-0 {
+          right: 0;
+        }
+
+        /* Z-index utility classes */
+        .z-50 {
+          z-index: 50;
+        }
+
+        /* Text alignment utility classes */
+        .text-center {
+          text-align: center;
+        }
+
+        /* Display utility classes */
+        .block {
+          display: block;
+        }
+
+        /* List utility classes */
+        .list-disc {
+          list-style-type: disc;
+        }
+
+        /* Misc utility classes */
+        .cursor-pointer {
+          cursor: pointer;
+        }
+
+        .hover\\:underline:hover {
+          text-decoration: underline;
+        }
+
+        .overflow-hidden {
+          overflow: hidden;
+        }
+
+        .overflow-y-auto {
+          overflow-y: auto;
+        }
+
+        .flex-1 {
+          flex: 1 1 0%;
+        }
+
+        .flex-col {
+          flex-direction: column;
+        }
+
+        /* Animation utility classes */
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .transition-all {
+          transition-property: all;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+          transition-duration: 150ms;
+        }
+
+        .duration-300 {
+          transition-duration: 300ms;
         }
       `}</style>
     </div>

@@ -1,5 +1,4 @@
-// app/api/sync-profile/route.ts
-// 📁 Create this file at: app/api/sync-profile/route.ts
+// app/api/sync-profile/route.ts - FIXED FOR YOUR SCHEMA
 import { headers } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { Webhook } from 'svix';
@@ -8,11 +7,16 @@ import { createClient } from '@supabase/supabase-js';
 // Initialize Supabase client with service role key for admin operations
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service role key for bypassing RLS
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    global: {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
     }
   }
 );
@@ -21,35 +25,44 @@ const supabase = createClient(
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET!;
 
 interface ClerkUserEvent {
-  type: 'user.created' | 'user.updated' | 'user.deleted';
+  type: 'user.created' | 'user.updated' | 'user.deleted' | 'email.created';
   data: {
-    id: string; // Clerk user ID (e.g., user_abc123)
-    username: string | null;
-    email_addresses: Array<{
+    id: string;
+    username?: string | null;
+    email_addresses?: Array<{
       email_address: string;
       verification?: {
         status: string;
       };
     }>;
-    first_name: string | null;
-    last_name: string | null;
-    image_url: string | null;
-    created_at: number;
-    updated_at: number;
-    banned: boolean;
-    locked: boolean;
+    first_name?: string | null;
+    last_name?: string | null;
+    image_url?: string | null;
+    created_at?: number;
+    updated_at?: number;
+    banned?: boolean;
+    locked?: boolean;
+    email_address?: string;
+    user_id?: string;
   };
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    console.log('🔗 Clerk webhook received');
+  console.log('🔗 Clerk webhook received at /api/sync-profile/');
+  console.log('⏰ Timestamp:', new Date().toISOString());
 
+  try {
     // Get headers for webhook verification
     const headersList = await headers();
     const svix_id = headersList.get('svix-id');
     const svix_timestamp = headersList.get('svix-timestamp');
     const svix_signature = headersList.get('svix-signature');
+
+    console.log('📋 Headers received:', {
+      svix_id: !!svix_id,
+      svix_timestamp: !!svix_timestamp,
+      svix_signature: !!svix_signature
+    });
 
     if (!svix_id || !svix_timestamp || !svix_signature) {
       console.error('❌ Missing Svix headers');
@@ -61,6 +74,7 @@ export async function POST(req: NextRequest) {
 
     // Get the raw body for signature verification
     const body = await req.text();
+    console.log('📄 Body received, length:', body.length);
 
     // Verify the webhook signature
     const wh = new Webhook(WEBHOOK_SECRET);
@@ -72,15 +86,17 @@ export async function POST(req: NextRequest) {
         'svix-timestamp': svix_timestamp,
         'svix-signature': svix_signature,
       }) as ClerkUserEvent;
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err);
+      
+      console.log('✅ Webhook signature verified');
+    } catch (err: any) {
+      console.error('❌ Webhook signature verification failed:', err.message);
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 400 }
       );
     }
 
-    console.log(`📋 Processing ${evt.type} event for user ${evt.data.id}`);
+    console.log(`📋 Processing ${evt.type} event for user ${evt.data.id || evt.data.user_id}`);
 
     // Handle different event types
     switch (evt.type) {
@@ -96,16 +112,27 @@ export async function POST(req: NextRequest) {
         await handleUserDeleted(evt.data.id);
         break;
       
+      case 'email.created':
+        console.log('📧 Email created event - ignoring for now');
+        break;
+      
       default:
         console.log(`ℹ️ Unhandled event type: ${evt.type}`);
     }
 
+    console.log('✅ Webhook processed successfully');
     return NextResponse.json({ success: true });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Webhook handler error:', error);
+    console.error('❌ Error stack:', error.stack);
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
@@ -114,18 +141,16 @@ export async function POST(req: NextRequest) {
 async function handleUserCreated(userData: ClerkUserEvent['data']) {
   try {
     console.log(`👤 Creating profile for ${userData.id}`);
+    console.log('📋 User data received:', {
+      id: userData.id,
+      username: userData.username,
+      email_addresses: userData.email_addresses?.length || 0,
+      first_name: userData.first_name,
+      last_name: userData.last_name,
+      image_url: !!userData.image_url
+    });
 
-    // Extract primary email
-    const primaryEmail = userData.email_addresses.find(
-      email => email.verification?.status === 'verified'
-    )?.email_address || userData.email_addresses[0]?.email_address;
-
-    if (!primaryEmail) {
-      console.error(`❌ No email found for user ${userData.id}`);
-      return;
-    }
-
-    // Generate display name
+    // Generate display name with fallbacks
     let displayName = '';
     if (userData.first_name && userData.last_name) {
       displayName = `${userData.first_name} ${userData.last_name}`;
@@ -134,30 +159,64 @@ async function handleUserCreated(userData: ClerkUserEvent['data']) {
     } else if (userData.username) {
       displayName = userData.username;
     } else {
-      displayName = primaryEmail.split('@')[0]; // Fallback to email prefix
+      // Fallback to email prefix if available
+      if (userData.email_addresses && userData.email_addresses.length > 0) {
+        displayName = userData.email_addresses[0].email_address.split('@')[0];
+      } else {
+        displayName = 'User'; // Final fallback
+      }
     }
 
-    // Insert new user profile
+    console.log('👤 Display name:', displayName);
+
+    // Generate username if not provided
+    let finalUsername = userData.username;
+    if (!finalUsername) {
+      if (userData.email_addresses && userData.email_addresses.length > 0) {
+        finalUsername = generateUsernameFromEmail(userData.email_addresses[0].email_address);
+      } else {
+        finalUsername = `user_${Math.random().toString(36).substring(2, 8)}`;
+      }
+      console.log('🔧 Generated username:', finalUsername);
+    }
+
+    // Check if profile already exists (prevent duplicates)
+    const { data: existingProfile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('clerk_id', userData.id)
+      .single();
+
+    if (existingProfile) {
+      console.log(`ℹ️ Profile already exists for ${userData.id}, skipping creation`);
+      return;
+    }
+
+    // Insert new user profile - explicitly provide UUID for id
     const { data, error } = await supabase
       .from('user_profiles')
       .insert({
+        id: crypto.randomUUID(), // Generate UUID manually
         clerk_id: userData.id,
-        username: userData.username || generateUsernameFromEmail(primaryEmail),
-        email: primaryEmail,
+        username: finalUsername,
         display_name: displayName,
-        avatar_url: userData.image_url,
-        status: 'online',
+        avatar_url: userData.image_url || null,
+        profile_complete: !!userData.username,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         is_online: true,
-        profile_complete: !!userData.username, // Profile is complete if username exists
-        created_at: new Date(userData.created_at).toISOString(),
-        updated_at: new Date(userData.updated_at).toISOString(),
         last_seen: new Date().toISOString(),
-        // Default values for new users
+        blocked_users: [],
+        bio: null,
+        profile_card_css: null,
+        banner_url: null,
+        pronouns: null,
+        status: 'online',
         display_name_color: '#667eea',
         display_name_animation: 'none',
         rainbow_speed: 3,
-        badges: [],
-        blocked_users: []
+        easy_customization_data: {},
+        badges: []
       })
       .select('id, username')
       .single();
@@ -173,7 +232,7 @@ async function handleUserCreated(userData: ClerkUserEvent['data']) {
       display_name: displayName
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ Error creating user ${userData.id}:`, error);
     throw error;
   }
@@ -183,11 +242,6 @@ async function handleUserUpdated(userData: ClerkUserEvent['data']) {
   try {
     console.log(`🔄 Updating profile for ${userData.id}`);
 
-    // Extract primary email
-    const primaryEmail = userData.email_addresses.find(
-      email => email.verification?.status === 'verified'
-    )?.email_address || userData.email_addresses[0]?.email_address;
-
     // Generate display name
     let displayName = '';
     if (userData.first_name && userData.last_name) {
@@ -196,20 +250,19 @@ async function handleUserUpdated(userData: ClerkUserEvent['data']) {
       displayName = userData.first_name;
     } else if (userData.username) {
       displayName = userData.username;
-    } else if (primaryEmail) {
-      displayName = primaryEmail.split('@')[0];
+    } else if (userData.email_addresses && userData.email_addresses.length > 0) {
+      displayName = userData.email_addresses[0].email_address.split('@')[0];
     }
 
     // Update existing user profile
     const { data, error } = await supabase
       .from('user_profiles')
       .update({
-        username: userData.username,
-        email: primaryEmail,
+        username: userData.username || undefined,
         display_name: displayName || undefined,
-        avatar_url: userData.image_url,
+        avatar_url: userData.image_url || undefined,
         profile_complete: !!userData.username,
-        updated_at: new Date(userData.updated_at).toISOString(),
+        updated_at: userData.updated_at ? new Date(userData.updated_at).toISOString() : new Date().toISOString(),
       })
       .eq('clerk_id', userData.id)
       .select('id, username')
@@ -217,6 +270,14 @@ async function handleUserUpdated(userData: ClerkUserEvent['data']) {
 
     if (error) {
       console.error(`❌ Failed to update profile for ${userData.id}:`, error);
+      
+      // If update fails because user doesn't exist, create them
+      if (error.code === 'PGRST116') { // No rows updated
+        console.warn(`⚠️ No profile found to update for ${userData.id}, creating new one`);
+        await handleUserCreated(userData);
+        return;
+      }
+      
       throw error;
     }
 
@@ -231,7 +292,7 @@ async function handleUserUpdated(userData: ClerkUserEvent['data']) {
       username: data.username
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ Error updating user ${userData.id}:`, error);
     throw error;
   }
@@ -241,26 +302,21 @@ async function handleUserDeleted(clerkId: string) {
   try {
     console.log(`🗑️ Handling deletion for ${clerkId}`);
 
-    // You might want to soft delete instead of hard delete
-    // to preserve referential integrity for messages, etc.
+    // OPTION A: Hard delete (permanently removes the user)
+    // WARNING: This will break references in other tables (messages, etc.)
     const { error } = await supabase
       .from('user_profiles')
-      .update({
-        status: 'deleted',
-        is_online: false,
-        email: null, // Clear PII
-        deleted_at: new Date().toISOString()
-      })
+      .delete()
       .eq('clerk_id', clerkId);
 
     if (error) {
-      console.error(`❌ Failed to mark user as deleted ${clerkId}:`, error);
+      console.error(`❌ Failed to delete user ${clerkId}:`, error);
       throw error;
     }
 
-    console.log(`✅ Marked user as deleted: ${clerkId}`);
+    console.log(`✅ Permanently deleted user: ${clerkId}`);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ Error deleting user ${clerkId}:`, error);
     throw error;
   }
@@ -276,15 +332,18 @@ function generateUsernameFromEmail(email: string): string {
   return `${cleaned}${suffix}`;
 }
 
-// Ensure environment variables are set
+// Environment variable validation
 if (!WEBHOOK_SECRET) {
+  console.error('❌ CLERK_WEBHOOK_SECRET environment variable is required');
   throw new Error('CLERK_WEBHOOK_SECRET environment variable is required');
 }
 
 if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  console.error('❌ NEXT_PUBLIC_SUPABASE_URL environment variable is required');
   throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is required');
 }
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('❌ SUPABASE_SERVICE_ROLE_KEY environment variable is required');
   throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required');
 }

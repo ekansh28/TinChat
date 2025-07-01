@@ -1,4 +1,4 @@
-// src/components/AuthModal.tsx - COMPLETE VERSION WITH ALL IMPORTS
+// src/components/AuthModal.tsx - ROBUST VERSION
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -28,6 +28,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [pendingVerification, setPendingVerification] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationLoading, setVerificationLoading] = useState(false);
+
+  // Profile sync state - simplified
+  const [completingSignup, setCompletingSignup] = useState(false);
 
   const { signIn, isLoaded: signInLoaded } = useSignIn();
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
@@ -66,7 +69,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen]);
 
-  // Real-time username availability check
+  // Real-time username availability check with better error handling
   useEffect(() => {
     if (!isSignUp || !username || username.length < 3) {
       setUsernameAvailable(null);
@@ -80,13 +83,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       try {
         console.log('🔍 Checking username:', username);
         
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const response = await fetch('/api/check-username', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ username: username.trim() }),
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -98,23 +108,32 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
         if (result.available) {
           setUsernameAvailable(true);
-          setError(null);
+          if (result.reason && result.reason.includes('Unable to verify')) {
+            setError(`⚠️ ${result.reason}`);
+          } else {
+            setError(null);
+          }
         } else {
           setUsernameAvailable(false);
           setError(result.reason || 'Username is not available');
         }
 
-      } catch (err) {
+      } catch (err: any) {
         console.error('Username check failed:', err);
         
-        // Fallback to basic client-side validation
-        const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-        if (!usernameRegex.test(username)) {
-          setUsernameAvailable(false);
-          setError('Username can only contain letters, numbers, underscores, and hyphens');
+        if (err.name === 'AbortError') {
+          setUsernameAvailable(null);
+          setError('Username check timed out. You can still proceed with signup.');
         } else {
-          setUsernameAvailable(null); // Unknown state
-          setError('Unable to check username availability');
+          // Fallback to basic client-side validation
+          const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+          if (!usernameRegex.test(username)) {
+            setUsernameAvailable(false);
+            setError('Username can only contain letters, numbers, underscores, and hyphens');
+          } else {
+            setUsernameAvailable(null);
+            setError('Unable to check username availability. You can still proceed with signup.');
+          }
         }
       } finally {
         setCheckingUsername(false);
@@ -125,6 +144,44 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     const timeoutId = setTimeout(checkUsername, 800);
     return () => clearTimeout(timeoutId);
   }, [username, isSignUp]);
+
+  // Simplified success handler - let Clerk webhook handle profile creation
+  const handleAuthSuccess = async (sessionId: string, userId?: string) => {
+    try {
+      console.log('✅ Authentication successful');
+      
+      if (setActive) {
+        await setActive({ session: sessionId });
+        console.log('✅ Session set successfully');
+      }
+
+      // For sign up, show brief completion message
+      if (isSignUp) {
+        setCompletingSignup(true);
+        
+        // Give webhook time to process in background
+        setTimeout(() => {
+          onClose();
+          window.location.reload();
+        }, 2000);
+      } else {
+        // For sign in, immediate redirect
+        onClose();
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+
+    } catch (error) {
+      console.error('❌ Auth success handler error:', error);
+      
+      // Fallback - still close modal and refresh
+      onClose();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +206,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         console.log('📋 Sign up result:', result.status);
 
         if (result.status === 'missing_requirements') {
-          // ✅ FIXED: Prepare email verification BEFORE switching to verification UI
           console.log('📧 Email verification required - preparing verification');
           
           try {
@@ -164,21 +220,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             setError('Failed to send verification email. Please try again.');
             setLoading(false);
           }
-        } else if (result.status === 'complete') {
-          // Sign up complete, set as active session
-          if (setActive && result.createdSessionId) {
-            await setActive({ session: result.createdSessionId });
-            console.log('✅ Sign up completed, session set');
-          }
-          onClose();
-          
-          // Small delay to let the session propagate
-          setTimeout(() => {
-            window.location.reload();
-          }, 100);
+        } else if (result.status === 'complete' && result.createdSessionId) {
+          console.log('✅ Sign up completed immediately');
+          await handleAuthSuccess(result.createdSessionId, result.createdUserId || undefined);
         } else {
           console.log('📧 Email verification required');
           setError('Please check your email for a verification link');
+          setLoading(false);
         }
       } else {
         // Sign In
@@ -193,21 +241,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
         console.log('📋 Sign in result:', result.status);
 
-        if (result.status === 'complete') {
-          if (setActive && result.createdSessionId) {
-            await setActive({ session: result.createdSessionId });
-            console.log('✅ Sign in completed, session set');
-          }
-          onClose();
-          
-          // Small delay to let the session propagate
-          setTimeout(() => {
-            window.location.reload();
-          }, 100);
+        if (result.status === 'complete' && result.createdSessionId) {
+          await handleAuthSuccess(result.createdSessionId);
         } else if (result.status === 'needs_second_factor') {
           setError('Two-factor authentication required');
+          setLoading(false);
         } else {
           setError('Sign in failed. Please check your credentials.');
+          setLoading(false);
         }
       }
     } catch (err: any) {
@@ -226,7 +267,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       } else {
         setError(isSignUp ? 'Failed to create account' : 'Failed to sign in');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -248,18 +288,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
       console.log('📋 Verification result:', result.status);
 
-      if (result.status === 'complete') {
-        if (setActive && result.createdSessionId) {
-          await setActive({ session: result.createdSessionId });
-          console.log('✅ Email verified and session set');
-        }
-        onClose();
-        
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+      if (result.status === 'complete' && result.createdSessionId) {
+        console.log('✅ Email verified and account created');
+        await handleAuthSuccess(result.createdSessionId, result.createdUserId || undefined);
       } else {
         setError('Verification failed. Please try again.');
+        setVerificationLoading(false);
       }
     } catch (err: any) {
       console.error('Verification error:', err);
@@ -279,7 +313,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       } else {
         setError('Invalid verification code. Please try again.');
       }
-    } finally {
       setVerificationLoading(false);
     }
   };
@@ -339,6 +372,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setUsernameAvailable(null);
     setPendingVerification(false);
     setVerificationCode('');
+    setCompletingSignup(false);
   };
 
   // Generate username suggestion from email
@@ -364,7 +398,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
-            {pendingVerification ? 'Email Verification' : (isSignUp ? 'Create Account' : 'Sign In')}
+            {completingSignup ? 'Welcome!' :
+             pendingVerification ? 'Email Verification' : 
+             (isSignUp ? 'Create Account' : 'Sign In')}
           </div>
           <div className="title-bar-controls">
             <button aria-label="Close" onClick={onClose}></button>
@@ -373,8 +409,21 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
         {/* Window Body */}
         <div className="window-body auth-modal-body">
-          {/* Show verification form if pending */}
-          {pendingVerification ? (
+          {/* Show completion message */}
+          {completingSignup ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-4">🎉</div>
+              <h3 className="text-lg font-semibold mb-2">Account Created Successfully!</h3>
+              <p className="text-sm text-gray-600">
+                Welcome to TinChat! We're setting up your profile in the background.
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                You'll be redirected in a moment...
+              </p>
+            </div>
+          ) : 
+          /* Show verification form if pending */
+          pendingVerification ? (
             <>
               <div className="mb-4">
                 <h3 className="text-lg font-semibold">Email Verification</h3>
@@ -574,7 +623,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 </div>
 
                 {error && (
-                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                  <div className={`text-xs p-2 border rounded ${
+                    error.includes('⚠️') 
+                      ? 'text-yellow-700 bg-yellow-100 border-yellow-400' 
+                      : 'text-red-600 bg-red-100 border-red-400'
+                  }`}>
                     {error}
                   </div>
                 )}
