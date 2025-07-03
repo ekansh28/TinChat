@@ -1,6 +1,6 @@
 // src/components/ProfileCustomizer/index.tsx - COMPLETE VERSION
 'use client';
-
+import './ProfileCustomizer.css';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { supabase } from '@/lib/supabase';

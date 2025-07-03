@@ -5,6 +5,7 @@ import { logger } from '../../../utils/logger';
 
 interface UserSearchResult {
   id: string;
+  clerk_id: string;  // Add this line
   username: string;
   display_name?: string;
   avatar_url?: string;
@@ -39,7 +40,7 @@ export class SearchModule {
       // Perform search
       const { data, error } = await this.supabase
         .from('user_profiles')
-        .select('id, username, display_name, avatar_url, is_online')
+        .select('id, clerk_id, username, display_name, avatar_url, is_online')  // Add clerk_id here
         .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
         .limit(limit);
 
@@ -47,6 +48,7 @@ export class SearchModule {
 
       const results = data?.map(user => ({
         id: user.id,
+        clerk_id: user.clerk_id,
         username: user.username,
         display_name: user.display_name,
         avatar_url: user.avatar_url,
@@ -82,7 +84,7 @@ export class SearchModule {
 
       const { data, error } = await this.supabase
         .from('user_profiles')
-        .select('id, username, display_name, avatar_url, is_online')
+        .select('id, clerk_id, username, display_name, avatar_url, is_online')  // Add clerk_id here
         .eq('username', username)
         .single();
 
@@ -95,6 +97,7 @@ export class SearchModule {
 
       const result = data ? {
         id: data.id,
+        clerk_id: data.clerk_id,
         username: data.username,
         display_name: data.display_name,
         avatar_url: data.avatar_url,
@@ -125,17 +128,17 @@ export class SearchModule {
         if (cached) {
           return cached;
         }
-      }
-
-      const { data, error } = await this.supabase
-        .from('user_profiles')
-        .select('id, username, display_name, avatar_url, is_online')
-        .in('id', userIds);
+      } 
+        const { data, error } = await this.supabase
+          .from('user_profiles')
+          .select('id, clerk_id, username, display_name, avatar_url, is_online')  // Add clerk_id here
+          .in('id', userIds);
 
       if (error) throw error;
 
       const results = data?.map(user => ({
         id: user.id,
+        clerk_id: user.clerk_id,
         username: user.username,
         display_name: user.display_name,
         avatar_url: user.avatar_url,

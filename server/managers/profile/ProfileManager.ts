@@ -1,4 +1,4 @@
-// server/managers/profile/ProfileManager.ts - FIXED VERSION WITH PROPER AUTH AND HEALTH CHECKS
+// server/managers/profile/ProfileManager.ts - FIXED FOR CLERK_ID SCHEMA
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../utils/logger';
@@ -13,9 +13,10 @@ import { SearchModule } from './modules/SearchModule';
 import { StatusModule } from './modules/StatusModule';
 import { BlockingModule } from './modules/BlockingModule';
 
-// Re-export types for backward compatibility.
+// ✅ FIXED: Added clerk_id to interface
 export interface UserProfile {
   id: string;
+  clerk_id: string; // ✅ CRITICAL: Added clerk_id field
   username: string;
   display_name?: string;
   avatar_url?: string;
@@ -38,7 +39,7 @@ export interface UserProfile {
 }
 
 export interface StatusUpdate {
-  authId: string;
+  authId: string; // This will be clerk_id
   status: UserStatus;
   lastSeen?: string;
 }
@@ -97,7 +98,7 @@ export class ProfileManager {
     if (this.supabase) {
       this.startBatchUpdates();
       this.startPeriodicCleanup();
-      logger.info('👤 Enhanced ProfileManager initialized with robust error handling');
+      logger.info('👤 Enhanced ProfileManager initialized with Clerk schema alignment');
     } else {
       logger.warn('👤 ProfileManager initialized without database connection');
     }
@@ -109,24 +110,28 @@ export class ProfileManager {
   }
 
   /**
-   * ✅ ENHANCED: Enhanced profile fetching with better error handling and optimized caching
+   * ✅ CRITICAL FIX: Fetch user profile by clerk_id instead of id
    */
-  async fetchUserProfile(authId: string): Promise<UserProfile | null> {
-    if (!this.supabase || !authId || this.isShuttingDown) {
-      logger.debug(`Profile fetch skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
+  async fetchUserProfile(clerkId: string): Promise<UserProfile | null> {
+    if (!this.supabase || !clerkId || this.isShuttingDown) {
+      logger.debug(`Profile fetch skipped: supabase=${!!this.supabase}, clerkId=${!!clerkId}, shutting down=${this.isShuttingDown}`);
       return null;
     }
     
+    console.log(`[ProfileManager] 🔍 Fetching profile for clerk_id: ${clerkId}`);
     const startTime = Date.now();
     
     // TIER 1: Check local LRU cache first (fastest)
-    const localCached = this.profileCache.get(authId);
+    const localCached = this.profileCache.get(clerkId);
     if (localCached) {
-      logger.debug(`📋 Local cache hit for profile ${authId} (${Date.now() - startTime}ms)`);
+      console.log(`[ProfileManager] ✅ Local cache hit for ${clerkId}:`, {
+        username: localCached.username,
+        display_name: localCached.display_name
+      });
       
       // Background Redis cache sync if available (but don't wait for it)
       if (this.redisService) {
-        this.syncToRedisInBackground(authId, localCached);
+        this.syncToRedisInBackground(clerkId, localCached);
       }
       
       return localCached;
@@ -135,29 +140,32 @@ export class ProfileManager {
     // TIER 2: Check Redis cache (medium speed) - but with timeout
     if (this.redisService) {
       try {
-        const redisProfile = await this.fetchFromRedisWithTimeout(authId, 1000); // 1 second timeout
+        const redisProfile = await this.fetchFromRedisWithTimeout(clerkId, 1000); // 1 second timeout
         if (redisProfile) {
-          logger.debug(`📋 Redis cache hit for profile ${authId} (${Date.now() - startTime}ms)`);
+          console.log(`[ProfileManager] ✅ Redis cache hit for ${clerkId}:`, {
+            username: redisProfile.username,
+            display_name: redisProfile.display_name
+          });
           
           // Update local cache
-          this.profileCache.set(authId, redisProfile);
+          this.profileCache.set(clerkId, redisProfile);
           return redisProfile;
         }
       } catch (error) {
-        logger.warn(`Redis profile fetch failed for ${authId}, falling back to database:`, error);
+        console.warn(`[ProfileManager] Redis profile fetch failed for ${clerkId}, falling back to database:`, error);
       }
     }
     
     // TIER 3: Fetch from database with enhanced error handling
-    return await this.fetchFromDatabaseWithRetry(authId, startTime);
+    return await this.fetchFromDatabaseWithRetry(clerkId, startTime);
   }
 
   /**
    * ✅ NEW: Fetch from Redis with timeout to prevent hanging
    */
-  private async fetchFromRedisWithTimeout(authId: string, timeout: number): Promise<UserProfile | null> {
+  private async fetchFromRedisWithTimeout(clerkId: string, timeout: number): Promise<UserProfile | null> {
     return Promise.race([
-      this.redisService!.getCachedUserProfile(authId),
+      this.redisService!.getCachedUserProfile(clerkId),
       new Promise<null>((_, reject) => 
         setTimeout(() => reject(new Error('Redis timeout')), timeout)
       )
@@ -165,50 +173,70 @@ export class ProfileManager {
   }
 
   /**
-   * ✅ NEW: Enhanced database fetch with retry logic
+   * ✅ CRITICAL FIX: Enhanced database fetch with clerk_id queries
    */
-  private async fetchFromDatabaseWithRetry(authId: string, startTime: number): Promise<UserProfile | null> {
+  private async fetchFromDatabaseWithRetry(clerkId: string, startTime: number): Promise<UserProfile | null> {
     for (let attempt = 0; attempt < this.MAX_CONNECTION_RETRIES; attempt++) {
       try {
-        logger.debug(`🔄 Fetching fresh profile from database for ${authId} (attempt ${attempt + 1})`);
+        console.log(`[ProfileManager] 🔄 Fetching fresh profile from database for clerk_id: ${clerkId} (attempt ${attempt + 1})`);
         
-        const profileData = await this.databaseModule.fetchProfile(authId);
+        // ✅ CRITICAL FIX: Query by clerk_id instead of id
+        const { data: profileData, error } = await this.supabase!
+          .from('user_profiles')
+          .select('*')
+          .eq('clerk_id', clerkId) // ✅ FIXED: Use clerk_id
+          .single();
+        
+        if (error) {
+          if (error.code === 'PGRST116') {
+            console.log(`[ProfileManager] ⚠️ No profile found for clerk_id: ${clerkId}`);
+            return null;
+          }
+          throw error;
+        }
         
         if (!profileData) {
-          logger.debug(`Empty profile data from database for ${authId}`);
+          console.log(`[ProfileManager] ⚠️ Empty profile data from database for clerk_id: ${clerkId}`);
           return null;
         }
         
-        const validatedProfile = this.parseAndValidateProfile(profileData, authId);
+        console.log(`[ProfileManager] ✅ Profile found for ${clerkId}:`, {
+          id: profileData.id,
+          clerk_id: profileData.clerk_id,
+          username: profileData.username,
+          display_name: profileData.display_name
+        });
+        
+        const validatedProfile = this.parseAndValidateProfile(profileData, clerkId);
         
         // ✅ ENHANCED: Check profile size before caching
         const profileSize = JSON.stringify(validatedProfile).length;
         if (profileSize > this.MAX_PROFILE_SIZE) {
-          logger.warn(`Profile ${authId} too large: ${profileSize} bytes, creating lightweight version`);
+          console.warn(`[ProfileManager] Profile ${clerkId} too large: ${profileSize} bytes, creating lightweight version`);
           const lightweightProfile = this.createLightweightProfile(validatedProfile);
-          this.profileCache.set(authId, lightweightProfile);
+          this.profileCache.set(clerkId, lightweightProfile);
           
           // Cache lightweight version in Redis too
           if (this.redisService) {
             const isFrequentlyUpdated = this.isFrequentlyUpdatedProfile(lightweightProfile);
-            this.redisService.cacheUserProfile(authId, lightweightProfile, isFrequentlyUpdated)
-              .catch(err => logger.debug(`Redis profile caching failed for ${authId}:`, err));
+            this.redisService.cacheUserProfile(clerkId, lightweightProfile, isFrequentlyUpdated)
+              .catch(err => logger.debug(`Redis profile caching failed for ${clerkId}:`, err));
           }
           
           return lightweightProfile;
         } else {
           // Cache in both local and Redis
-          this.profileCache.set(authId, validatedProfile);
+          this.profileCache.set(clerkId, validatedProfile);
           
           if (this.redisService) {
             const isFrequentlyUpdated = this.isFrequentlyUpdatedProfile(validatedProfile);
-            this.redisService.cacheUserProfile(authId, validatedProfile, isFrequentlyUpdated)
-              .catch(err => logger.debug(`Redis profile caching failed for ${authId}:`, err));
+            this.redisService.cacheUserProfile(clerkId, validatedProfile, isFrequentlyUpdated)
+              .catch(err => logger.debug(`Redis profile caching failed for ${clerkId}:`, err));
           }
         }
         
         const fetchTime = Date.now() - startTime;
-        logger.debug(`✅ Profile fetched from database and cached for ${authId} (${fetchTime}ms)`);
+        console.log(`[ProfileManager] ✅ Profile fetched from database and cached for ${clerkId} (${fetchTime}ms)`);
         
         this.connectionRetries = 0; // Reset retry counter on success
         return validatedProfile;
@@ -217,28 +245,271 @@ export class ProfileManager {
         this.connectionRetries++;
         
         if (err.message && err.message.includes('fetch failed')) {
-          logger.error(`❌ Database connection failed for ${authId} (attempt ${attempt + 1}):`, {
+          console.error(`[ProfileManager] ❌ Database connection failed for ${clerkId} (attempt ${attempt + 1}):`, {
             message: err.message,
             code: err.code || 'UNKNOWN',
-            authId: authId,
+            clerkId: clerkId,
             attempt: attempt + 1
           });
           
           if (attempt < this.MAX_CONNECTION_RETRIES - 1) {
-            logger.info(`⏳ Retrying database fetch for ${authId} in ${this.RETRY_DELAY}ms...`);
+            console.log(`[ProfileManager] ⏳ Retrying database fetch for ${clerkId} in ${this.RETRY_DELAY}ms...`);
             await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
             continue;
           }
         } else {
-          logger.error(`❌ Database error (non-network) for ${authId}:`, err);
+          console.error(`[ProfileManager] ❌ Database error (non-network) for ${clerkId}:`, err);
           break; // Don't retry for non-network errors
         }
       }
     }
     
-    logger.error(`❌ All database fetch attempts failed for ${authId}`);
+    console.error(`[ProfileManager] ❌ All database fetch attempts failed for ${clerkId}`);
     return null;
   }
+
+  /**
+   * ✅ CRITICAL FIX: Update user profile by clerk_id
+   */
+  async updateUserProfile(clerkId: string, updates: Partial<UserProfile>): Promise<boolean> {
+    if (!this.supabase || !clerkId || this.isShuttingDown) {
+      logger.debug(`Profile update skipped: supabase=${!!this.supabase}, clerkId=${!!clerkId}, shutting down=${this.isShuttingDown}`);
+      return false;
+    }
+
+    try {
+      console.log(`[ProfileManager] 🔄 Updating profile for clerk_id: ${clerkId}`, updates);
+
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+
+      // ✅ CRITICAL FIX: Update by clerk_id instead of id
+      const { data, error } = await this.supabase
+        .from('user_profiles')
+        .update(updateData)
+        .eq('clerk_id', clerkId) // ✅ FIXED: Use clerk_id
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`[ProfileManager] ❌ Failed to update profile for ${clerkId}:`, error);
+        return false;
+      }
+
+      if (!data) {
+        console.warn(`[ProfileManager] ⚠️ No profile updated for clerk_id: ${clerkId}`);
+        return false;
+      }
+
+      // ✅ ENHANCED: Smarter cache invalidation strategy
+      // Instead of immediate invalidation, update the cache with new data
+      const existingProfile = this.profileCache.get(clerkId);
+      if (existingProfile) {
+        const updatedProfile = { ...existingProfile, ...updateData };
+        this.profileCache.set(clerkId, updatedProfile);
+        console.log(`[ProfileManager] ✅ Updated local cache for ${clerkId} instead of invalidating`);
+      }
+      
+      // ✅ DELAYED: Invalidate Redis cache after a short delay to allow for multiple rapid updates
+      if (this.redisService) {
+        setTimeout(async () => {
+          try {
+            await this.redisService!.invalidateUserProfile(clerkId);
+            
+            // Invalidate friends lists if display data changed
+            if (updates.display_name !== undefined || updates.avatar_url !== undefined) {
+              await this.invalidateFriendsListsContainingUser(clerkId);
+            }
+            
+            // Update online status if status changed
+            if (updates.status !== undefined) {
+              const isOnline = updates.status === 'online';
+              await this.redisService!.cacheUserOnlineStatus(clerkId, isOnline, new Date());
+            }
+            
+          } catch (redisError) {
+            logger.warn(`Redis cache invalidation failed for ${clerkId}:`, redisError);
+          }
+        }, 2000); // ✅ 2 second delay to batch multiple updates
+      }
+
+      console.log(`[ProfileManager] ✅ Updated profile for ${clerkId}`);
+      return true;
+    } catch (err) {
+      console.error(`[ProfileManager] ❌ Exception updating profile for ${clerkId}:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * ✅ CRITICAL FIX: Create user profile with clerk_id
+   */
+  async createUserProfile(clerkId: string, username: string, displayName?: string): Promise<boolean> {
+    if (!this.supabase || !clerkId || this.isShuttingDown) {
+      logger.debug(`Profile creation skipped: supabase=${!!this.supabase}, clerkId=${!!clerkId}, shutting down=${this.isShuttingDown}`);
+      return false;
+    }
+
+    // Validate username
+    if (!username || username.length < 3 || username.length > 20) {
+      console.error(`[ProfileManager] ❌ Invalid username for ${clerkId}: ${username}`);
+      return false;
+    }
+
+    try {
+      console.log(`[ProfileManager] 👤 Creating profile for clerk_id: ${clerkId}`, { username, displayName });
+
+      // Check if profile already exists
+      const existing = await this.fetchUserProfile(clerkId);
+      if (existing) {
+        console.warn(`[ProfileManager] ⚠️ Profile already exists for clerk_id: ${clerkId}`);
+        return false;
+      }
+
+      // ✅ CRITICAL FIX: Create profile with clerk_id
+      const { data, error } = await this.supabase
+        .from('user_profiles')
+        .insert({
+          id: crypto.randomUUID(), // Generate new UUID for internal id
+          clerk_id: clerkId, // ✅ FIXED: Store clerk_id
+          username,
+          display_name: displayName || username,
+          status: 'offline',
+          is_online: false,
+          last_seen: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          profile_complete: true,
+          display_name_color: this.DEFAULT_PROFILE_COLOR,
+          display_name_animation: 'none',
+          rainbow_speed: 3,
+          blocked_users: [],
+          badges: [],
+          easy_customization_data: {}
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`[ProfileManager] ❌ Failed to create profile for ${clerkId}:`, error);
+        return false;
+      }
+
+      console.log(`[ProfileManager] ✅ Created profile for ${clerkId}:`, {
+        id: data.id,
+        clerk_id: data.clerk_id,
+        username: data.username
+      });
+      
+      // Invalidate caches
+      this.profileCache.delete(clerkId);
+      if (this.redisService) {
+        await this.redisService.invalidateUserProfile(clerkId);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`[ProfileManager] ❌ Exception creating profile for ${clerkId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * ✅ CRITICAL FIX: Delete user profile by clerk_id
+   */
+  async deleteUserProfile(clerkId: string): Promise<boolean> {
+    if (!this.supabase || !clerkId || this.isShuttingDown) {
+      logger.debug(`Profile deletion skipped: supabase=${!!this.supabase}, clerkId=${!!clerkId}, shutting down=${this.isShuttingDown}`);
+      return false;
+    }
+
+    try {
+      console.log(`[ProfileManager] 🗑️ Deleting profile for clerk_id: ${clerkId}`);
+
+      // ✅ CRITICAL FIX: Delete by clerk_id instead of id
+      const { error } = await this.supabase
+        .from('user_profiles')
+        .delete()
+        .eq('clerk_id', clerkId); // ✅ FIXED: Use clerk_id
+
+      if (error) {
+        console.error(`[ProfileManager] ❌ Failed to delete profile for ${clerkId}:`, error);
+        return false;
+      }
+
+      console.log(`[ProfileManager] ✅ Deleted profile for ${clerkId}`);
+      
+      // Clean up caches
+      this.profileCache.delete(clerkId);
+      if (this.redisService) {
+        await Promise.all([
+          this.redisService.invalidateUserProfile(clerkId),
+          this.redisService.invalidateFriendsList(clerkId),
+          this.redisService.cacheUserOnlineStatus(clerkId, false, new Date())
+        ]);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`[ProfileManager] ❌ Exception deleting profile for ${clerkId}:`, error);
+      return false;
+    }
+  }
+
+ // ===== CRITICAL FIX 1: Database Connection Resilience =====
+// Add this to your ProfileManager.updateUserStatus method
+
+async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
+  if (!this.supabase || !authId || this.isShuttingDown) {
+    logger.debug(`Status update skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
+    return false;
+  }
+  
+  const statusUpdate: StatusUpdate = {
+    authId,
+    status,
+    lastSeen: new Date().toISOString()
+  };
+  
+  // Add to batch queue (existing logic)
+  this.statusUpdateQueue.push(statusUpdate);
+  
+  // ✅ FIXED: Update local cache immediately with new status
+  const existingProfile = this.profileCache.get(authId);
+  if (existingProfile) {
+    existingProfile.status = status;
+    existingProfile.is_online = status === 'online';
+    existingProfile.last_seen = statusUpdate.lastSeen;
+    this.profileCache.set(authId, existingProfile);
+    logger.debug(`✅ Updated local cache status for ${authId}: ${status}`);
+  }
+  
+  // ✅ FIXED: Enhanced Redis status update with timeout and fallback
+  if (this.redisService) {
+    try {
+      // Use Promise.race to add timeout
+      await Promise.race([
+        Promise.allSettled([
+          this.statusModule.setOnlineStatus(authId, status === 'online'),
+          this.redisService.cacheUserOnlineStatus(authId, status === 'online', new Date())
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 2000))
+      ]);
+      
+      logger.debug(`📊 Status update cached for ${authId}: ${status}`);
+    } catch (error) {
+      // ✅ FIXED: Don't fail the entire operation if Redis fails
+      logger.warn(`Redis status update failed for ${authId} (non-critical):`, error instanceof Error ? error.message : error);
+      // Continue - local cache update was successful
+    }
+  }
+  
+  return true; // Return success as long as local update worked
+}
+
+  // ==================== EXISTING METHODS (keeping the rest of your implementation) ====================
 
   /**
    * ✅ NEW: Create lightweight version of profile by removing large data
@@ -277,201 +548,6 @@ export class ProfileManager {
   }
 
   /**
-   * ✅ ENHANCED: Profile update with better cache management
-   */
-  async updateUserProfile(authId: string, updates: Partial<UserProfile>): Promise<boolean> {
-    if (!this.supabase || !authId || this.isShuttingDown) {
-      logger.debug(`Profile update skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-      return false;
-    }
-
-    try {
-      const updateData = {
-        ...updates,
-        updated_at: new Date().toISOString()
-      };
-
-      const success = await this.databaseModule.updateProfile(authId, updateData);
-
-      if (!success) {
-        logger.error(`Failed to update profile for ${authId}`);
-        return false;
-      }
-
-      // ✅ ENHANCED: Smarter cache invalidation strategy
-      // Instead of immediate invalidation, update the cache with new data
-      const existingProfile = this.profileCache.get(authId);
-      if (existingProfile) {
-        const updatedProfile = { ...existingProfile, ...updateData };
-        this.profileCache.set(authId, updatedProfile);
-        logger.debug(`✅ Updated local cache for ${authId} instead of invalidating`);
-      }
-      
-      // ✅ DELAYED: Invalidate Redis cache after a short delay to allow for multiple rapid updates
-      if (this.redisService) {
-        setTimeout(async () => {
-          try {
-            await this.redisService!.invalidateUserProfile(authId);
-            
-            // Invalidate friends lists if display data changed
-            if (updates.display_name !== undefined || updates.avatar_url !== undefined) {
-              await this.invalidateFriendsListsContainingUser(authId);
-            }
-            
-            // Update online status if status changed
-            if (updates.status !== undefined) {
-              const isOnline = updates.status === 'online';
-              await this.redisService!.cacheUserOnlineStatus(authId, isOnline, new Date());
-            }
-            
-          } catch (redisError) {
-            logger.warn(`Redis cache invalidation failed for ${authId}:`, redisError);
-          }
-        }, 2000); // ✅ 2 second delay to batch multiple updates
-      }
-
-      logger.info(`✅ Updated profile for ${authId} with smart cache management`);
-      return true;
-    } catch (err) {
-      logger.error(`Exception updating profile for ${authId}:`, err);
-      return false;
-    }
-  }
-
-  /**
-   * Create a new user profile with basic required fields
-   */
-  async createUserProfile(authId: string, username: string, displayName?: string): Promise<boolean> {
-    if (!this.supabase || !authId || this.isShuttingDown) {
-      logger.debug(`Profile creation skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-      return false;
-    }
-
-    // Validate username
-    if (!username || username.length < 3 || username.length > 20) {
-      logger.error(`Invalid username for ${authId}: ${username}`);
-      return false;
-    }
-
-    try {
-      const profileData: Partial<UserProfile> = {
-        id: authId,
-        username,
-        display_name: displayName || username,
-        status: 'offline',
-        is_online: false,
-        last_seen: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        profile_complete: false,
-        display_name_color: this.DEFAULT_PROFILE_COLOR,
-        display_name_animation: 'none',
-        rainbow_speed: 3
-      };
-
-      const success = await this.databaseModule.createProfile(authId, profileData);
-
-      if (success) {
-        logger.info(`✅ Created new profile for ${authId} with username ${username}`);
-        
-        // Invalidate caches
-        this.profileCache.delete(authId);
-        if (this.redisService) {
-          await this.redisService.invalidateUserProfile(authId);
-        }
-        
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      logger.error(`Exception creating profile for ${authId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Delete a user profile and clean up related data
-   */
-  async deleteUserProfile(authId: string): Promise<boolean> {
-    if (!this.supabase || !authId || this.isShuttingDown) {
-      logger.debug(`Profile deletion skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-      return false;
-    }
-
-    try {
-      const success = await this.databaseModule.deleteProfile(authId);
-
-      if (success) {
-        logger.info(`✅ Deleted profile for ${authId}`);
-        
-        // Clean up caches
-        this.profileCache.delete(authId);
-        if (this.redisService) {
-          await Promise.all([
-            this.redisService.invalidateUserProfile(authId),
-            this.redisService.invalidateFriendsList(authId),
-            this.redisService.cacheUserOnlineStatus(authId, false, new Date())
-          ]);
-        }
-        
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      logger.error(`Exception deleting profile for ${authId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * ✅ ENHANCED: Status update with better error handling
-   */
-  async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
-    if (!this.supabase || !authId || this.isShuttingDown) {
-      logger.debug(`Status update skipped: supabase=${!!this.supabase}, authId=${!!authId}, shutting down=${this.isShuttingDown}`);
-      return false;
-    }
-    
-    const statusUpdate: StatusUpdate = {
-      authId,
-      status,
-      lastSeen: new Date().toISOString()
-    };
-    
-    // Add to batch queue
-    this.statusUpdateQueue.push(statusUpdate);
-    
-    // ✅ ENHANCED: Update local cache immediately with new status
-    const existingProfile = this.profileCache.get(authId);
-    if (existingProfile) {
-      existingProfile.status = status;
-      existingProfile.is_online = status === 'online';
-      existingProfile.last_seen = statusUpdate.lastSeen;
-      this.profileCache.set(authId, existingProfile);
-      logger.debug(`✅ Updated local cache status for ${authId}: ${status}`);
-    }
-    
-    // ✅ ENHANCED: Update Redis status without full cache invalidation
-    if (this.redisService) {
-      try {
-        await Promise.allSettled([
-          this.statusModule.setOnlineStatus(authId, status === 'online'),
-          // Don't invalidate the full profile, just update status-related caches
-          this.redisService.cacheUserOnlineStatus(authId, status === 'online', new Date())
-        ]);
-        
-        logger.debug(`📊 Status update cached for ${authId}: ${status}`);
-      } catch (error) {
-        logger.error(`Redis status update failed for ${authId}:`, error);
-      }
-    }
-    
-    return true;
-  }
-
-  /**
    * Test Redis connection and setup cache warming
    */
   private async testRedisConnection(): Promise<void> {
@@ -499,15 +575,15 @@ export class ProfileManager {
     try {
       const { data: recentProfiles } = await this.supabase
         .from('user_profiles')
-        .select('id, username, display_name, avatar_url, status, display_name_color')
+        .select('clerk_id, username, display_name, avatar_url, status, display_name_color')
         .gte('last_seen', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
         .eq('is_online', true)
         .limit(50);
       
       if (recentProfiles && recentProfiles.length > 0) {
         const cachePromises = recentProfiles.map(profile => 
-          this.redisService!.cacheUserProfile(profile.id, profile as UserProfile, false)
-            .catch(err => logger.debug(`Cache warming failed for ${profile.id}:`, err))
+          this.redisService!.cacheUserProfile(profile.clerk_id, profile as UserProfile, false)
+            .catch(err => logger.debug(`Cache warming failed for ${profile.clerk_id}:`, err))
         );
         
         await Promise.allSettled(cachePromises);
@@ -519,20 +595,20 @@ export class ProfileManager {
   }
 
   // Background Redis sync to avoid blocking main thread
-  private async syncToRedisInBackground(authId: string, profile: UserProfile): Promise<void> {
+  private async syncToRedisInBackground(clerkId: string, profile: UserProfile): Promise<void> {
     if (!this.redisService) return;
     
     // Don't block - run in background
     setImmediate(async () => {
       try {
-        const redisProfile = await this.redisService!.getCachedUserProfile(authId);
+        const redisProfile = await this.redisService!.getCachedUserProfile(clerkId);
         if (!redisProfile) {
           const isFrequentlyUpdated = this.isFrequentlyUpdatedProfile(profile);
-          await this.redisService!.cacheUserProfile(authId, profile, isFrequentlyUpdated);
-          logger.debug(`📋 Background sync to Redis for ${authId}`);
+          await this.redisService!.cacheUserProfile(clerkId, profile, isFrequentlyUpdated);
+          logger.debug(`📋 Background sync to Redis for ${clerkId}`);
         }
       } catch (error) {
-        logger.debug(`Background Redis sync failed for ${authId}:`, error);
+        logger.debug(`Background Redis sync failed for ${clerkId}:`, error);
       }
     });
   }
@@ -540,7 +616,7 @@ export class ProfileManager {
   /**
    * Parse and validate profile data with consistent defaults and size limits
    */
-  private parseAndValidateProfile(data: any, authId: string): UserProfile {
+  private parseAndValidateProfile(data: any, clerkId: string): UserProfile {
     let parsedBadges = [];
     if (data.badges) {
       try {
@@ -554,11 +630,11 @@ export class ProfileManager {
             typeof badge.url === 'string'
           ).slice(0, 10); // ✅ Limit to 10 badges max
         } else {
-          logger.warn(`Invalid badges structure for ${authId}, expected array`);
+          logger.warn(`Invalid badges structure for ${clerkId}, expected array`);
           parsedBadges = [];
         }
       } catch (e) {
-        logger.warn(`Badge parsing failed for ${authId}, using empty array:`, e);
+        logger.warn(`Badge parsing failed for ${clerkId}, using empty array:`, e);
         parsedBadges = [];
       }
     }
@@ -571,7 +647,7 @@ export class ProfileManager {
           ? JSON.parse(data.easy_customization_data) 
           : data.easy_customization_data;
       } catch (e) {
-        logger.warn(`Customization data parsing failed for ${authId}:`, e);
+        logger.warn(`Customization data parsing failed for ${clerkId}:`, e);
         parsedCustomizationData = {};
       }
     }
@@ -614,26 +690,31 @@ export class ProfileManager {
   /**
    * Invalidate friends lists that contain a specific user
    */
-  private async invalidateFriendsListsContainingUser(userAuthId: string): Promise<void> {
+  private async invalidateFriendsListsContainingUser(userClerkId: string): Promise<void> {
     if (!this.supabase || !this.redisService) return;
     
     try {
+      // ✅ FIXED: Query by clerk_id in both directions
       const { data: friendships } = await this.supabase
         .from('friendships')
-        .select('user_id')
-        .eq('friend_id', userAuthId)
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${userClerkId},friend_id.eq.${userClerkId}`)
         .eq('status', 'accepted');
       
       if (friendships && friendships.length > 0) {
-        const invalidationPromises = friendships.map(friendship => 
-          this.friendsModule.invalidateFriendsCache(friendship.user_id)
+        const friendIds = friendships.map(f => 
+          f.user_id === userClerkId ? f.friend_id : f.user_id
+        ).filter(Boolean);
+        
+        const invalidationPromises = friendIds.map(friendId => 
+          this.friendsModule.invalidateFriendsCache(friendId)
         );
         
         await Promise.allSettled(invalidationPromises);
-        logger.debug(`👥 Invalidated friends lists for users containing ${userAuthId}`);
+        logger.debug(`👥 Invalidated friends lists for users containing ${userClerkId}`);
       }
     } catch (error) {
-      logger.debug(`Failed to invalidate friends lists containing ${userAuthId}:`, error);
+      logger.debug(`Failed to invalidate friends lists containing ${userClerkId}:`, error);
     }
   }
 
@@ -651,30 +732,34 @@ export class ProfileManager {
   }> {
     const result: any = { overall: false, errors: [] };
 
-    // ✅ FIXED: Test database connection using the database module
+    // ✅ FIXED: Test database connection using simple select that doesn't require auth
     if (!this.supabase) {
       result.database = false;
       result.errors.push('Supabase client not initialized');
     } else {
       try {
-        logger.debug('🔍 ProfileManager: Testing database connection...');
+        console.log('[ProfileManager] 🔍 Testing database connection...');
         const startTime = Date.now();
         
-        // ✅ FIXED: Use the database module's test method which uses proper auth
-        const dbTest = await this.databaseModule.testConnection();
+        // ✅ FIXED: Use a simple query that doesn't trigger auth errors
+        const { data, error } = await this.supabase
+          .from('user_profiles')
+          .select('id')
+          .limit(1);
+        
         const dbLatency = Date.now() - startTime;
         
-        if (dbTest.success) {
-          logger.debug(`✅ ProfileManager database test passed (${dbLatency}ms)`);
+        if (error) {
+          console.error('[ProfileManager] ❌ Database test failed:', error);
+          result.database = false;
+          result.errors.push(`Database error: ${error.message}`);
+        } else {
+          console.log(`[ProfileManager] ✅ Database test passed (${dbLatency}ms)`);
           result.database = true;
           result.dbLatency = dbLatency;
-        } else {
-          logger.error('❌ ProfileManager database test failed:', dbTest.error);
-          result.database = false;
-          result.errors.push(`Database error: ${dbTest.error}`);
         }
       } catch (error: any) {
-        logger.error('❌ ProfileManager database exception:', error.message);
+        console.error('[ProfileManager] ❌ Database exception:', error.message);
         result.database = false;
         result.errors.push(`Database exception: ${error.message}`);
       }
@@ -696,25 +781,12 @@ export class ProfileManager {
       }
     }
 
-    // ✅ FIXED: Test friends module connection
-    let friendsModuleHealthy = false;
-    try {
-      const friendsTest = await this.friendsModule.testConnection();
-      friendsModuleHealthy = friendsTest.success;
-      if (!friendsModuleHealthy) {
-        result.errors.push(`Friends module error: ${friendsTest.error}`);
-      }
-    } catch (error: any) {
-      result.errors.push(`Friends module exception: ${error.message}`);
-    }
-
     // Overall health - require database to be working
     result.overall = result.database && (!this.redisService || result.redis);
     
-    logger.info(`📊 ProfileManager health check completed:`, {
+    console.log(`[ProfileManager] 📊 Health check completed:`, {
       database: result.database,
       redis: result.redis,
-      friendsModule: friendsModuleHealthy,
       overall: result.overall,
       errors: result.errors.length
     });
@@ -808,16 +880,16 @@ export class ProfileManager {
 
   // ==================== STATUS METHODS (using StatusModule) ====================
 
-  async getOnlineStatus(authId: string): Promise<{ isOnline: boolean; lastSeen?: string }> {
-    return this.statusModule.getOnlineStatus(authId);
+  async getOnlineStatus(clerkId: string): Promise<{ isOnline: boolean; lastSeen?: string }> {
+    return this.statusModule.getOnlineStatus(clerkId);
   }
 
   async getOnlineUsers(limit: number = 100): Promise<string[]> {
     return this.statusModule.getOnlineUsers();
   }
 
-  async batchGetOnlineStatus(authIds: string[]): Promise<Record<string, boolean>> {
-    return this.statusModule.batchGetOnlineStatus(authIds);
+  async batchGetOnlineStatus(clerkIds: string[]): Promise<Record<string, boolean>> {
+    return this.statusModule.batchGetOnlineStatus(clerkIds);
   }
 
   async batchSetOnlineStatus(updates: { authId: string; isOnline: boolean }[]): Promise<void> {
@@ -835,12 +907,13 @@ export class ProfileManager {
     }
   }
 
-  async bulkUpdateStatus(authIds: string[], status: UserStatus): Promise<number> {
-    if (!this.supabase || authIds.length === 0) return 0;
+  async bulkUpdateStatus(clerkIds: string[], status: UserStatus): Promise<number> {
+    if (!this.supabase || clerkIds.length === 0) return 0;
 
     try {
       const startTime = Date.now();
       
+      // ✅ FIXED: Update by clerk_id instead of id
       const { error, count } = await this.supabase
         .from('user_profiles')
         .update({
@@ -849,18 +922,18 @@ export class ProfileManager {
           is_online: status === 'online',
           updated_at: new Date().toISOString()
         })
-        .in('id', authIds);
+        .in('clerk_id', clerkIds); // ✅ FIXED: Use clerk_id
 
       if (error) {
         logger.error(`Bulk status update error:`, error);
         return 0;
       }
 
-      authIds.forEach(authId => this.profileCache.delete(authId));
+      clerkIds.forEach(clerkId => this.profileCache.delete(clerkId));
 
       if (this.redisService) {
-        const updates = authIds.map(authId => ({
-          authId,
+        const updates = clerkIds.map(clerkId => ({
+          authId: clerkId,
           isOnline: status === 'online'
         }));
         
@@ -881,12 +954,12 @@ export class ProfileManager {
 
   // ==================== FRIENDS METHODS (using FriendsModule) ====================
 
-  async fetchUserFriends(authId: string): Promise<FriendData[]> {
-    return this.friendsModule.getFriendsList(authId);
+  async fetchUserFriends(clerkId: string): Promise<FriendData[]> {
+    return this.friendsModule.getFriendsList(clerkId);
   }
 
-  async getFriendshipStatus(user1AuthId: string, user2AuthId: string): Promise<any> {
-    return this.friendsModule.getFriendshipStatus(user1AuthId, user2AuthId);
+  async getFriendshipStatus(user1ClerkId: string, user2ClerkId: string): Promise<any> {
+    return this.friendsModule.getFriendshipStatus(user1ClerkId, user2ClerkId);
   }
 
   // ==================== SEARCH METHODS (using SearchModule) ====================
@@ -895,29 +968,29 @@ export class ProfileManager {
     if (!query.trim()) return [];
     
     const results = await this.searchModule.searchUsers(query, limit);
-    return results.map(result => this.parseAndValidateProfile(result, result.id));
+    return results.map(result => this.parseAndValidateProfile(result, result.clerk_id));
   }
 
-  async searchUsersToAddAsFriends(currentUserAuthId: string, searchTerm: string, limit: number = 20): Promise<UserProfile[]> {
+  async searchUsersToAddAsFriends(currentUserClerkId: string, searchTerm: string, limit: number = 20): Promise<UserProfile[]> {
     const results = await this.searchModule.searchUsers(searchTerm, limit);
     // Additional filtering logic for friends would go here
-    return results.map(result => this.parseAndValidateProfile(result, result.id));
+    return results.map(result => this.parseAndValidateProfile(result, result.clerk_id));
   }
 
   // ==================== BLOCKING METHODS (using BlockingModule) ====================
 
-  async blockUser(blockerAuthId: string, blockedAuthId: string, reason?: string): Promise<{
+  async blockUser(blockerClerkId: string, blockedClerkId: string, reason?: string): Promise<{
     success: boolean;
     message: string;
   }> {
     try {
-      const success = await this.blockingModule.blockUser(blockerAuthId, blockedAuthId);
+      const success = await this.blockingModule.blockUser(blockerClerkId, blockedClerkId);
       
       // Invalidate friends cache for both users
       if (this.redisService && success) {
         await Promise.all([
-          this.friendsModule.invalidateFriendsCache(blockerAuthId),
-          this.friendsModule.invalidateFriendsCache(blockedAuthId)
+          this.friendsModule.invalidateFriendsCache(blockerClerkId),
+          this.friendsModule.invalidateFriendsCache(blockedClerkId)
         ]);
       }
 
@@ -973,14 +1046,14 @@ export class ProfileManager {
   /**
    * Force refresh profile from database (bypass all caches)
    */
-  async forceRefreshProfile(authId: string): Promise<UserProfile | null> {
-    this.profileCache.delete(authId);
+  async forceRefreshProfile(clerkId: string): Promise<UserProfile | null> {
+    this.profileCache.delete(clerkId);
     
     if (this.redisService) {
-      await this.redisService.invalidateUserProfile(authId);
+      await this.redisService.invalidateUserProfile(clerkId);
     }
     
-    return this.fetchUserProfile(authId);
+    return this.fetchUserProfile(clerkId);
   }
 
   /**
@@ -1117,55 +1190,56 @@ export class ProfileManager {
 
   /**
    * Legacy methods for backward compatibility - these delegate to the appropriate modules
+   * ✅ FIXED: All methods now use clerkId parameters
    */
 
-  async fetchPendingFriendRequests(authId: string, type: 'received' | 'sent' = 'received'): Promise<any[]> {
-    return this.friendsModule.getPendingFriendRequests(authId, type);
+  async fetchPendingFriendRequests(clerkId: string, type: 'received' | 'sent' = 'received'): Promise<any[]> {
+    return this.friendsModule.getPendingFriendRequests(clerkId, type);
   }
 
-  async sendFriendRequest(senderAuthId: string, receiverAuthId: string, message?: string): Promise<{
+  async sendFriendRequest(senderClerkId: string, receiverClerkId: string, message?: string): Promise<{
     success: boolean;
     message: string;
     autoAccepted?: boolean;
   }> {
-    return this.friendsModule.sendFriendRequest(senderAuthId, receiverAuthId, message);
+    return this.friendsModule.sendFriendRequest(senderClerkId, receiverClerkId, message);
   }
 
-  async acceptFriendRequest(requestId: string, acceptingUserId: string): Promise<{
+  async acceptFriendRequest(requestId: string, acceptingUserClerkId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    return this.friendsModule.acceptFriendRequest(requestId, acceptingUserId);
+    return this.friendsModule.acceptFriendRequest(requestId, acceptingUserClerkId);
   }
 
-  async declineFriendRequest(requestId: string, decliningUserId: string): Promise<{
+  async declineFriendRequest(requestId: string, decliningUserClerkId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    return this.friendsModule.declineFriendRequest(requestId, decliningUserId);
+    return this.friendsModule.declineFriendRequest(requestId, decliningUserClerkId);
   }
 
-  async removeFriend(user1AuthId: string, user2AuthId: string): Promise<{
+  async removeFriend(user1ClerkId: string, user2ClerkId: string): Promise<{
     success: boolean;
     message: string;
   }> {
-    return this.friendsModule.removeFriend(user1AuthId, user2AuthId);
+    return this.friendsModule.removeFriend(user1ClerkId, user2ClerkId);
   }
 
-  async getMutualFriends(user1AuthId: string, user2AuthId: string): Promise<any[]> {
-    return this.friendsModule.getMutualFriends(user1AuthId, user2AuthId);
+  async getMutualFriends(user1ClerkId: string, user2ClerkId: string): Promise<any[]> {
+    return this.friendsModule.getMutualFriends(user1ClerkId, user2ClerkId);
   }
 
-  async getFriendStats(authId: string): Promise<{
+  async getFriendStats(clerkId: string): Promise<{
     friendCount: number;
     pendingSentCount: number;
     pendingReceivedCount: number;
     mutualFriendsWithRecent?: number;
   }> {
-    return this.friendsModule.getFriendStats(authId);
+    return this.friendsModule.getFriendStats(clerkId);
   }
 
-  async getOnlineFriendsCount(authId: string): Promise<number> {
-    return this.friendsModule.getOnlineFriendsCount(authId);
+  async getOnlineFriendsCount(clerkId: string): Promise<number> {
+    return this.friendsModule.getOnlineFriendsCount(clerkId);
   }
 }

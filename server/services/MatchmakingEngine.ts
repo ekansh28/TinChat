@@ -1,4 +1,4 @@
-// server/services/MatchmakingEngine.ts - ENHANCED WITH SMART REDIS INTEGRATION
+// server/services/MatchmakingEngine.ts - FIXED VERSION WITH PROPER ASYNC OPERATIONS
 
 import { logger } from '../utils/logger';
 import { User } from '../types/User';
@@ -24,6 +24,9 @@ export class MatchmakingEngine {
     }>;
     lastActivity: number;
   }>();
+
+  // ✅ FIXED: Track ongoing async operations to prevent race conditions
+  private ongoingOperations = new Map<string, Promise<any>>();
 
   constructor(redisService: RedisService | null = null) {
     this.redisService = redisService;
@@ -79,51 +82,334 @@ export class MatchmakingEngine {
     }
   }
 
+    // ===== CRITICAL FIX 5: Enhanced Queue Removal =====
+  // Add this method to handle queue removal issues
+  
+  private async safeRemoveFromQueues(socketId: string): Promise<boolean> {
+    try {
+      let totalRemoved = 0;
+      
+      // Remove from memory queues with detailed logging
+      for (const type of ['text', 'video'] as const) {
+        const originalLength = this.waitingUsers[type].length;
+        
+        this.waitingUsers[type] = this.waitingUsers[type].filter(u => {
+          if (u.id === socketId) {
+            totalRemoved++;
+            logger.debug(`🗑️ Removed ${socketId} from ${type} memory queue`);
+            return false;
+          }
+          return true;
+        });
+        
+        const removed = originalLength - this.waitingUsers[type].length;
+        if (removed > 0) {
+          logger.debug(`✅ Removed ${removed} entries for ${socketId} from ${type} queue`);
+        }
+      }
+      
+      // Remove from Redis queues with timeout
+      if (this.redisService) {
+        try {
+          await Promise.race([
+            Promise.all([
+              this.redisService.removeFromQueue('text', socketId),
+              this.redisService.removeFromQueue('video', socketId)
+            ]),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis removal timeout')), 2000))
+          ]);
+          
+          logger.debug(`📋 Removed ${socketId} from Redis queues`);
+        } catch (error) {
+          logger.warn(`Redis queue removal failed for ${socketId} (non-critical):`, error instanceof Error ? error.message : error);
+          // Don't fail the operation
+        }
+      }
+      
+      return totalRemoved > 0;
+    } catch (error) {
+      logger.error(`Failed to remove ${socketId} from queues:`, error);
+      return false;
+    }
+  }
+  
   /**
    * Enhanced find match with Redis-backed user preferences and history
    */
   async findMatch(currentUser: User): Promise<User | null> {
     logger.info(`🎯 ENHANCED MATCHMAKING: ${currentUser.id} (${currentUser.authId || 'anonymous'}) - ${currentUser.chatType} chat`);
     
-    // Load user preferences from Redis if available
-    const userPrefs = await this.loadUserPreferences(currentUser);
-    
-    // Get match history to avoid repeated matches
-    const matchHistory = await this.getMatchHistory(currentUser);
-    
-    // Get candidates from both memory and Redis
-    const candidates = await this.getCandidatesWithPreferences(currentUser, userPrefs, matchHistory);
-    
-    logger.info(`🔍 ENHANCED FILTERING: ${candidates.length} candidates after preference filtering`);
-    
-    if (candidates.length === 0) {
+    try {
+      // Load user preferences from Redis if available
+      const userPrefs = await this.loadUserPreferences(currentUser);
+      
+      // Get match history to avoid repeated matches
+      const matchHistory = await this.getMatchHistory(currentUser);
+      
+      // Get candidates from both memory and Redis
+      const candidates = await this.getCandidatesWithPreferences(currentUser, userPrefs, matchHistory);
+      
+      logger.info(`🔍 ENHANCED FILTERING: ${candidates.length} candidates after preference filtering`);
+      
+      if (candidates.length === 0) {
+        return null;
+      }
+
+      // Smart candidate selection based on preferences and history
+      const selectedPartner = this.selectBestCandidate(currentUser, candidates, userPrefs);
+      
+      if (selectedPartner) {
+        // ✅ FIXED: Ensure async removal operations are properly awaited
+        await this.removeUserFromAllQueues(selectedPartner.id);
+        
+        // Record the match in history (async but don't wait)
+        this.recordMatch(currentUser, selectedPartner).catch(err =>
+          logger.debug('Failed to record match history:', err)
+        );
+        
+        // Update user preferences based on successful match (async but don't wait)
+        this.updateUserPreferences(currentUser, selectedPartner).catch(err =>
+          logger.debug('Failed to update preferences:', err)
+        );
+        
+        logger.info(`✅ ENHANCED MATCH: ${currentUser.id} ↔ ${selectedPartner.id} (${currentUser.chatType})`, {
+          matchScore: this.calculateMatchScore(currentUser, selectedPartner, userPrefs),
+          preferenceFactors: this.getPreferenceFactors(currentUser, selectedPartner, userPrefs)
+        });
+        
+        return selectedPartner;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`❌ Error in findMatch for ${currentUser.id}:`, error);
       return null;
     }
-
-    // Smart candidate selection based on preferences and history
-    const selectedPartner = this.selectBestCandidate(currentUser, candidates, userPrefs);
-    
-    if (selectedPartner) {
-      // Remove from both memory and Redis
-      await this.removeUserFromQueues(selectedPartner.id);
-      
-      // Record the match in history
-      await this.recordMatch(currentUser, selectedPartner);
-      
-      // Update user preferences based on successful match
-      await this.updateUserPreferences(currentUser, selectedPartner);
-      
-      logger.info(`✅ ENHANCED MATCH: ${currentUser.id} ↔ ${selectedPartner.id} (${currentUser.chatType})`, {
-        matchScore: this.calculateMatchScore(currentUser, selectedPartner, userPrefs),
-        preferenceFactors: this.getPreferenceFactors(currentUser, selectedPartner, userPrefs)
-      });
-      
-      return selectedPartner;
-    }
-
-    return null;
   }
 
+  /**
+   * Enhanced queue management with Redis persistence
+   */
+  async addToWaitingList(user: User): Promise<void> {
+  if (!user.id || !user.chatType) {
+    logger.error(`❌ Invalid user data for addToWaitingList:`, {
+      id: user.id,
+      chatType: user.chatType,
+      authId: user.authId
+    });
+    return;
+  }
+
+  try {
+    // ✅ FIXED: Use safe removal method
+    const removed = await this.safeRemoveFromQueues(user.id);
+    if (!removed) {
+      logger.debug(`No existing entries found for ${user.id} (this is normal for new users)`);
+    }
+    
+    // Rest of your existing logic...
+    if (!user.connectionStartTime) {
+      user.connectionStartTime = Date.now();
+    }
+    
+    // Add to memory queue
+    this.waitingUsers[user.chatType].push(user);
+    
+    // Add to Redis queue
+    if (this.redisService) {
+      try {
+        const addSuccess = await this.redisService.addToQueue(user.chatType, user);
+        if (addSuccess) {
+          logger.debug(`📋 Added user ${user.id} to Redis ${user.chatType} queue`);
+        } else {
+          logger.warn(`⚠️ Failed to add user ${user.id} to Redis queue, continuing with memory-only`);
+        }
+      } catch (error) {
+        logger.error(`Failed to add user to Redis queue:`, error);
+        // Continue without Redis - graceful degradation
+      }
+    }
+    
+    logger.info(`➕ ENHANCED QUEUED: ${user.id} (${user.authId || 'anonymous'}) to ${user.chatType} queue. Memory: ${this.waitingUsers[user.chatType].length}`);
+  } catch (error) {
+    logger.error(`❌ Error in addToWaitingList for ${user.id}:`, error);
+  }
+}
+
+  /**
+   * ✅ FIXED: Remove user from all queues (memory + Redis) - now properly async
+   */
+  async removeUserFromAllQueues(socketId: string): Promise<void> {
+    // ✅ FIXED: Check if operation is already in progress to prevent race conditions
+    const operationKey = `remove_${socketId}`;
+    if (this.ongoingOperations.has(operationKey)) {
+      logger.debug(`⏳ Removal operation already in progress for ${socketId}, waiting...`);
+      try {
+        await this.ongoingOperations.get(operationKey);
+        return;
+      } catch (error) {
+        logger.warn(`Previous removal operation failed for ${socketId}:`, error);
+      }
+    }
+
+    // Start new removal operation
+    const removalPromise = this.performRemovalOperation(socketId);
+    this.ongoingOperations.set(operationKey, removalPromise);
+
+    try {
+      await removalPromise;
+    } finally {
+      this.ongoingOperations.delete(operationKey);
+    }
+  }
+
+  /**
+   * ✅ NEW: Actual removal operation implementation
+   */
+  private async performRemovalOperation(socketId: string): Promise<void> {
+    let totalRemoved = 0;
+    let removedUser: User | null = null;
+    
+    try {
+      // Remove from memory queues
+      for (const type of ['text', 'video'] as const) {
+        const originalLength = this.waitingUsers[type].length;
+        
+        this.waitingUsers[type] = this.waitingUsers[type].filter(u => {
+          if (u.id === socketId) {
+            totalRemoved++;
+            removedUser = u;
+            return false;
+          }
+          return true;
+        });
+        
+        const removed = originalLength - this.waitingUsers[type].length;
+        if (removed > 1) {
+          logger.warn(`⚠️ Removed ${removed} duplicate entries for ${socketId} from ${type} memory queue`);
+        }
+      }
+      
+      // ✅ FIXED: Remove from Redis queues with proper async handling
+      if (this.redisService) {
+        try {
+          const removalPromises = [
+            this.redisService.removeFromQueue('text', socketId),
+            this.redisService.removeFromQueue('video', socketId)
+          ];
+          
+          const results = await Promise.allSettled(removalPromises);
+          
+          let redisRemovalSuccess = false;
+          results.forEach((result, index) => {
+            const queueType = index === 0 ? 'text' : 'video';
+            if (result.status === 'fulfilled' && result.value) {
+              redisRemovalSuccess = true;
+              logger.debug(`📋 Removed ${socketId} from Redis ${queueType} queue`);
+            } else if (result.status === 'rejected') {
+              logger.warn(`Failed to remove ${socketId} from Redis ${queueType} queue:`, result.reason);
+            }
+          });
+          
+          if (!redisRemovalSuccess && totalRemoved === 0) {
+            logger.debug(`No entries found for ${socketId} in any queue`);
+          }
+        } catch (error) {
+          logger.error(`Failed to remove user from Redis queues:`, error);
+        }
+      }
+      
+      if (totalRemoved > 0) {
+        logger.debug(`🧹 Enhanced removal: ${totalRemoved} total entries for ${socketId}`);
+        
+        if (removedUser) {
+          this.trackUserDisconnection(removedUser);
+        }
+      }
+    } catch (error) {
+      logger.error(`❌ Error in removal operation for ${socketId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ FIXED: Legacy method now properly calls async version
+   */
+  removeFromWaitingLists(socketId: string): void {
+    // ✅ FIXED: Call async version and handle promise properly
+    this.removeUserFromAllQueues(socketId).catch(error => {
+      logger.error(`Error in removeFromWaitingLists for ${socketId}:`, error);
+    });
+  }
+
+  /**
+   * Enhanced cleanup with better async handling
+   */
+  async cleanupStaleUsers(isConnectedCheck: (socketId: string) => boolean): Promise<void> {
+    try {
+      let totalRemoved = 0;
+      const now = Date.now();
+      const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+      
+      // ✅ FIXED: Collect all stale/disconnected users first
+      const usersToRemove: { socketId: string; reason: string }[] = [];
+      
+      for (const type of ['text', 'video'] as const) {
+        for (const user of this.waitingUsers[type]) {
+          const isConnected = isConnectedCheck(user.id);
+          const waitTime = now - (user.connectionStartTime || now);
+          const isStale = waitTime > STALE_THRESHOLD;
+          
+          if (!isConnected) {
+            usersToRemove.push({ socketId: user.id, reason: 'disconnected' });
+          } else if (isStale) {
+            usersToRemove.push({ socketId: user.id, reason: `stale (${Math.round(waitTime / 1000)}s)` });
+          }
+        }
+      }
+      
+      // ✅ FIXED: Remove users with proper async handling and rate limiting
+      if (usersToRemove.length > 0) {
+        logger.info(`🧹 Starting cleanup of ${usersToRemove.length} stale/disconnected users`);
+        
+        // Process removals in batches to avoid overwhelming the system
+        const batchSize = 10;
+        for (let i = 0; i < usersToRemove.length; i += batchSize) {
+          const batch = usersToRemove.slice(i, i + batchSize);
+          
+          const removalPromises = batch.map(async ({ socketId, reason }) => {
+            try {
+              await this.removeUserFromAllQueues(socketId);
+              logger.debug(`🧹 Removed ${reason} user: ${socketId}`);
+              return true;
+            } catch (error) {
+              logger.warn(`Failed to remove ${socketId} (${reason}):`, error);
+              return false;
+            }
+          });
+          
+          const results = await Promise.allSettled(removalPromises);
+          const successCount = results.filter(r => 
+            r.status === 'fulfilled' && r.value === true
+          ).length;
+          
+          totalRemoved += successCount;
+          
+          // Small delay between batches to avoid overwhelming Redis
+          if (i + batchSize < usersToRemove.length) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        }
+        
+        logger.info(`🧹 Enhanced cleanup completed: ${totalRemoved}/${usersToRemove.length} users removed successfully`);
+      }
+    } catch (error) {
+      logger.error('❌ Error during enhanced cleanup:', error);
+    }
+  }
+
+  // ✅ ENHANCED: All Redis operations now have proper error handling
+  
   /**
    * Load user preferences from Redis with fallback to defaults
    */
@@ -134,13 +420,11 @@ export class MatchmakingEngine {
     
     try {
       const key = `${this.REDIS_USER_PREFERENCES_PREFIX}:${user.authId}`;
-      const redisInstance = this.redisService.getRedisInstance();
-      const cached = await redisInstance.get(key);
+      const cached = await this.redisService.get<any>(key);
       
       if (cached) {
-        const prefs = JSON.parse(cached);
         logger.debug(`🎛️ Loaded preferences for ${user.authId}`);
-        return { ...this.getDefaultPreferences(), ...prefs };
+        return { ...this.getDefaultPreferences(), ...cached };
       }
       
       return this.getDefaultPreferences();
@@ -150,17 +434,17 @@ export class MatchmakingEngine {
     }
   }
 
-  private getDefaultPreferences(): any {
-    return {
-      preferredLanguages: [],
-      avoidRecentMatches: true,
-      recentMatchWindow: 30 * 60 * 1000, // 30 minutes
-      preferAuthenticatedUsers: false,
-      interestMatchWeight: 0.3,
-      activityLevelPreference: 'any', // 'low', 'medium', 'high', 'any'
-      maxWaitTimePreference: 5 * 60 * 1000, // 5 minutes
-    };
-  }
+private getDefaultPreferences(): any {
+  return {
+    preferredLanguages: [],
+    avoidRecentMatches: false, // ✅ FIXED: Disable to allow more matches during testing
+    recentMatchWindow: 30 * 60 * 1000, // 30 minutes
+    preferAuthenticatedUsers: false, // ✅ FIXED: Allow mixed auth/anonymous matching
+    interestMatchWeight: 0.1, // ✅ FIXED: Reduced weight for broader matching
+    activityLevelPreference: 'any',
+    maxWaitTimePreference: 15 * 60 * 1000, // ✅ FIXED: Increased to 15 minutes
+  };
+}
 
   /**
    * Get match history to avoid repeated matches
@@ -172,17 +456,13 @@ export class MatchmakingEngine {
     
     try {
       const key = `${this.REDIS_MATCH_HISTORY_PREFIX}:${user.authId}`;
-      const redisInstance = this.redisService.getRedisInstance();
-      const history = await redisInstance.lrange(key, 0, 9); // Last 10 matches
+      const cached = await this.redisService.get<string[]>(key);
       
-      return history.map(entry => {
-        try {
-          const match = JSON.parse(entry);
-          return match.partnerId;
-        } catch {
-          return '';
-        }
-      }).filter(Boolean);
+      if (Array.isArray(cached)) {
+        return cached.slice(0, 10); // Last 10 matches
+      }
+      
+      return [];
     } catch (error) {
       logger.error(`Failed to get match history for ${user.authId}:`, error);
       return [];
@@ -192,53 +472,93 @@ export class MatchmakingEngine {
   /**
    * Get candidates with enhanced filtering based on preferences
    */
-  private async getCandidatesWithPreferences(
-    currentUser: User, 
-    userPrefs: any, 
-    matchHistory: string[]
-  ): Promise<User[]> {
+  // ===== CRITICAL FIX 2: Enhanced Matchmaking Logic =====
+// Replace your getCandidatesWithPreferences method with this enhanced version
+
+private async getCandidatesWithPreferences(
+  currentUser: User, 
+  userPrefs: any, 
+  matchHistory: string[]
+): Promise<User[]> {
+  try {
     // Get candidates from memory queue
     const memoryQueue = this.waitingUsers[currentUser.chatType];
     
     // Get candidates from Redis queue if available
     let redisCandidates: User[] = [];
     if (this.redisService) {
-      redisCandidates = await this.getAllFromRedisQueue(currentUser.chatType);
+      try {
+        redisCandidates = await this.getAllFromRedisQueue(currentUser.chatType);
+      } catch (error) {
+        logger.warn('Failed to get Redis candidates, using memory only:', error);
+      }
     }
     
     // Combine and deduplicate candidates
     const allCandidates = this.deduplicateCandidates([...memoryQueue, ...redisCandidates]);
     
-    // Apply enhanced filtering
-    return allCandidates.filter(candidate => {
-      // Basic validation (from original code)
-      if (!this.isValidMatchCandidate(currentUser, candidate)) {
+    logger.debug(`🔍 Raw candidates found: ${allCandidates.length} (memory: ${memoryQueue.length}, redis: ${redisCandidates.length})`);
+    
+    // ✅ FIXED: Enhanced filtering with detailed logging
+    const validCandidates = allCandidates.filter(candidate => {
+      // ✅ FIXED: Skip self-matching
+      if (candidate.id === currentUser.id) {
+        logger.debug(`❌ Skipped self-match: ${candidate.id}`);
         return false;
       }
       
-      // Avoid recent matches if preference is set
+      // ✅ FIXED: Skip same auth ID
+      if (currentUser.authId && candidate.authId && currentUser.authId === candidate.authId) {
+        logger.debug(`❌ Skipped same auth ID: ${candidate.authId}`);
+        return false;
+      }
+      
+      // Basic validation
+      if (!this.isValidMatchCandidate(currentUser, candidate)) {
+        logger.debug(`❌ Failed basic validation: ${candidate.id}`);
+        return false;
+      }
+      
+      // ✅ FIXED: More lenient recent match checking
       if (userPrefs.avoidRecentMatches && matchHistory.includes(candidate.authId || candidate.id)) {
         logger.debug(`❌ Avoiding recent match: ${candidate.id}`);
         return false;
       }
       
-      // Preference for authenticated users
-      if (userPrefs.preferAuthenticatedUsers && !candidate.authId) {
-        logger.debug(`❌ Preferring authenticated users: ${candidate.id} is anonymous`);
+      // ✅ FIXED: More flexible auth user preference
+      if (userPrefs.preferAuthenticatedUsers && !candidate.authId && currentUser.authId) {
+        logger.debug(`❌ Preferring authenticated users: ${candidate.id} is anonymous, current user is authenticated`);
         return false;
       }
       
-      // Check wait time preference
+      // ✅ FIXED: More lenient wait time checking
       const candidateWaitTime = Date.now() - (candidate.connectionStartTime || Date.now());
-      if (candidateWaitTime > userPrefs.maxWaitTimePreference) {
-        logger.debug(`❌ Candidate waited too long: ${candidateWaitTime}ms > ${userPrefs.maxWaitTimePreference}ms`);
+      const maxWaitTime = userPrefs.maxWaitTimePreference || (10 * 60 * 1000); // Default 10 minutes
+      if (candidateWaitTime > maxWaitTime) {
+        logger.debug(`❌ Candidate waited too long: ${candidateWaitTime}ms > ${maxWaitTime}ms`);
         return false;
       }
       
+      logger.debug(`✅ Valid candidate: ${candidate.id} (authId: ${candidate.authId || 'anonymous'})`);
       return true;
     });
+    
+    logger.info(`🔍 Filtering results: ${allCandidates.length} total → ${validCandidates.length} valid candidates`);
+    
+    return validCandidates;
+  } catch (error) {
+    logger.error('Error getting candidates with preferences:', error);
+    // Fallback to basic memory queue filtering
+    const memoryQueue = this.waitingUsers[currentUser.chatType];
+    const basicCandidates = memoryQueue.filter(candidate => 
+      candidate.id !== currentUser.id && 
+      !(currentUser.authId && candidate.authId && currentUser.authId === candidate.authId)
+    );
+    
+    logger.warn(`🔄 Using fallback candidates: ${basicCandidates.length} from memory`);
+    return basicCandidates;
   }
-
+}
   /**
    * Deduplicate candidates from memory and Redis
    */
@@ -348,105 +668,6 @@ export class MatchmakingEngine {
   }
 
   /**
-   * Enhanced queue management with Redis persistence
-   */
-  async addToWaitingList(user: User): Promise<void> {
-    // Add to memory queue (existing logic)
-    this.removeFromWaitingLists(user.id);
-    
-    if (!user.id || !user.chatType) {
-      logger.error(`❌ Invalid user data for addToWaitingList:`, {
-        id: user.id,
-        chatType: user.chatType,
-        authId: user.authId
-      });
-      return;
-    }
-    
-    // Deduplication and validation (existing logic)
-    if (user.authId) {
-      (['text', 'video'] as const).forEach(type => {
-        const existingUserIndex = this.waitingUsers[type].findIndex(u => 
-          u.authId === user.authId
-        );
-        if (existingUserIndex !== -1) {
-          const existingUser = this.waitingUsers[type][existingUserIndex];
-          logger.warn(`🔄 Removing duplicate auth user: ${existingUser?.id} with authId ${user.authId} from ${type} queue`);
-          this.waitingUsers[type].splice(existingUserIndex, 1);
-        }
-      });
-    }
-    
-    if (!user.connectionStartTime) {
-      user.connectionStartTime = Date.now();
-    }
-    
-    // Add to memory queue
-    this.waitingUsers[user.chatType].push(user);
-    
-    // Add to Redis queue for persistence
-    if (this.redisService) {
-      try {
-        await this.redisService.addToQueue(user.chatType, user);
-        logger.debug(`📋 Added user ${user.id} to Redis ${user.chatType} queue`);
-      } catch (error) {
-        logger.error(`Failed to add user to Redis queue:`, error);
-        // Continue without Redis - graceful degradation
-      }
-    }
-    
-    logger.info(`➕ ENHANCED QUEUED: ${user.id} (${user.authId || 'anonymous'}) to ${user.chatType} queue. Memory: ${this.waitingUsers[user.chatType].length}`);
-  }
-
-  /**
-   * Remove user from all queues (memory + Redis)
-   */
-  async removeUserFromQueues(socketId: string): Promise<void> {
-    let totalRemoved = 0;
-    let removedUser: User | null = null;
-    
-    // Remove from memory queues
-    (['text', 'video'] as const).forEach(type => {
-      const originalLength = this.waitingUsers[type].length;
-      
-      this.waitingUsers[type] = this.waitingUsers[type].filter(u => {
-        if (u.id === socketId) {
-          totalRemoved++;
-          removedUser = u;
-          return false;
-        }
-        return true;
-      });
-      
-      const removed = originalLength - this.waitingUsers[type].length;
-      if (removed > 1) {
-        logger.warn(`⚠️ Removed ${removed} duplicate entries for ${socketId} from ${type} memory queue`);
-      }
-    });
-    
-    // Remove from Redis queues
-    if (this.redisService) {
-      try {
-        await Promise.all([
-          this.redisService.removeFromQueue('text', socketId),
-          this.redisService.removeFromQueue('video', socketId)
-        ]);
-        logger.debug(`📋 Removed ${socketId} from Redis queues`);
-      } catch (error) {
-        logger.error(`Failed to remove user from Redis queues:`, error);
-      }
-    }
-    
-    if (totalRemoved > 0) {
-      logger.debug(`🧹 Enhanced removal: ${totalRemoved} total entries for ${socketId}`);
-      
-      if (removedUser) {
-        this.trackUserDisconnection(removedUser);
-      }
-    }
-  }
-
-  /**
    * Record successful match in Redis for history tracking
    */
   private async recordMatch(user1: User, user2: User): Promise<void> {
@@ -463,31 +684,36 @@ export class MatchmakingEngine {
         matchScore: this.calculateMatchScore(user1, user2, this.getDefaultPreferences())
       };
       
-      const redisInstance = this.redisService.getRedisInstance();
-      
       // Record in both users' history
+      const promises: Promise<any>[] = [];
+      
       if (user1.authId) {
         const key1 = `${this.REDIS_MATCH_HISTORY_PREFIX}:${user1.authId}`;
-        await redisInstance.lpush(key1, JSON.stringify({
+        const historyEntry = {
           ...matchData,
           partnerId: user2.authId || user2.id,
           partnerName: user2.displayName || user2.username
-        }));
-        await redisInstance.ltrim(key1, 0, 19); // Keep last 20 matches
-        await redisInstance.expire(key1, 30 * 24 * 60 * 60); // 30 days
+        };
+        
+        promises.push(
+          this.redisService.set(key1, JSON.stringify(historyEntry), 30 * 24 * 60 * 60) // 30 days
+        );
       }
       
       if (user2.authId) {
         const key2 = `${this.REDIS_MATCH_HISTORY_PREFIX}:${user2.authId}`;
-        await redisInstance.lpush(key2, JSON.stringify({
+        const historyEntry = {
           ...matchData,
           partnerId: user1.authId || user1.id,
           partnerName: user1.displayName || user1.username
-        }));
-        await redisInstance.ltrim(key2, 0, 19); // Keep last 20 matches
-        await redisInstance.expire(key2, 30 * 24 * 60 * 60); // 30 days
+        };
+        
+        promises.push(
+          this.redisService.set(key2, JSON.stringify(historyEntry), 30 * 24 * 60 * 60) // 30 days
+        );
       }
       
+      await Promise.allSettled(promises);
       logger.debug(`📝 Recorded match history for ${user1.id} ↔ ${user2.id}`);
     } catch (error) {
       logger.error('Failed to record match history:', error);
@@ -515,8 +741,7 @@ export class MatchmakingEngine {
       };
       
       const key = `${this.REDIS_USER_PREFERENCES_PREFIX}:${user.authId}`;
-      const redisInstance = this.redisService.getRedisInstance();
-      await redisInstance.setex(key, 7 * 24 * 60 * 60, JSON.stringify(updatedPrefs)); // 7 days
+      await this.redisService.set(key, updatedPrefs, 7 * 24 * 60 * 60); // 7 days
       
       logger.debug(`🎛️ Updated preferences for ${user.authId} based on successful match`);
     } catch (error) {
@@ -541,17 +766,7 @@ export class MatchmakingEngine {
     if (!this.redisService) return [];
     
     try {
-      const redisInstance = this.redisService.getRedisInstance();
-      const queueKey = `queue:${chatType}`;
-      const items = await redisInstance.lrange(queueKey, 0, -1);
-      
-      return items.map(item => {
-        try {
-          return JSON.parse(item) as User;
-        } catch {
-          return null;
-        }
-      }).filter((user): user is User => user !== null);
+      return await this.redisService.getAllFromQueue(chatType);
     } catch (error) {
       logger.error(`Failed to get all users from Redis ${chatType} queue:`, error);
       return [];
@@ -710,18 +925,8 @@ export class MatchmakingEngine {
     let redisCleared = 0;
     if (this.redisService) {
       try {
-        const redisInstance = this.redisService.getRedisInstance();
-        const [textLength, videoLength] = await Promise.all([
-          redisInstance.llen('queue:text'),
-          redisInstance.llen('queue:video')
-        ]);
-        
-        redisCleared = textLength + videoLength;
-        
-        await Promise.all([
-          redisInstance.del('queue:text'),
-          redisInstance.del('queue:video')
-        ]);
+        const result = await this.redisService.clearAllQueues();
+        redisCleared = result.cleared;
         
         logger.info(`📋 Cleared Redis queues: ${redisCleared} users`);
       } catch (error) {
@@ -736,47 +941,49 @@ export class MatchmakingEngine {
   }
 
   // Keep all the existing methods from the original implementation
-  private isValidMatchCandidate(currentUser: User, candidate: User): boolean {
-    // [Keep the existing validation logic from your original code]
-    if (candidate.id === currentUser.id) {
-      logger.debug(`❌ Blocked self-match by socket ID: ${candidate.id}`);
-      return false;
-    }
-    
-    if (currentUser.authId && candidate.authId && currentUser.authId === candidate.authId) {
-      logger.debug(`❌ Blocked self-match by auth ID: ${candidate.authId}`);
-      return false;
-    }
-    
-    const currentTime = Date.now();
-    const candidateAge = currentTime - (candidate.connectionStartTime || 0);
-    const currentUserAge = currentTime - (currentUser.connectionStartTime || 0);
-    
-    const minConnectionTime = (currentUser.authId || candidate.authId) ? 2000 : 1000;
-    
-    if (candidateAge < minConnectionTime) {
-      logger.debug(`❌ Blocked recent candidate connection: ${candidateAge}ms < ${minConnectionTime}ms`);
-      return false;
-    }
-    
-    if (currentUserAge < minConnectionTime) {
-      logger.debug(`❌ Blocked recent current user connection: ${currentUserAge}ms < ${minConnectionTime}ms`);
-      return false;
-    }
-    
-    const timeDiff = Math.abs(candidateAge - currentUserAge);
-    const maxTimeDiff = (currentUser.authId || candidate.authId) ? 1000 : 500;
-    
-    if (timeDiff < maxTimeDiff) {
-      logger.debug(`❌ Blocked similar connection times: diff=${timeDiff}ms < ${maxTimeDiff}ms`);
-      return false;
-    }
-    
-    return true;
+private isValidMatchCandidate(currentUser: User, candidate: User): boolean {
+  // ✅ FIXED: Basic ID check
+  if (candidate.id === currentUser.id) {
+    logger.debug(`❌ Blocked self-match by socket ID: ${candidate.id}`);
+    return false;
   }
+  
+  // ✅ FIXED: Auth ID check
+  if (currentUser.authId && candidate.authId && currentUser.authId === candidate.authId) {
+    logger.debug(`❌ Blocked self-match by auth ID: ${candidate.authId}`);
+    return false;
+  }
+  
+  const currentTime = Date.now();
+  const candidateAge = currentTime - (candidate.connectionStartTime || 0);
+  const currentUserAge = currentTime - (currentUser.connectionStartTime || 0);
+  
+  // ✅ FIXED: More lenient connection time requirements
+  const minConnectionTime = 500; // Reduced from 1000/2000ms
+  
+  if (candidateAge < minConnectionTime) {
+    logger.debug(`❌ Blocked recent candidate connection: ${candidateAge}ms < ${minConnectionTime}ms`);
+    return false;
+  }
+  
+  if (currentUserAge < minConnectionTime) {
+    logger.debug(`❌ Blocked recent current user connection: ${currentUserAge}ms < ${minConnectionTime}ms`);
+    return false;
+  }
+  
+  // ✅ FIXED: More lenient time difference check
+  const timeDiff = Math.abs(candidateAge - currentUserAge);
+  const maxTimeDiff = 2000; // Increased tolerance
+  
+  if (timeDiff < 100) { // Reduced from 500/1000ms - only block very rapid successive connections
+    logger.debug(`❌ Blocked similar connection times: diff=${timeDiff}ms < 100ms`);
+    return false;
+  }
+  
+  return true;
+}
 
   private trackUserDisconnection(user: User): void {
-    // [Keep existing tracking logic]
     const userId = user.authId || user.id;
     
     if (!this.userSessions.has(userId)) {
@@ -798,7 +1005,7 @@ export class MatchmakingEngine {
     }
   }
 
-  // Keep all other existing methods (getQueueStats, cleanupStaleUsers, etc.)
+  // Keep all other existing methods (getQueueStats, forceMatch, etc.)
   getQueueStats() {
     const textQueue = this.waitingUsers.text;
     const videoQueue = this.waitingUsers.video;
@@ -836,13 +1043,6 @@ export class MatchmakingEngine {
         video: videoQueue.filter(u => !u.authId).length
       }
     };
-  }
-
-  removeFromWaitingLists(socketId: string): void {
-    // For backward compatibility - calls the async version
-    this.removeUserFromQueues(socketId).catch(error => {
-      logger.error(`Error in removeFromWaitingLists for ${socketId}:`, error);
-    });
   }
 
   getQueueDetails() {
@@ -896,8 +1096,13 @@ export class MatchmakingEngine {
       }
       
       if (user1 && user2) {
-        this.removeUserFromQueues(user1.id);
-        this.removeUserFromQueues(user2.id);
+        // Use async removal but don't wait for it in this synchronous method
+        this.removeUserFromAllQueues(user1.id).catch(err => 
+          logger.error('Failed to remove user1 in force match:', err)
+        );
+        this.removeUserFromAllQueues(user2.id).catch(err => 
+          logger.error('Failed to remove user2 in force match:', err)
+        );
         
         logger.warn(`🔧 FORCE MATCH: ${user1.id} ↔ ${user2.id} (${chatType})`);
         return { user1, user2 };
@@ -922,56 +1127,5 @@ export class MatchmakingEngine {
     }
     
     return { valid: true };
-  }
-
-  cleanupStaleUsers(isConnectedCheck: (socketId: string) => boolean): void {
-    let totalRemoved = 0;
-    const now = Date.now();
-    const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
-    
-    (['text', 'video'] as const).forEach(type => {
-      const originalLength = this.waitingUsers[type].length;
-      
-      this.waitingUsers[type] = this.waitingUsers[type].filter(user => {
-        const isConnected = isConnectedCheck(user.id);
-        const waitTime = now - (user.connectionStartTime || now);
-        const isStale = waitTime > STALE_THRESHOLD;
-        
-        if (!isConnected) {
-          logger.debug(`🧹 Removing disconnected user: ${user.id} from ${type} queue`);
-          this.trackUserDisconnection(user);
-          
-          // Also remove from Redis if available
-          if (this.redisService) {
-            this.redisService.removeFromQueue(type, user.id).catch(err =>
-              logger.debug(`Failed to remove ${user.id} from Redis:`, err)
-            );
-          }
-          return false;
-        }
-        
-        if (isStale) {
-          logger.warn(`⏰ Removing stale user: ${user.id} (waited ${Math.round(waitTime / 1000)}s) from ${type} queue`);
-          this.trackUserDisconnection(user);
-          
-          // Also remove from Redis if available
-          if (this.redisService) {
-            this.redisService.removeFromQueue(type, user.id).catch(err =>
-              logger.debug(`Failed to remove stale ${user.id} from Redis:`, err)
-            );
-          }
-          return false;
-        }
-        
-        return true;
-      });
-      
-      const removedCount = originalLength - this.waitingUsers[type].length;
-      totalRemoved += removedCount;
-    });
-    
-    if (totalRemoved > 0) {
-      logger.info(`🧹 Enhanced cleanup completed: ${totalRemoved} stale users removed from memory and Redis`);
-    }
   }
 }

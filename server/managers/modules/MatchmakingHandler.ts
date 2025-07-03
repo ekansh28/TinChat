@@ -372,35 +372,74 @@ export class MatchmakingHandler {
   }
 
   private async enhanceUserWithProfile(user: User, authId: string): Promise<void> {
-    const profile = await this.profileCache.getProfile(
-      authId, 
-      (id) => this.profileManager.fetchUserProfile(id)
-    );
-    
-    if (profile) {
-      user.username = profile.username;
-      user.displayName = profile.display_name ?? '';
-      user.avatarUrl = profile.avatar_url ?? '';
-      user.bannerUrl = profile.banner_url ?? '';
-      user.pronouns = profile.pronouns ?? '';
-      user.status = profile.status || 'online';
-      user.displayNameColor = profile.display_name_color || this.DEFAULT_PROFILE_COLOR;
-      user.displayNameAnimation = profile.display_name_animation || 'none';
-      user.rainbowSpeed = profile.rainbow_speed || 3;
-      user.badges = profile.badges || [];
-    } else {
+    try {
+      console.log(`[MatchmakingHandler] Enhancing user profile for authId: ${authId}`);
+      
+      // ✅ CRITICAL: Use the ProfileCache.getProfile method which should handle clerk_id
+      const profile = await this.profileCache.getProfile(
+        authId, 
+        (id) => this.profileManager.fetchUserProfile(id)
+      );
+      
+      if (profile) {
+        console.log(`[MatchmakingHandler] ✅ Profile found for ${authId}:`, {
+          id: profile.id,
+          clerk_id: profile.clerk_id,
+          username: profile.username,
+          display_name: profile.display_name
+        });
+        
+        // ✅ FIXED: Use the correct field names from the database schema
+        user.username = profile.username;
+        user.displayName = profile.display_name || profile.username || 'User';
+        user.avatarUrl = profile.avatar_url || '';
+        user.bannerUrl = profile.banner_url || '';
+        user.pronouns = profile.pronouns || '';
+        user.status = (profile.status as any) || 'online';
+        user.displayNameColor = profile.display_name_color || this.DEFAULT_PROFILE_COLOR;
+        user.displayNameAnimation = profile.display_name_animation || 'none';
+        user.rainbowSpeed = profile.rainbow_speed || 3;
+        user.badges = profile.badges || [];
+        
+        console.log(`[MatchmakingHandler] ✅ User enhanced with profile data:`, {
+          username: user.username,
+          displayName: user.displayName,
+          displayNameColor: user.displayNameColor
+        });
+      } else {
+        console.log(`[MatchmakingHandler] ⚠️ No profile found for ${authId}, using defaults`);
+        this.setDefaultUserProperties(user);
+      }
+    } catch (error) {
+      console.error(`[MatchmakingHandler] ❌ Error enhancing profile for ${authId}:`, error);
       this.setDefaultUserProperties(user);
     }
   }
 
   private setDefaultUserProperties(user: User): void {
+    console.log(`[MatchmakingHandler] Setting default properties for user ${user.id}`);
+    
+    // ✅ If user has authId but no profile, try to use a better fallback name
+    if (user.authId) {
+      user.username = user.username || `User_${user.authId.slice(-4)}`;
+      user.displayName = user.displayName || user.username;
+    } else {
+      user.username = user.username || 'Stranger';
+      user.displayName = user.displayName || 'Stranger';
+    }
+    
     user.status = 'online';
     user.displayNameColor = this.DEFAULT_PROFILE_COLOR;
     user.displayNameAnimation = 'none';
     user.rainbowSpeed = 3;
     user.badges = [];
+    
+    console.log(`[MatchmakingHandler] Default properties set:`, {
+      username: user.username,
+      displayName: user.displayName,
+      authId: user.authId
+    });
   }
-
   private async createChatRoom(currentUser: User, matchedPartner: User): Promise<void> {
     const partnerSocket = this.io.sockets.sockets.get(matchedPartner.id);
     if (!partnerSocket || !partnerSocket.connected) {
