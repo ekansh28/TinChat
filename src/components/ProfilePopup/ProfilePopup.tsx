@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH CORRECT API ENDPOINTS
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH PROPER DATA LOADING
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -7,9 +7,7 @@ import { UserProfile, Badge } from '../ProfileCustomizer/types';
 
 interface ProfilePopupProps {
   isVisible: boolean;
-  profile: UserProfile | null;
-  badges: Badge[];
-  customCSS: string;
+  userId: string | null; // Changed to userId instead of full profile
   position: { x: number; y: number } | null;
   currentUserAuthId?: string; // For friendship operations
 }
@@ -19,8 +17,9 @@ interface FriendshipStatus {
   since?: string;
 }
 
-// ✅ SIMPLIFIED: Use NEXT_PUBLIC_SOCKET_SERVER_URL directly
-const API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
+// ✅ API URLs - Use your Next.js API routes
+const PROFILE_API_URL = '/api/profile/load'; // Your profile loading endpoint
+const SOCKET_API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
 
 function getDefaultAvatar() {
   return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
@@ -48,9 +47,7 @@ const getDisplayNameClass = (animation?: string): string => {
 
 export function ProfilePopup({
   isVisible,
-  profile,
-  badges,
-  customCSS,
+  userId,
   position,
   currentUserAuthId
 }: ProfilePopupProps) {
@@ -60,11 +57,17 @@ export function ProfilePopup({
   const [isMounted, setIsMounted] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>({ status: 'none' });
-  const [isLoading, setIsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // ✅ NEW: Profile data state
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [customCSS, setCustomCSS] = useState<string>('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   // ✅ Check if this is the current user's own profile
-  const isOwnProfile = currentUserAuthId && profile?.id === currentUserAuthId;
+  const isOwnProfile = currentUserAuthId && userId === currentUserAuthId;
 
   // ✅ Ensure component is mounted before state updates
   useEffect(() => {
@@ -72,37 +75,31 @@ export function ProfilePopup({
     return () => setIsMounted(false);
   }, []);
 
-  // ✅ Load friendship status when profile changes
+  // ✅ NEW: Load profile data when userId changes
   useEffect(() => {
-    if (!isMounted || !profile?.id || !currentUserAuthId || isOwnProfile) {
+    if (!isMounted || !userId || !isVisible) {
       return;
     }
 
-    const loadFriendshipStatus = async () => {
-      setIsLoading(true);
+    const loadProfileData = async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+      
       try {
-        console.log('🔍 Loading friendship status...', {
-          apiUrl: `${API_BASE_URL}/api/friends/status`,
-          currentUser: currentUserAuthId,
-          targetUser: profile.id
-        });
+        console.log('🔍 Loading profile data for user:', userId);
 
-        const response = await fetch(`${API_BASE_URL}/api/friends/status`, {
-          method: 'POST',
+        // Create a profile loading endpoint that accepts any user ID
+        const response = await fetch(`${PROFILE_API_URL}?userId=${encodeURIComponent(userId)}`, {
+          method: 'GET',
           headers: { 
             'Content-Type': 'application/json',
             'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            user1AuthId: currentUserAuthId,
-            user2AuthId: profile.id
-          })
+          }
         });
 
-        console.log('📡 Friendship status response:', {
+        console.log('📡 Profile load response:', {
           status: response.status,
-          ok: response.ok,
-          headers: Object.fromEntries(response.headers.entries())
+          ok: response.ok
         });
 
         if (!response.ok) {
@@ -110,24 +107,87 @@ export function ProfilePopup({
         }
 
         const data = await response.json();
-        console.log('✅ Friendship status data:', data);
+        console.log('✅ Profile data loaded:', data);
 
-        if (data.success && isMounted) {
-          setFriendshipStatus(data.status);
+        if (data.success && data.data && isMounted) {
+          const profileData = data.data;
+          
+          // Parse badges if they exist
+          let parsedBadges: Badge[] = [];
+          if (profileData.badges) {
+            try {
+              parsedBadges = Array.isArray(profileData.badges) 
+                ? profileData.badges 
+                : JSON.parse(profileData.badges);
+              parsedBadges = parsedBadges.filter(badge => 
+                badge && typeof badge === 'object' && badge.id && badge.url
+              );
+            } catch (e) {
+              console.warn('Failed to parse badges:', e);
+              parsedBadges = [];
+            }
+          }
+
+          setProfile(profileData);
+          setBadges(parsedBadges);
+          setCustomCSS(profileData.profile_card_css || '');
         } else {
-          console.error('❌ Friendship status failed:', data.message);
+          throw new Error(data.message || 'Failed to load profile');
         }
       } catch (error) {
-        console.error('❌ Failed to load friendship status:', error);
+        console.error('❌ Failed to load profile data:', error);
+        if (isMounted) {
+          setProfileError(error instanceof Error ? error.message : 'Failed to load profile');
+        }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setProfileLoading(false);
         }
       }
     };
 
+    loadProfileData();
+  }, [isMounted, userId, isVisible]);
+
+  // ✅ Load friendship status when profile changes
+  useEffect(() => {
+    if (!isMounted || !userId || !currentUserAuthId || isOwnProfile || !profile) {
+      return;
+    }
+
+    const loadFriendshipStatus = async () => {
+      try {
+        console.log('🔍 Loading friendship status...', {
+          apiUrl: `${SOCKET_API_BASE_URL}/api/friends/status`,
+          currentUser: currentUserAuthId,
+          targetUser: userId
+        });
+
+        const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/status`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            user1AuthId: currentUserAuthId,
+            user2AuthId: userId
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && isMounted) {
+            setFriendshipStatus(data.status);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to load friendship status:', error);
+      }
+    };
+
     loadFriendshipStatus();
-  }, [isMounted, profile?.id, currentUserAuthId, isOwnProfile]);
+  }, [isMounted, userId, currentUserAuthId, isOwnProfile, profile]);
 
   // ✅ Calculate position only after mounting
   useEffect(() => {
@@ -142,7 +202,7 @@ export function ProfilePopup({
     const viewportHeight = window.innerHeight;
     
     const popupWidth = 300;
-    const popupHeight = 450; // Increased for new buttons
+    const popupHeight = 450;
     
     let { x, y } = position;
     
@@ -195,19 +255,13 @@ export function ProfilePopup({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showContextMenu]);
 
-  // ✅ FIXED: Friend action handlers with correct API endpoints
+  // ✅ Friend action handlers with correct API endpoints
   const handleSendFriendRequest = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!userId || !currentUserAuthId) return;
 
     setActionLoading('add_friend');
     try {
-      console.log('📤 Sending friend request...', {
-        apiUrl: `${API_BASE_URL}/api/friends/send-request`,
-        sender: currentUserAuthId,
-        receiver: profile.id
-      });
-
-      const response = await fetch(`${API_BASE_URL}/api/friends/send-request`, {
+      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/send-request`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -215,51 +269,31 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           senderAuthId: currentUserAuthId,
-          receiverAuthId: profile.id
+          receiverAuthId: userId
         })
       });
 
-      console.log('📡 Friend request response:', {
-        status: response.status,
-        ok: response.ok
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ Friend request data:', data);
-
-      if (data.success) {
-        setFriendshipStatus({ 
-          status: data.autoAccepted ? 'friends' : 'pending_sent' 
-        });
-        
-        // Show success message
-        console.log('✅ Friend request sent successfully');
-      } else {
-        console.error('❌ Failed to send friend request:', data.message);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFriendshipStatus({ 
+            status: data.autoAccepted ? 'friends' : 'pending_sent' 
+          });
+        }
       }
     } catch (error) {
       console.error('❌ Error sending friend request:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [userId, currentUserAuthId]);
 
   const handleRemoveFriend = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!userId || !currentUserAuthId) return;
 
     setActionLoading('remove_friend');
     try {
-      console.log('💔 Removing friend...', {
-        apiUrl: `${API_BASE_URL}/api/friends/remove`,
-        user1: currentUserAuthId,
-        user2: profile.id
-      });
-
-      const response = await fetch(`${API_BASE_URL}/api/friends/remove`, {
+      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/remove`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -267,42 +301,31 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           user1AuthId: currentUserAuthId,
-          user2AuthId: profile.id
+          user2AuthId: userId
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setFriendshipStatus({ status: 'none' });
-        console.log('✅ Friend removed successfully');
-      } else {
-        console.error('❌ Failed to remove friend:', data.message);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFriendshipStatus({ status: 'none' });
+        }
       }
     } catch (error) {
       console.error('❌ Error removing friend:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [userId, currentUserAuthId]);
 
   const handleBlockUser = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!userId || !currentUserAuthId) return;
 
     setActionLoading('block_user');
     setShowContextMenu(false);
     
     try {
-      console.log('🚫 Blocking user...', {
-        apiUrl: `${API_BASE_URL}/api/friends/block`,
-        blocker: currentUserAuthId,
-        blocked: profile.id
-      });
-
-      const response = await fetch(`${API_BASE_URL}/api/friends/block`, {
+      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/block`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -310,40 +333,29 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: profile.id
+          blockedAuthId: userId
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setFriendshipStatus({ status: 'blocked' });
-        console.log('✅ User blocked successfully');
-      } else {
-        console.error('❌ Failed to block user:', data.message);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFriendshipStatus({ status: 'blocked' });
+        }
       }
     } catch (error) {
       console.error('❌ Error blocking user:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [userId, currentUserAuthId]);
 
   const handleUnblockUser = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!userId || !currentUserAuthId) return;
 
     setActionLoading('unblock_user');
     try {
-      console.log('🔓 Unblocking user...', {
-        apiUrl: `${API_BASE_URL}/api/friends/unblock`,
-        blocker: currentUserAuthId,
-        blocked: profile.id
-      });
-
-      const response = await fetch(`${API_BASE_URL}/api/friends/unblock`, {
+      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/unblock`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -351,32 +363,25 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: profile.id
+          blockedAuthId: userId
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setFriendshipStatus({ status: 'none' });
-        console.log('✅ User unblocked successfully');
-      } else {
-        console.error('❌ Failed to unblock user:', data.message);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFriendshipStatus({ status: 'none' });
+        }
       }
     } catch (error) {
       console.error('❌ Error unblocking user:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [userId, currentUserAuthId]);
 
   // ✅ Get button text and action based on friendship status
   const getFriendButtonConfig = () => {
-    if (isLoading) return { text: 'Loading...', action: null, disabled: true };
-
     switch (friendshipStatus.status) {
       case 'friends':
         return { 
@@ -423,8 +428,48 @@ export function ProfilePopup({
     }
   };
 
-  if (!isMounted || !isVisible || !profile || !adjustedPosition) {
+  if (!isMounted || !isVisible || !userId || !adjustedPosition) {
     return null;
+  }
+
+  // ✅ Loading state
+  if (profileLoading) {
+    return (
+      <div 
+        className="fixed z-[1050] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6"
+        style={{
+          top: `${adjustedPosition.y}px`,
+          left: `${adjustedPosition.x}px`,
+          width: '300px'
+        }}
+      >
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <span className="ml-3 text-gray-600 dark:text-gray-400">Loading profile...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Error state
+  if (profileError || !profile) {
+    return (
+      <div 
+        className="fixed z-[1050] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6"
+        style={{
+          top: `${adjustedPosition.y}px`,
+          left: `${adjustedPosition.x}px`,
+          width: '300px'
+        }}
+      >
+        <div className="text-center py-4">
+          <div className="text-red-500 mb-2">⚠️</div>
+          <div className="text-gray-700 dark:text-gray-300">
+            {profileError || 'Failed to load profile'}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const statusInfo = getStatusIndicator(profile.status || 'offline');
@@ -594,15 +639,6 @@ export function ProfilePopup({
                 >
                   💬 Send Message
                 </button>
-              </div>
-            )}
-
-            {/* Debug Info (only in development) */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mb-3 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                <div>API Base: {API_BASE_URL}</div>
-                <div>Status: {friendshipStatus.status}</div>
-                <div>Loading: {actionLoading || 'none'}</div>
               </div>
             )}
 

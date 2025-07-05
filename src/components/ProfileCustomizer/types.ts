@@ -1,4 +1,6 @@
-// src/components/ProfileCustomizer/types.ts
+// ===============================
+// 2. Types: src/components/ProfileCustomizer/types.ts
+// ===============================
 
 export interface Badge {
   id: string;

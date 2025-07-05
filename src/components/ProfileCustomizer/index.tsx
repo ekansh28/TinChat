@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/index.tsx - MAIN COMPONENT
+// src/components/ProfileCustomizer/index.tsx - COMPLETE FILE
 'use client';
 import './ProfileCustomizer.css';
 import React, { useEffect, useCallback } from 'react';
@@ -70,7 +70,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     }
   }, [hasChanges, onClose]);
 
-  // Handle save with API route
+  // Handle save with enhanced error handling
   const handleSave = useCallback(async () => {
     if (!user?.id) {
       toast({
@@ -88,11 +88,35 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         description: "Your profile has been updated successfully!",
         variant: "default"
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Save error:', error);
+      
+      const getErrorMessage = (err: unknown): string => {
+        if (err instanceof Error) return err.message;
+        if (typeof err === 'string') return err;
+        return 'An unknown error occurred';
+      };
+      
+      const errorMessage = getErrorMessage(error);
+      
+      // Enhanced error messages based on error type
+      let displayMessage = "Failed to save your profile. Please try again.";
+      let errorTitle = "Save Failed";
+      
+      if (errorMessage.includes('Network error')) {
+        errorTitle = "Connection Error";
+        displayMessage = "Unable to connect to the server. Please check your internet connection and try again.";
+      } else if (errorMessage.includes('Username')) {
+        errorTitle = "Invalid Username";
+        displayMessage = errorMessage;
+      } else if (errorMessage.includes('Database')) {
+        errorTitle = "Database Error";
+        displayMessage = "There was a problem saving to the database. Please try again in a few moments.";
+      }
+      
       toast({
-        title: "Save Failed",
-        description: error.message || "Failed to save your profile. Please try again.",
+        title: errorTitle,
+        description: displayMessage,
         variant: "destructive"
       });
     }
@@ -124,6 +148,39 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
       loadProfile(user.id);
     }
   }, [user?.id, loadProfile]);
+
+  // Debug function to test API connection
+  const testConnection = useCallback(async () => {
+    try {
+      console.log('Testing API connection...');
+      const response = await fetch('/api/profile/save', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      console.log('Test response status:', response.status);
+      const data = await response.json();
+      console.log('Test response data:', data);
+      
+      toast({
+        title: "Connection Test",
+        description: `API responded with status: ${response.status}`,
+        variant: response.ok ? "default" : "destructive"
+      });
+    } catch (error: unknown) {
+      const getErrorMessage = (err: unknown): string => {
+        if (err instanceof Error) return err.message;
+        if (typeof err === 'string') return err;
+        return 'An unknown error occurred';
+      };
+      
+      console.error('Connection test failed:', error);
+      toast({
+        title: "Connection Test Failed",
+        description: `Error: ${getErrorMessage(error)}`,
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
 
   if (!isOpen) return null;
 
@@ -183,22 +240,32 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             </div>
           )}
 
-          {/* Show error state */}
+          {/* Show error state with enhanced debugging */}
           {isLoaded && isSignedIn && user && !loading && error && (
             <div className="window-body">
               <div className="flex items-center justify-center p-8">
                 <div className="text-center">
                   <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">
-                      <img src="https://cdn.sekansh21.workers.dev/icons/warning.png" alt="Warning" />
-                    </span>
+                    <span className="text-2xl">⚠️</span>
                   </div>
                   <h3 className="text-lg font-bold text-red-700 mb-2">Failed to Load Profile</h3>
                   <p className="text-gray-700 mb-4">{error}</p>
-                  <div className="flex gap-2 justify-center">
+                  <div className="flex gap-2 justify-center mb-4">
                     <button className="btn" onClick={handleRetry}>Try Again</button>
+                    <button className="btn" onClick={testConnection}>Test Connection</button>
                     <button className="btn" onClick={handleClose}>Close</button>
                   </div>
+                  
+                  {/* Debug info */}
+                  <details className="text-left bg-gray-100 p-2 rounded text-xs">
+                    <summary className="cursor-pointer font-bold">Debug Information</summary>
+                    <div className="mt-2 space-y-1">
+                      <div>User ID: {user?.id}</div>
+                      <div>Current URL: {typeof window !== 'undefined' ? window.location.href : 'N/A'}</div>
+                      <div>User Agent: {typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}</div>
+                      <div>Error: {error}</div>
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
@@ -318,6 +385,28 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                           </div>
                         </div>
                       </div>
+
+                      {/* Debug panel for development */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="field-row">
+                          <div className="sunken border border-gray-400 p-2 bg-yellow-50">
+                            <div className="text-xs text-gray-600">
+                              <div className="font-bold mb-1">🔧 Debug Panel:</div>
+                              <button 
+                                className="btn text-xs mb-1" 
+                                onClick={testConnection}
+                                style={{ fontSize: '10px', padding: '2px 4px' }}
+                              >
+                                Test API Connection
+                              </button>
+                              <div>Has Changes: {hasChanges ? 'Yes' : 'No'}</div>
+                              <div>Saving: {saving ? 'Yes' : 'No'}</div>
+                              <div>Loading: {loading ? 'Yes' : 'No'}</div>
+                              <div>Error: {error ? 'Yes' : 'No'}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -328,58 +417,69 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           {/* Footer Controls with change detection */}
           {isLoaded && isSignedIn && user && !loading && !error && (
             <div className="absolute bottom-0 left-0 right-0 p-4" style={{ borderStyle: 'inset' }}>
-              <div className="flex justify-end gap-6 items-center">
+              <div className="flex justify-between items-center">
                 <div className="flex gap-2 items-center">
-                  {/* Discard changes button (only show when there are changes) */}
-                  {hasChanges && (
-                    <button
-                      className="btn"
-                      onClick={handleDiscardChanges}
-                      disabled={saving || loading}
-                      style={{ color: '#d97706' }}
-                    >
-                      Discard Changes
-                    </button>
-                  )}
-                  
-                  {error && (
-                    <button
-                      className="btn"
-                      onClick={handleRetry}
-                      disabled={loading}
-                    >
-                      🔄 Reload Profile
-                    </button>
+                  {/* Debug info for development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="text-xs text-gray-500">
+                      URL: {typeof window !== 'undefined' ? window.location.href : 'N/A'}
+                    </div>
                   )}
                 </div>
                 
-                <div className="flex gap-2 items-center">
-                  {saving && (
-                    <div className="flex items-center gap-2 text-sm text-gray-700">
-                      <LoadingSpinner98 size="sm" />
-                      Saving...
-                    </div>
-                  )}
+                <div className="flex gap-6 items-center">
+                  <div className="flex gap-2 items-center">
+                    {/* Discard changes button (only show when there are changes) */}
+                    {hasChanges && (
+                      <button
+                        className="btn"
+                        onClick={handleDiscardChanges}
+                        disabled={saving || loading}
+                        style={{ color: '#d97706' }}
+                      >
+                        Discard Changes
+                      </button>
+                    )}
+                    
+                    {error && (
+                      <button
+                        className="btn"
+                        onClick={handleRetry}
+                        disabled={loading}
+                      >
+                        🔄 Reload Profile
+                      </button>
+                    )}
+                  </div>
                   
-                  <button
-                    className="btn"
-                    onClick={handleClose}
-                    disabled={saving}
-                  >
-                    {hasChanges ? 'Cancel' : 'Close'}
-                  </button>
-                  
-                  {/* Save button only visible when there are changes */}
-                  {hasChanges && (
+                  <div className="flex gap-2 items-center">
+                    {saving && (
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <LoadingSpinner98 size="sm" />
+                        Saving...
+                      </div>
+                    )}
+                    
                     <button
                       className="btn"
-                      onClick={handleSave}
-                      disabled={saving || loading || !profile.username?.trim()}
-                      style={{ fontWeight: 'bold', backgroundColor: hasChanges ? '#4ade80' : undefined }}
+                      onClick={handleClose}
+                      disabled={saving}
                     >
-                      {saving ? 'Saving...' : 'Save Changes'}
+                      {hasChanges ? 'Cancel' : 'Close'}
                     </button>
-                  )}
+                    
+                    {/* Save button only visible when there are changes */}
+                    {hasChanges && (
+                      <button
+                        className="btn"
+                        onClick={handleSave}
+                        disabled={saving || loading || !profile.username?.trim()}
+                        style={{ fontWeight: 'bold', backgroundColor: hasChanges ? '#4ade80' : undefined }}
+                      >
+                        {saving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -501,6 +601,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
         .z-50 { z-index: 50; }
         .text-center { text-align: center; }
+        .text-left { text-align: left; }
         .block { display: block; }
         .cursor-pointer { cursor: pointer; }
         .hover\\:underline:hover { text-decoration: underline; }
@@ -521,6 +622,20 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           transition-property: all;
           transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
           transition-duration: 150ms;
+        }
+
+        details {
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          padding: 8px;
+        }
+
+        summary {
+          font-weight: bold;
+          margin: -8px -8px 8px -8px;
+          padding: 8px;
+          background: #f0f0f0;
+          border-radius: 4px;
         }
       `}</style>
     </div>

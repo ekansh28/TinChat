@@ -1,9 +1,8 @@
-// src/components/ProfilePopup/ProfilePopupProvider.tsx - FIXED VERSION WITH PROPER PROPS
+// src/components/ProfilePopup/ProfilePopupProvider.tsx - UPDATED VERSION
 
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
-import { UserProfile, Badge } from '../ProfileCustomizer/types';
 import { ProfilePopup } from './ProfilePopup';
 import { useAuth } from '@/app/chat/hooks/useAuth'; // Import auth hook for currentUserAuthId
 
@@ -14,14 +13,12 @@ interface PopupPosition {
 
 interface PopupState {
   isVisible: boolean;
-  profile: UserProfile | null;
-  badges: Badge[];
-  customCSS: string;
+  userId: string | null; // Changed to userId instead of full profile
   position: PopupPosition | null;
 }
 
 interface ProfilePopupContextType {
-  showProfile: (profile: UserProfile, badges: Badge[], customCSS: string, clickEvent: React.MouseEvent) => void;
+  showProfile: (userId: string, clickEvent: React.MouseEvent) => void;
   hideProfile: () => void;
   isVisible: boolean;
 }
@@ -31,9 +28,7 @@ const ProfilePopupContext = createContext<ProfilePopupContextType | undefined>(u
 export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [popupState, setPopupState] = useState<PopupState>({
     isVisible: false,
-    profile: null,
-    badges: [],
-    customCSS: '',
+    userId: null,
     position: null
   });
 
@@ -52,9 +47,7 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
   }, []);
 
   const showProfile = useCallback((
-    profile: UserProfile,
-    badges: Badge[] = [],
-    customCSS: string = '',
+    userId: string,
     clickEvent: React.MouseEvent
   ) => {
     if (!isMountedRef.current) {
@@ -62,19 +55,14 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
       return;
     }
 
-    console.log('[ProfilePopupProvider] Showing profile popup:', {
-      username: profile.username,
-      badgeCount: badges.length,
-      hasCustomCSS: !!customCSS.trim(),
+    console.log('[ProfilePopupProvider] Showing profile popup for user:', userId, {
       position: { x: clickEvent.clientX, y: clickEvent.clientY }
     });
 
     if (isMountedRef.current) {
       setPopupState({
         isVisible: true,
-        profile,
-        badges,
-        customCSS,
+        userId,
         position: {
           x: clickEvent.clientX,
           y: clickEvent.clientY
@@ -143,14 +131,12 @@ export const ProfilePopupProvider: React.FC<{ children: ReactNode }> = ({ childr
     }}>
       {children}
       
-      {/* ✅ FIXED: Only render ProfilePopup with all required props when visible */}
-      {popupState.isVisible && popupState.profile && (
+      {/* ✅ FIXED: Only render ProfilePopup when visible and has userId */}
+      {popupState.isVisible && popupState.userId && (
         <div ref={popupRef}>
           <ProfilePopup 
             isVisible={popupState.isVisible}
-            profile={popupState.profile}
-            badges={popupState.badges}
-            customCSS={popupState.customCSS}
+            userId={popupState.userId}
             position={popupState.position}
             currentUserAuthId={auth.authId || undefined}
           />

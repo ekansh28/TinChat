@@ -1,4 +1,4 @@
-// app/api/profile/save/route.ts
+// src/app/api/profile/save/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
@@ -15,47 +15,74 @@ const supabase = createClient(
   }
 );
 
+// Add CORS headers helper
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
+
 export async function POST(req: NextRequest) {
+  console.log('API: Profile save request received');
+  
   try {
     // Verify user is authenticated with Clerk
     const { userId } = await auth();
+    console.log('API: Clerk auth result:', { userId });
     
     if (!userId) {
+      console.log('API: Unauthorized - no userId from Clerk');
       return NextResponse.json(
         { error: 'Unauthorized - Please sign in' }, 
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
-    const profileData = await req.json();
-    console.log('API: Saving profile for user:', userId);
+    let profileData;
+    try {
+      profileData = await req.json();
+      console.log('API: Received profile data:', profileData);
+    } catch (parseError) {
+      console.error('API: Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid request body - must be valid JSON' }, 
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     // Server-side validation
     if (!profileData.username?.trim()) {
       return NextResponse.json(
         { error: 'Username is required' }, 
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (profileData.username.trim().length < 3) {
       return NextResponse.json(
         { error: 'Username must be at least 3 characters' }, 
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (profileData.username.trim().length > 20) {
       return NextResponse.json(
         { error: 'Username must be less than 20 characters' }, 
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (!/^[a-zA-Z0-9_-]+$/.test(profileData.username.trim())) {
       return NextResponse.json(
         { error: 'Username can only contain letters, numbers, underscores, and dashes' }, 
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -74,17 +101,34 @@ export async function POST(req: NextRequest) {
         if (parsedBadges.length > 10) {
           return NextResponse.json(
             { error: 'Maximum 10 badges allowed' }, 
-            { status: 400 }
+            { status: 400, headers: corsHeaders }
           );
         }
       } catch (e) {
-        console.warn('Invalid badges data, using empty array');
+        console.warn('API: Invalid badges data, using empty array:', e);
         parsedBadges = [];
       }
     }
 
+    console.log('API: Checking if profile exists for user:', userId);
+
+    // First, check if profile already exists
+    const { data: existingProfile, error: checkError } = await supabase
+      .from('user_profiles')
+      .select('id, clerk_id')
+      .eq('clerk_id', userId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('API: Error checking existing profile:', checkError);
+      return NextResponse.json(
+        { error: `Database error: ${checkError.message}` }, 
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
     // Prepare the profile data
-    const upsertData = {
+    const profileUpdateData = {
       clerk_id: userId,
       username: profileData.username.trim(),
       display_name: profileData.display_name?.trim() || null,
@@ -102,52 +146,85 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
-    console.log('API: Upserting profile data for:', userId);
+    let result;
 
-    // Use upsert to handle both insert and update
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .upsert(upsertData, {
-        onConflict: 'clerk_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
+    if (existingProfile) {
+      // Profile exists - UPDATE it
+      console.log('API: Updating existing profile with ID:', existingProfile.id);
+      
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(profileUpdateData)
+        .eq('id', existingProfile.id)
+        .select()
+        .single();
 
-    if (error) {
-      console.error('API: Supabase error:', error);
-      return NextResponse.json(
-        { error: `Database error: ${error.message}` }, 
-        { status: 500 }
-      );
+      if (error) {
+        console.error('API: Supabase update error:', error);
+        return NextResponse.json(
+          { error: `Database error: ${error.message}` }, 
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      result = data;
+      console.log('API: Profile updated successfully');
+    } else {
+      // Profile doesn't exist - INSERT new one
+      console.log('API: Creating new profile for user:', userId);
+      
+      // For INSERT, we don't include 'id' if it's auto-generated
+      const insertData = {
+        ...profileUpdateData,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('API: Supabase insert error:', error);
+        return NextResponse.json(
+          { error: `Database error: ${error.message}` }, 
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      result = data;
+      console.log('API: Profile created successfully');
     }
 
-    console.log('API: Profile saved successfully for:', userId);
+    console.log('API: Operation completed successfully for user:', userId);
     
     return NextResponse.json({ 
       success: true, 
-      data,
+      data: result,
       message: 'Profile saved successfully'
-    });
+    }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error('API: Unexpected error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
-      { status: 500 }
+      { error: 'Internal server error', details: error.message }, 
+      { status: 500, headers: corsHeaders }
     );
   }
 }
 
-// Also create a GET endpoint for loading profiles
+// GET endpoint for loading profiles (unchanged)
 export async function GET(req: NextRequest) {
+  console.log('API: Profile load request received');
+  
   try {
     const { userId } = await auth();
     
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' }, 
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -161,20 +238,20 @@ export async function GET(req: NextRequest) {
       console.error('API: Load error:', error);
       return NextResponse.json(
         { error: error.message }, 
-        { status: 500 }
+        { status: 500, headers: corsHeaders }
       );
     }
 
     return NextResponse.json({ 
       success: true, 
       data: data || null 
-    });
+    }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error('API: Load error:', error);
     return NextResponse.json(
       { error: 'Internal server error' }, 
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

@@ -1,6 +1,25 @@
-// src/components/ProfileCustomizer/hooks/useProfileCustomizer.ts
+// ===============================
+// 3. Hook: src/components/ProfileCustomizer/hooks/useProfileCustomizer.ts
+// ===============================
+
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { UserProfile, Badge } from '../types';
+
+// Helper function to safely get error message
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unknown error occurred';
+};
+
+// Helper function to check if error is a TypeError
+const isTypeError = (error: unknown): error is TypeError => {
+  return error instanceof TypeError;
+};
 
 // Helper function to deep compare objects for change detection
 const isEqual = (obj1: any, obj2: any): boolean => {
@@ -131,11 +150,30 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
       await updateProgressWithDelay(30, 300);
       await updateProgressWithDelay(50, 200);
       
-      // Call API route
-      const response = await fetch('/api/profile/save', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // Call API route with enhanced error handling
+      let response: Response;
+      try {
+        response = await fetch('/api/profile/save', {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        
+        console.log('ProfileCustomizer: Load response status:', response.status);
+        
+      } catch (fetchError: unknown) {
+        console.error('ProfileCustomizer: Load fetch error:', fetchError);
+        
+        const errorMessage = getErrorMessage(fetchError);
+        
+        if (isTypeError(fetchError) && errorMessage === 'fetch failed') {
+          throw new Error('Network error: Unable to connect to server. Please check your internet connection and try again.');
+        }
+        
+        throw new Error(`Network request failed: ${errorMessage}`);
+      }
 
       if (!mountedRef.current) {
         console.log('ProfileCustomizer: Component unmounted during fetch');
@@ -145,8 +183,16 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
       await updateProgressWithDelay(70, 300);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to load profile');
+        const contentType = response.headers.get('content-type');
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+        } else {
+          const errorText = await response.text();
+          console.error('ProfileCustomizer: Non-JSON error response:', errorText);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
       }
 
       const result = await response.json();
@@ -217,10 +263,12 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
         }
       }, 600);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('ProfileCustomizer: Load error:', error);
+      const errorMessage = getErrorMessage(error);
+      
       if (mountedRef.current) {
-        setError(error.message || 'Failed to load profile');
+        setError(errorMessage || 'Failed to load profile');
         
         const defaultProfileWithClerk = { ...DEFAULT_PROFILE };
         setProfile(defaultProfileWithClerk);
@@ -237,7 +285,7 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
     }
   }, [updateProgressWithDelay]);
 
-  // Save profile using API route
+  // Enhanced save profile with better error handling
   const saveProfile = useCallback(async (clerkUserId: string) => {
     if (!clerkUserId || !mountedRef.current) {
       throw new Error('Clerk User ID is required');
@@ -296,19 +344,71 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
 
       console.log('ProfileCustomizer: Sending to API:', profileData);
 
-      // Call API route
-      const response = await fetch('/api/profile/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save profile');
+      // Enhanced fetch with better error handling
+      let response: Response;
+      try {
+        response = await fetch('/api/profile/save', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(profileData)
+        });
+        
+        console.log('ProfileCustomizer: Response status:', response.status);
+        console.log('ProfileCustomizer: Response headers:', Object.fromEntries(response.headers.entries()));
+        
+      } catch (fetchError: unknown) {
+        console.error('ProfileCustomizer: Fetch error details:', fetchError);
+        
+        const errorMessage = getErrorMessage(fetchError);
+        
+        // Check if it's a network error
+        if (isTypeError(fetchError) && errorMessage === 'fetch failed') {
+          throw new Error('Network error: Unable to connect to server. Please check your internet connection and try again.');
+        }
+        
+        // Check if it's a CORS error
+        if (errorMessage.includes('CORS')) {
+          throw new Error('CORS error: Cross-origin request blocked. Please check your server configuration.');
+        }
+        
+        throw new Error(`Network request failed: ${errorMessage}`);
       }
 
-      const result = await response.json();
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+          } catch (jsonError: unknown) {
+            console.error('ProfileCustomizer: Failed to parse error response as JSON:', jsonError);
+            throw new Error(`Server error: ${response.status} ${response.statusText}`);
+          }
+        } else {
+          // Non-JSON response
+          const errorText = await response.text();
+          console.error('ProfileCustomizer: Non-JSON error response:', errorText);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+      }
+
+      let result: any;
+      try {
+        result = await response.json();
+        console.log('ProfileCustomizer: Save response:', result);
+      } catch (jsonError: unknown) {
+        console.error('ProfileCustomizer: Failed to parse success response as JSON:', jsonError);
+        throw new Error('Server returned invalid response format');
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Save operation failed');
+      }
+
       console.log('ProfileCustomizer: Profile saved successfully');
       
       // Update original state after successful save
@@ -317,12 +417,15 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
       setOriginalCustomCSS(customCSS);
       
       setError(null);
-    } catch (error: any) {
+      
+    } catch (error: unknown) {
       console.error('ProfileCustomizer: Save exception:', error);
+      const errorMessage = getErrorMessage(error);
+      
       if (mountedRef.current) {
-        setError(error.message || 'Failed to save profile');
+        setError(errorMessage || 'Failed to save profile');
       }
-      throw error;
+      throw new Error(errorMessage);
     } finally {
       if (mountedRef.current) {
         setSaving(false);
