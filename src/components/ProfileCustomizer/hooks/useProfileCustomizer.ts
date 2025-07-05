@@ -1,7 +1,39 @@
 // src/components/ProfileCustomizer/hooks/useProfileCustomizer.ts
-import { useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { UserProfile, Badge } from '../types';
+
+// Helper function to deep compare objects for change detection
+const isEqual = (obj1: any, obj2: any): boolean => {
+  if (obj1 === obj2) return true;
+  
+  if (obj1 == null || obj2 == null) return obj1 === obj2;
+  
+  if (typeof obj1 !== typeof obj2) return false;
+  
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+  
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+  
+  if (Array.isArray(obj1)) {
+    if (obj1.length !== obj2.length) return false;
+    for (let i = 0; i < obj1.length; i++) {
+      if (!isEqual(obj1[i], obj2[i])) return false;
+    }
+    return true;
+  }
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) return false;
+  
+  for (const key of keys1) {
+    if (!keys2.includes(key)) return false;
+    if (!isEqual(obj1[key], obj2[key])) return false;
+  }
+  
+  return true;
+};
 
 interface UseProfileCustomizerReturn {
   profile: UserProfile;
@@ -12,9 +44,13 @@ interface UseProfileCustomizerReturn {
   setCustomCSS: React.Dispatch<React.SetStateAction<string>>;
   saving: boolean;
   loading: boolean;
+  error: string | null;
+  loadingProgress: number;
+  hasChanges: boolean;
   saveProfile: (userId: string) => Promise<void>;
   loadProfile: (userId: string) => Promise<void>;
   resetToDefaults: () => void;
+  discardChanges: () => void;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -38,78 +74,212 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
   const [customCSS, setCustomCSS] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  
+  // Track original state for change detection
+  const [originalProfile, setOriginalProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [originalBadges, setOriginalBadges] = useState<Badge[]>([]);
+  const [originalCustomCSS, setOriginalCustomCSS] = useState<string>('');
+  
+  // Track mount state to prevent memory leaks
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const loadProfile = useCallback(async (userId: string) => {
-    if (!userId) return;
+  // Simple progress update function with delays
+  const updateProgressWithDelay = useCallback(async (targetProgress: number, delay: number = 500) => {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setLoadingProgress(targetProgress);
+        }
+        resolve();
+      }, delay);
+    });
+  }, []);
+
+  // Check if any changes have been made
+  const hasChanges = useMemo(() => {
+    const profileChanged = !isEqual(profile, originalProfile);
+    const badgesChanged = !isEqual(badges, originalBadges);
+    const cssChanged = customCSS.trim() !== originalCustomCSS.trim();
+    
+    return profileChanged || badgesChanged || cssChanged;
+  }, [profile, originalProfile, badges, originalBadges, customCSS, originalCustomCSS]);
+
+  // Load profile using API route
+  const loadProfile = useCallback(async (clerkUserId: string) => {
+    if (!clerkUserId || !mountedRef.current) {
+      console.warn('No Clerk user ID provided to loadProfile or component unmounted');
+      return;
+    }
 
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+    setError(null);
+    setLoadingProgress(0);
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading profile:', error);
+    try {
+      console.log(`ProfileCustomizer: Loading profile for Clerk user ${clerkUserId}`);
+      
+      await updateProgressWithDelay(15, 200);
+      await updateProgressWithDelay(30, 300);
+      await updateProgressWithDelay(50, 200);
+      
+      // Call API route
+      const response = await fetch('/api/profile/save', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!mountedRef.current) {
+        console.log('ProfileCustomizer: Component unmounted during fetch');
         return;
       }
 
-      if (data) {
-        // Parse badges safely
+      await updateProgressWithDelay(70, 300);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to load profile');
+      }
+
+      const result = await response.json();
+      await updateProgressWithDelay(85, 250);
+
+      if (result.success && result.data) {
+        console.log(`ProfileCustomizer: Profile loaded:`, result.data);
+        
         let parsedBadges: Badge[] = [];
-        if (data.badges) {
+        if (result.data.badges) {
           try {
-            parsedBadges = typeof data.badges === 'string' 
-              ? JSON.parse(data.badges) 
-              : data.badges;
-            if (!Array.isArray(parsedBadges)) parsedBadges = [];
+            parsedBadges = Array.isArray(result.data.badges) 
+              ? result.data.badges 
+              : JSON.parse(result.data.badges);
+            parsedBadges = parsedBadges.filter(badge => 
+              badge && typeof badge === 'object' && badge.id && badge.url
+            );
           } catch (e) {
-            console.warn('Failed to parse badges:', e);
+            console.warn('Failed to parse badges, using empty array:', e);
             parsedBadges = [];
           }
         }
 
-        setProfile({
-          ...data,
-          badges: undefined // Remove badges from profile object
-        });
+        const loadedProfile = {
+          ...result.data,
+          clerk_id: undefined,
+          badges: undefined
+        };
+        const loadedCSS = result.data.profile_card_css || '';
+
+        // Set both current and original state
+        setProfile(loadedProfile);
         setBadges(parsedBadges);
-        setCustomCSS(data.profile_card_css || '');
+        setCustomCSS(loadedCSS);
+        
+        // Set original state for change detection
+        setOriginalProfile(loadedProfile);
+        setOriginalBadges(parsedBadges);
+        setOriginalCustomCSS(loadedCSS);
+        
+        setError(null);
       } else {
-        // No profile found, use defaults but keep the userId
-        setProfile({ ...DEFAULT_PROFILE, id: userId });
+        console.log('ProfileCustomizer: No profile found, using defaults');
+        const defaultProfileWithClerk = { 
+          ...DEFAULT_PROFILE, 
+          username: '',
+          display_name: '',
+          avatar_url: ''
+        };
+        
+        setProfile(defaultProfileWithClerk);
         setBadges([]);
         setCustomCSS('');
+        
+        setOriginalProfile(defaultProfileWithClerk);
+        setOriginalBadges([]);
+        setOriginalCustomCSS('');
+        
+        setError(null);
       }
-    } catch (error) {
-      console.error('Exception loading profile:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
-  const saveProfile = useCallback(async (userId: string) => {
-    if (!userId) throw new Error('User ID is required');
+      await updateProgressWithDelay(100, 400);
+      
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setLoading(false);
+          setLoadingProgress(0);
+        }
+      }, 600);
+
+    } catch (error: any) {
+      console.error('ProfileCustomizer: Load error:', error);
+      if (mountedRef.current) {
+        setError(error.message || 'Failed to load profile');
+        
+        const defaultProfileWithClerk = { ...DEFAULT_PROFILE };
+        setProfile(defaultProfileWithClerk);
+        setBadges([]);
+        setCustomCSS('');
+        
+        setOriginalProfile(defaultProfileWithClerk);
+        setOriginalBadges([]);
+        setOriginalCustomCSS('');
+        
+        setLoading(false);
+        setLoadingProgress(0);
+      }
+    }
+  }, [updateProgressWithDelay]);
+
+  // Save profile using API route
+  const saveProfile = useCallback(async (clerkUserId: string) => {
+    if (!clerkUserId || !mountedRef.current) {
+      throw new Error('Clerk User ID is required');
+    }
 
     setSaving(true);
+    setError(null);
+    
     try {
-      // Validate required fields
+      console.log('ProfileCustomizer: Saving profile for Clerk user:', clerkUserId);
+      
+      // Client-side validation
       if (!profile.username?.trim()) {
         throw new Error('Username is required');
       }
 
-      if (profile.username.length < 3) {
+      if (profile.username.trim().length < 3) {
         throw new Error('Username must be at least 3 characters');
       }
 
-      if (profile.username.length > 20) {
+      if (profile.username.trim().length > 20) {
         throw new Error('Username must be less than 20 characters');
       }
 
-      // Prepare the profile data
+      if (!/^[a-zA-Z0-9_-]+$/.test(profile.username.trim())) {
+        throw new Error('Username can only contain letters, numbers, underscores, and dashes');
+      }
+
+      if (profile.display_name && profile.display_name.length > 32) {
+        throw new Error('Display name must be less than 32 characters');
+      }
+
+      if (profile.bio && profile.bio.length > 500) {
+        throw new Error('Bio must be less than 500 characters');
+      }
+
+      if (badges.length > 10) {
+        throw new Error('Maximum 10 badges allowed');
+      }
+
+      // Prepare data for API
       const profileData = {
-        id: userId,
         username: profile.username.trim(),
         display_name: profile.display_name?.trim() || null,
         avatar_url: profile.avatar_url?.trim() || null,
@@ -119,31 +289,44 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
         status: profile.status || 'online',
         display_name_color: profile.display_name_color || '#000000',
         display_name_animation: profile.display_name_animation || 'none',
-        rainbow_speed: profile.rainbow_speed || 3,
+        rainbow_speed: Math.max(1, Math.min(10, profile.rainbow_speed || 3)),
         profile_card_css: customCSS.trim() || null,
         badges: badges.length > 0 ? JSON.stringify(badges) : null,
-        profile_complete: true,
-        updated_at: new Date().toISOString()
       };
 
-      // Use upsert to handle both insert and update
-      const { error } = await supabase
-        .from('user_profiles')
-        .upsert(profileData, {
-          onConflict: 'id'
-        });
+      console.log('ProfileCustomizer: Sending to API:', profileData);
 
-      if (error) {
-        console.error('Error saving profile:', error);
-        throw new Error(error.message || 'Failed to save profile');
+      // Call API route
+      const response = await fetch('/api/profile/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save profile');
       }
 
-      console.log('Profile saved successfully');
-    } catch (error) {
-      console.error('Exception saving profile:', error);
+      const result = await response.json();
+      console.log('ProfileCustomizer: Profile saved successfully');
+      
+      // Update original state after successful save
+      setOriginalProfile(profile);
+      setOriginalBadges([...badges]);
+      setOriginalCustomCSS(customCSS);
+      
+      setError(null);
+    } catch (error: any) {
+      console.error('ProfileCustomizer: Save exception:', error);
+      if (mountedRef.current) {
+        setError(error.message || 'Failed to save profile');
+      }
       throw error;
     } finally {
-      setSaving(false);
+      if (mountedRef.current) {
+        setSaving(false);
+      }
     }
   }, [profile, badges, customCSS]);
 
@@ -151,7 +334,19 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
     setProfile(DEFAULT_PROFILE);
     setBadges([]);
     setCustomCSS('');
+    setOriginalProfile(DEFAULT_PROFILE);
+    setOriginalBadges([]);
+    setOriginalCustomCSS('');
+    setError(null);
+    setLoadingProgress(0);
   }, []);
+
+  // Discard changes function
+  const discardChanges = useCallback(() => {
+    setProfile(originalProfile);
+    setBadges([...originalBadges]);
+    setCustomCSS(originalCustomCSS);
+  }, [originalProfile, originalBadges, originalCustomCSS]);
 
   return {
     profile,
@@ -162,8 +357,12 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
     setCustomCSS,
     saving,
     loading,
+    error,
+    loadingProgress,
+    hasChanges,
     saveProfile,
     loadProfile,
-    resetToDefaults
+    resetToDefaults,
+    discardChanges
   };
 };
