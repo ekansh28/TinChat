@@ -290,148 +290,158 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
       </div>
 
       {/* Tab Content - 98.css styled windows */}
-      <div className="window">
-        <div className="title-bar">
-          <div className="title-bar-text">
+      <div className=" no-scrollbar">
+        <div className="legend-tab">
+          <div className="legend ">
             {tabs.find(t => t.id === activeTab)?.icon} {tabs.find(t => t.id === activeTab)?.label}
           </div>
         </div>
-        <div className="window-body" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <div className="fieldset no-scrollbar">
           {/* Combined Basic Info + Appearance + Badges Tab */}
           {activeTab === 'basic' && (
             <div className="space-y-4">
               {/* Basic Info Section */}
-              <fieldset style={{ border: '2px inset #c0c0c0', padding: '8px' }}>
-                <legend style={{ fontWeight: 'bold', fontSize: '12px' }}>Basic Information</legend>
-                
+              <fieldset style={{ border: 'groove' }} className="p-4 space-y-2">
+                <legend className="font-bold text-xs">Basic Information</legend>
+
                 {/* Username */}
-                <div className="field-row">
-                  <label htmlFor="username" className="font-bold">Username *</label>
-                  <input
-                    id="username"
-                    type="text"
-                    value={profile.username || ''}
-                    onChange={(e) => updateProfile({ username: e.target.value.slice(0, 20) })}
-                    placeholder="Enter your username"
-                    maxLength={20}
-                    disabled={saving || loading}
-                    style={{ width: '100%' }}
-                  />
-                  <div className="text-xs text-gray-600 mt-1">
-                    {(profile.username || '').length}/20 - This is your unique identifier
+                <div className="field-row flex items-start ">
+                  <label htmlFor="username" className="font-bold w-28">Username</label>
+                  <div className="flex w-full">
+                    <input
+                      id="username"
+                      type="text"
+                      value={profile.username || ''}
+                      onChange={(e) => updateProfile({ username: e.target.value.slice(0, 20) })}
+                      placeholder="Enter your username"
+                      maxLength={20}
+                      disabled={saving || loading}
+                      className="w-1/3"
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      {(profile.username || '').length}/20
+                    </div>
                   </div>
                 </div>
 
                 {/* Display Name */}
-                <div className="field-row">
-                  <label htmlFor="display_name" className="font-bold">Display Name</label>
-                  <input
-                    id="display_name"
-                    type="text"
-                    value={profile.display_name || ''}
-                    onChange={(e) => updateProfile({ display_name: e.target.value.slice(0, 32) })}
-                    placeholder="Enter your display name"
-                    maxLength={32}
-                    disabled={saving || loading}
-                    style={{ width: '100%' }}
-                  />
-                  <div className="text-xs text-gray-600 mt-1">
-                    {(profile.display_name || '').length}/32 - This appears in chat and on your profile
+                <div className="field-row flex items-start ">
+                  <label htmlFor="display_name" className="font-bold w-28 mt-1">Display Name</label>
+                  <div className="flex w-full">
+                    <input
+                      id="display_name"
+                      type="text"
+                      value={profile.display_name || ''}
+                      onChange={(e) => updateProfile({ display_name: e.target.value.slice(0, 32) })}
+                      placeholder="Enter your display name"
+                      maxLength={32}
+                      disabled={saving || loading}
+                      className="w-1/3"
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      {(profile.display_name || '').length}/32
+                    </div>
                   </div>
                 </div>
 
                 {/* Pronouns */}
-                <div className="field-row">
-                  <label htmlFor="pronouns" className="font-bold">Pronouns</label>
-                  <input
-                    id="pronouns"
-                    type="text"
-                    value={profile.pronouns || ''}
-                    onChange={(e) => updateProfile({ pronouns: e.target.value.slice(0, 20) })}
-                    placeholder="e.g., they/them, she/her, he/him"
-                    maxLength={20}
-                    disabled={saving || loading}
-                    style={{ width: '100%' }}
-                  />
-                  <div className="text-xs text-gray-600 mt-1">
-                    {(profile.pronouns || '').length}/20 - Optional
+                <div className="field-row flex items-start ">
+                  <label htmlFor="pronouns" className="font-bold w-28 mt-1">Pronouns</label>
+                  <div className="flex  w-full">
+                    <input
+                      id="pronouns"
+                      type="text"
+                      value={profile.pronouns || ''}
+                      onChange={(e) => updateProfile({ pronouns: e.target.value.slice(0, 20) })}
+                      placeholder="e.g., he/him , she/her"
+                      maxLength={20}
+                      disabled={saving || loading}
+                      className="w-1/3"
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      {(profile.pronouns || '').length}/20 
+                    </div>
                   </div>
                 </div>
 
                 {/* Bio */}
-                <div className="field-row">
-                  <label htmlFor="bio" className="font-bold">About Me</label>
-                  <textarea
-                    id="bio"
-                    value={profile.bio || ''}
-                    onChange={(e) => updateProfile({ bio: e.target.value.slice(0, 500) })}
-                    placeholder="Tell people about yourself..."
-                    maxLength={500}
-                    rows={4}
-                    disabled={saving || loading}
-                    style={{ width: '100%', resize: 'none' }}
-                  />
-                  <div className="text-xs text-gray-600 mt-1">
-                    {(profile.bio || '').length}/500 - Share something interesting about yourself
+                <div className="field-row flex items-start ">
+                  <label htmlFor="bio" className="font-bold w-28 mt-1">About Me</label>
+                  <div className="flex  w-full">
+                    <textarea
+                      id="bio"
+                      value={profile.bio || ''}
+                      onChange={(e) => updateProfile({ bio: e.target.value.slice(0, 500) })}
+                      placeholder="Tell people about yourself..."
+                      maxLength={200}
+                      rows={4}
+                      disabled={saving || loading}
+                      className="w-1/2 resize-none"
+                       
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      {(profile.bio || '').length}/200 
+                    </div>
                   </div>
                 </div>
               </fieldset>
 
-              {/* Appearance Section */}
-              <fieldset style={{ border: '2px inset #c0c0c0', padding: '8px' }}>
-                <legend style={{ fontWeight: 'bold', fontSize: '12px' }}>Appearance</legend>
-                
-                {/* Hidden file inputs */}
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImageUpload(file, 'avatar', setAvatarUploading);
-                  }}
-                  style={{ display: 'none' }}
-                />
-                <input
-                  ref={bannerInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImageUpload(file, 'banner', setBannerUploading);
-                  }}
-                  style={{ display: 'none' }}
-                />
+            {/* Appearance Section */}
+            <fieldset className="p-4 space-y-2" style={{ border: 'groove' }}>
+              <legend className="font-bold text-xs">Appearance</legend>
 
-                {/* Avatar Upload Info */}
-                <div className="field-row">
-                  <label className="font-bold">Profile Picture</label>
-                  <div className="text-xs text-gray-600 mb-2">
-                    📸 Hover over your profile picture in the preview to upload a new image
+              {/* Hidden file inputs */}
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImageUpload(file, 'avatar', setAvatarUploading);
+                }}
+                style={{ display: 'none' }}
+              />
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImageUpload(file, 'banner', setBannerUploading);
+                }}
+                style={{ display: 'none' }}
+              />
+
+              {/* Avatar Upload Info */}
+              <div className="field-row flex items-start gap-4">
+                <label className="font-bold w-28 pt-1">Profile Picture</label>
+                <div className="flex flex-col">
+                  <div className="text-xs text-gray-600 mb-1">
+                    Hover over your profile picture in the preview to upload a new image
                   </div>
                   {avatarUploading && (
-                    <div className="text-xs text-blue-600">
-                      📤 Uploading avatar...
-                    </div>
+                    <div className="text-xs text-blue-600">Uploading avatar...</div>
                   )}
                 </div>
+              </div>
 
-                {/* Banner Upload Info */}
-                <div className="field-row">
-                  <label className="font-bold">Banner Image</label>
-                  <div className="text-xs text-gray-600 mb-2">
-                    📸 Hover over the banner area in the preview to upload a new image
+              {/* Banner Upload Info */}
+              <div className="field-row flex items-start gap-4">
+                <label className="font-bold w-28 pt-1">Banner Image</label>
+                <div className="flex flex-col">
+                  <div className="text-xs text-gray-600 mb-1">
+                    Hover over the banner area in the preview to upload a new image
                   </div>
                   {bannerUploading && (
-                    <div className="text-xs text-blue-600">
-                      📤 Uploading banner...
-                    </div>
+                    <div className="text-xs text-blue-600">Uploading banner...</div>
                   )}
                 </div>
+              </div>
 
-                {/* Display Name Color */}
-                <div className="field-row">
-                  <label htmlFor="display_name_color" className="font-bold">Display Name Color</label>
+              {/* Display Name Color */}
+              <div className="field-row flex items-start gap-4">
+                <label htmlFor="display_name_color" className="font-bold w-28 pt-1">Display Name Color</label>
+                <div className="flex flex-col w-full gap-1">
                   <div className="flex gap-2 items-center">
                     <ColorPicker
                       color={profile.display_name_color || '#000000'}
@@ -445,23 +455,25 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                       onChange={(e) => updateProfile({ display_name_color: e.target.value })}
                       placeholder="#000000"
                       disabled={saving || loading}
-                      style={{ flex: 1 }}
+                      className="w-1/6"
                     />
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">
+                  <div className="text-xs text-gray-600">
                     This color appears when you send messages in chat
                   </div>
                 </div>
+              </div>
 
-                {/* Display Name Animation */}
-                <div className="field-row">
-                  <label htmlFor="display_name_animation" className="font-bold">Display Name Animation</label>
+              {/* Display Name Animation */}
+              <div className="field-row flex items-start gap-4">
+                <label htmlFor="display_name_animation" className="font-bold w-28 pt-1">Display Name Animation</label>
+                <div className="flex flex-col w-full">
                   <select
                     id="display_name_animation"
                     value={profile.display_name_animation || 'none'}
                     onChange={(e) => updateProfile({ display_name_animation: e.target.value })}
                     disabled={saving || loading}
-                    style={{ width: '100%' }}
+                    className="w-1/6"
                   >
                     <option value="none">None</option>
                     <option value="rainbow">Rainbow</option>
@@ -470,11 +482,13 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                     <option value="gradient">Gradient</option>
                   </select>
                 </div>
+              </div>
 
-                {/* Rainbow Speed (only show if rainbow animation is selected) */}
-                {profile.display_name_animation === 'rainbow' && (
-                  <div className="field-row">
-                    <label htmlFor="rainbow_speed" className="font-bold">Rainbow Speed</label>
+              {/* Rainbow Speed */}
+              {profile.display_name_animation === 'rainbow' && (
+                <div className="field-row flex items-start gap-4">
+                  <label htmlFor="rainbow_speed" className="font-bold w-28 pt-1">Rainbow Speed</label>
+                  <div className="flex flex-col w-full">
                     <div className="flex items-center gap-4">
                       <input
                         type="range"
@@ -484,7 +498,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                         value={profile.rainbow_speed || 3}
                         onChange={(e) => updateProfile({ rainbow_speed: parseInt(e.target.value) })}
                         disabled={saving || loading}
-                        style={{ flex: 1 }}
+                        className="flex-1"
                       />
                       <span className="text-sm text-gray-600 min-w-[60px] font-bold">
                         {profile.rainbow_speed || 3}s
@@ -494,17 +508,19 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                       How fast the rainbow animation cycles (1 = fastest, 10 = slowest)
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Status */}
-                <div className="field-row">
-                  <label htmlFor="status" className="font-bold">Status</label>
+              {/* Status */}
+              <div className="field-row flex items-start gap-4">
+                <label htmlFor="status" className="font-bold w-28 pt-1">Status</label>
+                <div className="flex flex-col w-full">
                   <select
                     id="status"
                     value={profile.status || 'online'}
                     onChange={(e) => updateProfile({ status: e.target.value as any })}
                     disabled={saving || loading}
-                    style={{ width: '100%' }}
+                    className="w-1/4"
                   >
                     <option value="online">🟢 Online</option>
                     <option value="idle">🟡 Idle</option>
@@ -512,10 +528,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                     <option value="offline">⚫ Offline</option>
                   </select>
                 </div>
-              </fieldset>
+              </div>
+            </fieldset>
+
 
               {/* Badges Section */}
-              <fieldset style={{ border: '2px inset #c0c0c0', padding: '8px' }}>
+              <fieldset style={{ border: 'groove'}}>
                 <legend style={{ fontWeight: 'bold', fontSize: '12px' }}>Badges</legend>
                 <BadgeManager
                   badges={badges}
@@ -583,7 +601,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
               <div className="field-row">
                 <label className="font-bold">Custom CSS Editor</label>
                 <div className="text-sm text-gray-600 mb-2">
-                  Customize your profile card with CSS. Target the <code style={{ background: '#e0e0e0', padding: '2px 4px' }}>.profile-card-custom</code> class.
+                  Customize your profile card with CSS. Target the <code style={{padding: '2px 4px' }}>.profile-card-custom</code> class.
                 </div>
               </div>
               
@@ -596,15 +614,15 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
               {/* CSS Examples */}
               <div className="field-row">
                 <label className="font-bold">Quick Examples:</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', marginTop: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginTop: '8px' }}>
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Neon glow effect */
-.profile-card-custom {
-  box-shadow: 0 0 20px #00ffff, 0 0 40px #00ffff, 0 0 60px #00ffff;
-  border: 2px solid #00ffff;
-  background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
-}`)}
+                    .profile-card-custom {
+                      box-shadow: 0 0 20px #00ffff, 0 0 40px #00ffff, 0 0 60px #00ffff;
+                      border: 2px solid #00ffff;
+                      background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
+                    }`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -614,11 +632,11 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Retro gradient */
-.profile-card-custom {
-  background: linear-gradient(45deg, #ff6b9d, #c44569, #f8b500, #feca57);
-  color: white;
-  border-radius: 20px;
-}`)}
+                    .profile-card-custom {
+                      background: linear-gradient(45deg, #ff6b9d, #c44569, #f8b500, #feca57);
+                      color: white;
+                      border-radius: 20px;
+                    }`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -628,12 +646,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Glass effect */
-.profile-card-custom {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}`)}
+                    .profile-card-custom {
+                      background: rgba(255, 255, 255, 0.1);
+                      backdrop-filter: blur(10px);
+                      border: 1px solid rgba(255, 255, 255, 0.2);
+                      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                    }`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -643,27 +661,27 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Animated border */
-.profile-card-custom {
-  position: relative;
-  background: #000;
-  border-radius: 15px;
-}
+                    .profile-card-custom {
+                      position: relative;
+                      background: #000;
+                      border-radius: 15px;
+                    }
 
-.profile-card-custom::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  padding: 2px;
-  background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #00ff00, #0080ff, #8000ff);
-  border-radius: 15px;
-  z-index: -1;
-  animation: rotate 2s linear infinite;
-}
+                    .profile-card-custom::before {
+                      content: '';
+                      position: absolute;
+                      inset: -2px;
+                      padding: 2px;
+                      background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #00ff00, #0080ff, #8000ff);
+                      border-radius: 15px;
+                      z-index: -1;
+                      animation: rotate 2s linear infinite;
+                    }
 
-@keyframes rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}`)}
+                    @keyframes rotate {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -673,9 +691,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
               </div>
 
               {/* CSS Help */}
+              <fieldset style={{ border: 'groove'}}>
+                <legend>CSS Tips:</legend>
               <div className="field-row">
-                <div className="sunken" style={{ padding: '8px', backgroundColor: '#e0e0e0' }}>
-                  <div className="font-bold mb-2">💡 CSS Tips:</div>
+                
+               
+              
                   <ul className="text-sm space-y-1 text-gray-700" style={{ fontSize: '11px', lineHeight: '1.3' }}>
                     <li>• Use <code>background</code> to change the card background</li>
                     <li>• Use <code>border</code> and <code>border-radius</code> for shape styling</li>
@@ -684,11 +705,14 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                     <li>• Use <code>@keyframes</code> for animations</li>
                     <li>• Use <code>transform</code> for rotations and scaling</li>
                   </ul>
-                </div>
+                
               </div>
+              </fieldset>
             </div>
+            
           )}
         </div>
+        
       </div>
 
       {/* Export avatar/banner upload functions */}
@@ -721,13 +745,13 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         .field-row input:disabled,
         .field-row textarea:disabled,
         .field-row select:disabled {
-          background: #c0c0c0;
+          
           color: #808080;
         }
         
         .btn.pressed {
           border-style: inset;
-          background: #c0c0c0;
+         
         }
         
         .sunken {
@@ -735,7 +759,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         }
         
         code {
-          background: #e0e0e0;
+         
           padding: 1px 3px;
           border: 1px inset #c0c0c0;
           font-family: 'MS Sans Serif', sans-serif;
@@ -797,14 +821,11 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         .mb-2 {
           margin-bottom: 8px;
         }
-        
-        fieldset {
-          margin-bottom: 16px;
-        }
+     
         
         legend {
           padding: 0 8px;
-          background: #c0c0c0;
+          
         }
       `}</style>
     </div>

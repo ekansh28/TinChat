@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import { CustomizerPanel } from './components/CustomizerPanel';
 import type { UserProfile, Badge } from './types';
 import ProfileCardPreview from './components/ProfileCardPreview';
+import SimpleSpriteAnimator from '@/components/SpriteAnimator';
+import GoogleAd from "@/components/googleAd"; // ✅ Correct casing
 
 // Helper function to deep compare objects for change detection
 const isEqual = (obj1: any, obj2: any): boolean => {
@@ -71,23 +73,35 @@ const LoadingState98: React.FC<{
 }> = ({ message, progress, onCancel }) => (
   <div className="window-body">
     <div className="flex flex-col items-center justify-center p-8 space-y-4">
-      <LoadingSpinner98 size="lg" />
+
+    <SimpleSpriteAnimator
+      src="https://cdn.sekansh21.workers.dev/animations/downloadsprite.png"
+      frameCount={24}
+      progress={progress ?? 0}
+      columns={1}
+      rows={24}
+      frameWidth={272}
+      frameHeight={60}
+    />
+
       <div className="text-center space-y-2">
         <h3 className="text-lg font-bold flex items-center gap-2">
           Loading Profile
         </h3>
         <p className="text-gray-700">{message}</p>
         {progress !== undefined && (
+          <>
+             {console.log("Current progress:", progress)}
           <div className="w-64">
-            <div className="sunken border-2 border-gray-400 h-4 bg-gray-200">
-              <div 
-                className="h-full bg-blue-600 transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
+            <div className="progress-indicator">
+              <div className="progress-indicator-bar transition-all duration-300" 
+               style={{ width: `${progress}%` }} />
             </div>
           </div>
+        </>
         )}
       </div>
+
       {onCancel && (
         <button className="btn" onClick={onCancel}>
           Cancel
@@ -96,8 +110,8 @@ const LoadingState98: React.FC<{
     </div>
   </div>
 );
-
 // Enhanced profile hook with change detection and Clerk integration
+// Enhanced profile hook with simple smooth loading progress
 const useProfileCustomizer = () => {
   const DEFAULT_PROFILE: UserProfile = {
     username: '',
@@ -137,6 +151,18 @@ const useProfileCustomizer = () => {
     };
   }, []);
 
+  // Simple progress update function with delays
+  const updateProgressWithDelay = useCallback(async (targetProgress: number, delay: number = 500) => {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setLoadingProgress(targetProgress);
+        }
+        resolve();
+      }, delay);
+    });
+  }, []);
+
   // Check if any changes have been made
   const hasChanges = useMemo(() => {
     const profileChanged = !isEqual(profile, originalProfile);
@@ -153,20 +179,28 @@ const useProfileCustomizer = () => {
     return profileChanged || badgesChanged || cssChanged;
   }, [profile, originalProfile, badges, originalBadges, customCSS, originalCustomCSS]);
 
-  // Load profile using clerk_id instead of Supabase user.id
+  // Load profile with simple smooth progress
   const loadProfile = useCallback(async (clerkUserId: string) => {
     if (!clerkUserId || !mountedRef.current) {
       console.warn('No Clerk user ID provided to loadProfile or component unmounted');
       return;
     }
 
-    const startTime = Date.now();
     setLoading(true);
     setError(null);
-    setLoadingProgress(10);
+    setLoadingProgress(0);
 
     try {
       console.log(`ProfileCustomizer: Loading profile for Clerk user ${clerkUserId}`);
+      
+      // Progress: 0% → 15%
+      await updateProgressWithDelay(15, 200);
+      
+      // Progress: 15% → 30%
+      await updateProgressWithDelay(30, 300);
+      
+      // Progress: 30% → 50% (start database fetch)
+      await updateProgressWithDelay(50, 200);
       
       // Query by clerk_id instead of id
       const { data: profileData, error: fetchError } = await supabase
@@ -180,14 +214,16 @@ const useProfileCustomizer = () => {
         return;
       }
 
-      setLoadingProgress(60);
+      // Progress: 50% → 70% (fetch completed)
+      await updateProgressWithDelay(70, 300);
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('ProfileCustomizer: Fetch error:', fetchError);
         throw new Error(fetchError.message || 'Failed to load profile');
       }
 
-      setLoadingProgress(90);
+      // Progress: 70% → 85% (processing data)
+      await updateProgressWithDelay(85, 250);
 
       if (profileData) {
         console.log(`ProfileCustomizer: Profile loaded:`, profileData);
@@ -245,7 +281,17 @@ const useProfileCustomizer = () => {
         setError(null);
       }
 
-      setLoadingProgress(100);
+      // Progress: 85% → 100% (finalizing)
+      await updateProgressWithDelay(100, 400);
+      
+      // Keep at 100% for a moment, then hide loading
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setLoading(false);
+          setLoadingProgress(0);
+        }
+      }, 600);
+
     } catch (error: any) {
       console.error('ProfileCustomizer: Load error:', error);
       if (mountedRef.current) {
@@ -259,14 +305,12 @@ const useProfileCustomizer = () => {
         setOriginalProfile(defaultProfileWithClerk);
         setOriginalBadges([]);
         setOriginalCustomCSS('');
-      }
-    } finally {
-      if (mountedRef.current) {
+        
         setLoading(false);
         setLoadingProgress(0);
       }
     }
-  }, []);
+  }, [updateProgressWithDelay]);
 
   // Save profile using clerk_id and proper ID handling
   const saveProfile = useCallback(async (clerkUserId: string) => {
@@ -598,33 +642,40 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     }
   }, [hasChanges, onClose]);
 
-  // Handle save with better error reporting
-  const handleSave = useCallback(async () => {
-    if (!user?.id) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to save your profile",
-        variant: "destructive"
-      });
-      return;
-    }
+// Handle save with better error reporting
+const handleSave = useCallback(async () => {
+  if (!user?.id) {
+    toast({
+      title: "Authentication Required",
+      description: "Please sign in to save your profile",
+      variant: "destructive"
+    });
+    return;
+  }
 
-    try {
-      await saveProfile(user.id);
-      toast({
-        title: "Profile Saved! ⚡",
-        description: "Your profile has been updated successfully!",
-        variant: "default"
-      });
-    } catch (error: any) {
-      console.error('Save error:', error);
-      toast({
-        title: "Save Failed",
-        description: error.message || "Failed to save your profile. Please try again.",
-        variant: "destructive"
-      });
-    }
-  }, [user?.id, saveProfile, toast]);
+  try {
+    // Add debugging code here
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    console.log('Supabase JWT user:', supabaseUser);
+    console.log('JWT sub claim:', supabaseUser?.user_metadata?.sub);
+    console.log('JWT claims:', supabaseUser);
+    console.log('Your clerk_id:', user.id);
+    
+    await saveProfile(user.id);
+    toast({
+      title: "Profile Saved! ⚡",
+      description: "Your profile has been updated successfully!",
+      variant: "default"
+    });
+  } catch (error: any) {
+    console.error('Save error:', error);
+    toast({
+      title: "Save Failed",
+      description: error.message || "Failed to save your profile. Please try again.",
+      variant: "destructive"
+    });
+  }
+}, [user?.id, saveProfile, toast]);
 
   const handleReset = useCallback(() => {
     resetToDefaults();
@@ -661,7 +712,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
-            Customize Your Profile ⚡
+            Customize Your Profile 
             {hasChanges && <span className="text-xs text-red-600"> - Unsaved Changes</span>}
           </div>
           <div className="title-bar-controls">
@@ -684,7 +735,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             <div className="window-body">
               <div className="flex items-center justify-center p-8">
                 <div className="text-center">
-                  <div className="w-16 h-16 sunken border-2 border-gray-400 bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 sunken border-2 bg-blue-100 flex items-center justify-center mx-auto mb-4">
                     <span className="text-2xl">🔐</span>
                   </div>
                   <h3 className="text-lg font-bold mb-2">Authentication Required</h3>
@@ -696,12 +747,20 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           )}
 
           {/* Show loading state during profile fetch */}
-          {isLoaded && isSignedIn && user && loading && (
-            <LoadingState98 
-              message="Fetching your profile data..."
-              progress={loadingProgress}
-            />
-          )}
+{isLoaded && isSignedIn && user && loading && (
+  <div className="space-y-4">
+    <LoadingState98 
+      message=" "
+      progress={loadingProgress}
+    />
+    <GoogleAd
+      adClient="ca-pub-5670235631357216"
+      adSlot="6047746984"
+      adFormat="fluid"
+      layoutKey="-f9+4w+7x-eg+3a"
+    />
+  </div>
+)}
 
           {/* Show error state */}
           {isLoaded && isSignedIn && user && !loading && error && (
@@ -709,12 +768,12 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
               <div className="flex items-center justify-center p-8">
                 <div className="text-center">
                   <div className="w-16 h-16 sunken border-2 border-gray-400 bg-red-100 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">⚠️</span>
+                    <span className="text-2xl"> <img src="https://cdn.sekansh21.workers.dev/icons/warning.png"></img></span>
                   </div>
                   <h3 className="text-lg font-bold text-red-700 mb-2">Failed to Load Profile</h3>
                   <p className="text-gray-700 mb-4">{error}</p>
                   <div className="flex gap-2 justify-center">
-                    <button className="btn" onClick={handleRetry}>🔄 Try Again</button>
+                    <button className="btn" onClick={handleRetry}>Try Again</button>
                     <button className="btn" onClick={handleClose}>Close</button>
                   </div>
                 </div>
@@ -749,7 +808,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                     <div className="flex items-center gap-2">
                       <span className="text-yellow-700">⚠️</span>
                       <span className="text-yellow-800 text-sm font-bold">
-                        You have unsaved changes
+                        You have unsaved changes !
                       </span>
                     </div>
                   </div>
@@ -778,7 +837,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
               </div>
 
               {/* Right Panel - Live Preview */}
-              <div className="w-80 p-4 overflow-y-auto bg-gray-100" style={{ width: '40%' }}>
+              <div className="w-80 h-100 p-4 overflow-y-auto " style={{ width: '40%' }}>
                 <div className="window">
                   <div className="title-bar">
                     <div className="title-bar-text">
@@ -788,31 +847,25 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                   <div className="window-body">
                     <div className="space-y-4">
                       {/* Profile Card Preview with upload hover */}
-                      <div className="field-row">
-                        <ProfileCardPreview
-                          profile={profile}
-                          badges={badges}
-                          customCSS={customCSS}
-                          isPreview={true}
-                          onAvatarUpload={handleAvatarUpload}
-                          onBannerUpload={handleBannerUpload}
-                        />
-                      </div>
+  <div className="field-row flex justify-center">
+  <div style={{ width: "298px", height: "358px" }}>
+    <ProfileCardPreview
+      profile={profile}
+      badges={badges}
+      customCSS={customCSS}
+      isPreview={true}
+      onAvatarUpload={handleAvatarUpload}
+      onBannerUpload={handleBannerUpload}
+    />
+  </div>
+</div>
                       
                       {/* Chat Preview */}
                       <div className="field-row">
                         <label className="font-bold text-sm mb-2 block">Chat Preview:</label>
                         <div className="sunken border border-gray-400 p-2 bg-white">
                           <div className="flex items-start gap-2">
-                            <img
-                              src={profile.avatar_url || getDefaultAvatar()}
-                              alt="Avatar"
-                              className="w-6 h-6 border border-gray-400"
-                              style={{ imageRendering: 'pixelated' }}
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = getDefaultAvatar();
-                              }}
-                            />
+
                             <div>
                               <div 
                                 className="text-sm font-bold cursor-pointer hover:underline"
@@ -821,45 +874,25 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                                   animation: profile.display_name_animation === 'rainbow' ? 
                                     `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
                                 }}
-                                onClick={(e) => {
-                                  // Show profile popup preview
-                                  e.preventDefault();
-                                  alert(`In the actual chat, clicking "${profile.display_name || profile.username || 'Unknown User'}" would show your profile popup with all your customizations, badges, and CSS styling - just like Discord!`);
-                                }}
-                                title="Click to preview profile popup"
                               >
-                                {profile.display_name || profile.username || 'Unknown User'}
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                Hello! This is how your name appears in chat. Click it to see the profile popup!
+                            <span>
+                              {profile.display_name || profile.username || 'Unknown User'}
+                            </span>
+                            <span style={{ color: '#000000' }}> : hello!</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Profile popup preview note */}
-                      <div className="field-row">
-                        <div className="sunken border border-gray-400 p-2 bg-blue-50">
-                          <div className="text-xs text-blue-800">
-                            <div className="font-bold mb-1">💡 Profile Popup Feature:</div>
-                            <div>When others click your username in chat, they'll see a popup with:</div>
-                            <ul className="mt-1 ml-3 list-disc">
-                              <li>Your profile card with custom styling</li>
-                              <li>All your badges</li>
-                              <li>Bio and status</li>
-                              <li>Custom CSS effects</li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
+               
 
                       {/* User info display */}
                       <div className="field-row">
                         <div className="sunken border border-gray-400 p-2 bg-gray-50">
                           <div className="text-xs text-gray-600">
                             <div className="font-bold mb-1">👤 Account Info:</div>
-                            <div>Clerk ID: {user.id}</div>
+                            <div>ID: {user.id}</div>
                             <div>Email: {user.emailAddresses?.[0]?.emailAddress}</div>
                             <div>Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}</div>
                           </div>
@@ -874,16 +907,10 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
 
           {/* Footer Controls with change detection */}
           {isLoaded && isSignedIn && user && !loading && !error && (
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gray-200 border-t border-gray-400" style={{ borderStyle: 'inset' }}>
-              <div className="flex justify-between items-center">
+            <div className=" absolute bottom-0 left-0 right-0 p-4   " style={{ borderStyle: 'inset' }}>
+              <div className="flex justify-end gap-6 items-center">
                 <div className="flex gap-2 items-center">
-                  <button
-                    className="btn"
-                    onClick={handleReset}
-                    disabled={saving || loading}
-                  >
-                    Reset to Defaults
-                  </button>
+
                   
                   {/* Discard changes button (only show when there are changes) */}
                   {hasChanges && (
@@ -916,13 +943,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                     </div>
                   )}
                   
-                  {/* Changes indicator in footer */}
-                  {hasChanges && !saving && (
-                    <div className="flex items-center gap-1 text-sm text-yellow-700 bg-yellow-100 px-2 py-1 border border-yellow-400">
-                      <span>⚠️</span>
-                      <span>Unsaved changes</span>
-                    </div>
-                  )}
+
                   
                   <button
                     className="btn"
@@ -940,7 +961,9 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                       disabled={saving || loading || !profile.username?.trim()}
                       style={{ fontWeight: 'bold', backgroundColor: hasChanges ? '#4ade80' : undefined }}
                     >
+                      
                       {saving ? 'Saving...' : 'Save Changes'}
+                      
                     </button>
                   )}
                 </div>

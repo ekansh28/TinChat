@@ -104,20 +104,29 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               }}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-t-lg" />
+            <div className="w-full h-full bg-black rounded-t-lg" />
+
           )}
           
           {/* Banner upload overlay */}
-          {(bannerHover || !profile.banner_url) && onBannerUpload && (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-t-lg transition-opacity">
-              <div className="text-white text-center">
-                <div className="text-2xl mb-1">📝</div>
-                <div className="text-xs">
-                  {profile.banner_url ? 'Change Banner' : 'Add Banner'}
-                </div>
-              </div>
-            </div>
-          )}
+
+{/* Banner upload overlay (with hover animation) */}
+{onBannerUpload && (
+  <div
+    className={cn(
+      "absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center rounded-t-lg transition-opacity duration-200",
+      bannerHover ? "opacity-100" : "opacity-0 pointer-events-none"
+    )}
+  >
+    <div className="text-white text-center">
+      <div className="text-xs">
+        {profile.banner_url ? 'Change Banner' : 'Add Banner'}
+      </div>
+    </div>
+  </div>
+)}
+
+
         </div>
 
         {/* Main content */}
@@ -141,11 +150,24 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               />
               
               {/* Avatar upload overlay */}
-              {avatarHover && onAvatarUpload && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-full transition-opacity">
-                  <div className="text-white text-xs">📝</div>
-                </div>
-              )}
+{onAvatarUpload && (
+<div
+  className={cn(
+    "absolute inset-0 flex items-center justify-center rounded-full transition-opacity duration-200",
+    avatarHover ? "opacity-100" : "opacity-0 pointer-events-none"
+  )}
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+>
+  <div className="text-white text-xs">
+<span className="text-black text-xl inline-block rotate-[135deg]">✏︎</span>
+
+
+
+  </div>
+</div>
+
+)}
+
             </div>
 
             <div className="flex-1 min-w-0">
@@ -230,17 +252,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             </div>
           )}
 
-          {/* Footer */}
-          <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
-            <div className="flex items-center justify-between">
-              <span>Profile Preview</span>
-              {isPreview && (
-                <span className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-xs">
-                  Live Preview
-                </span>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 

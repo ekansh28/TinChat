@@ -164,9 +164,9 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
               onKeyDown={handleKeyDown}
               disabled={disabled}
               placeholder="/* Enter your custom CSS here */
-.profile-card-custom {
-  /* Your styles go here */
-}"
+              .profile-card-custom {
+                /* Your styles go here */
+              }"
               className={cn(
                 "w-full p-3 bg-transparent border-none outline-none resize-none font-mono text-sm leading-6",
                 "text-gray-800 dark:text-gray-200",
@@ -203,7 +203,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
         <div className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
           ⚠️ CSS Safety Guidelines:
         </div>
-        <ul className="text-yellow-700 dark:text-yellow-300 space-y-1 text-xs">
+        <ul className=" space-y-1 text-xs">
           <li>• Only style the <code>.profile-card-custom</code> class and its children</li>
           <li>• Avoid <code>position: fixed</code> or <code>position: absolute</code> that break layout</li>
           <li>• Be careful with <code>z-index</code> values that might cover UI elements</li>

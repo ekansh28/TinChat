@@ -16,6 +16,7 @@ import SettingsPanel from '@/components/home/SettingsPanel';
 import Footer from '@/components/home/Footer';
 import ProfileCustomizer from '@/components/ProfileCustomizer';
 
+import GoogleAd from "@/components/googleAd"; 
 // Hooks
 import { useOnlineUsers } from '@/hooks/useOnlineUsers';
 import { useOnlineUsersData } from '@/hooks/useOnlineUsersData';
@@ -147,8 +148,11 @@ export default function SelectionLobby() {
       </div>
 
       <div className={styles.homeMainContent}>
+        
         <div className={styles.homeCardWrapper}>
+          
           <div className={styles.sideLinksContainer}>
+            
             <div ref={cardWrapperRef} className={styles.cardZIndex}>
               <MainCard
                 currentInterest={currentInterest}
@@ -164,10 +168,43 @@ export default function SelectionLobby() {
                 toast={toast}
               />
             </div>
+            
             <div className="mt-4">
               <SideLinks isMobile={isMobile} />
             </div>
           </div>
+          
+          {/* Sponsored Ad - Right Side */}
+          {!isMobile && (
+            <div className="fixed top-20 right-4 z-10 " >
+              <div className="window" style={{ width: 300 }}>
+                <div className="title-bar">
+                  <div className="title-bar-text">Sponsored Ad</div>
+                  <div className="title-bar-controls">
+                    <button aria-label="Minimize"></button>
+                    <button aria-label="Maximize"></button>
+                  <button
+                    aria-label="Close"
+                    onClick={() => {
+                      const el = document.getElementById("google-ad-window");
+                      if (el) el.style.display = "none";
+                    }}
+                  ></button>
+                  </div>
+                </div>
+                <div className="window-body">
+                  <ins
+                    className="adsbygoogle"
+                    style={{ display: "block" }}
+                    data-ad-client="ca-pub-5670235631357216"
+                    data-ad-slot="9984806773"
+                    data-ad-format="auto"
+                    data-full-width-responsive="true"
+                  ></ins>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

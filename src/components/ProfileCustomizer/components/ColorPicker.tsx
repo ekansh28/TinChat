@@ -63,20 +63,22 @@ export const ColorPicker = React.memo<ColorPickerProps>(({
 
   return (
     <div className="relative" ref={pickerRef}>
-      {/* Color preview button */}
-      <button
-        type="button"
-        onClick={togglePicker}
-        disabled={disabled}
-        className={cn(
-          "w-10 h-10 rounded border-2 border-gray-300 dark:border-gray-600 cursor-pointer",
-          "hover:border-gray-400 dark:hover:border-gray-500 transition-colors",
-          disabled && "opacity-50 cursor-not-allowed"
-        )}
-        style={{ backgroundColor: color }}
-        title={`Current color: ${color}`}
-        aria-label="Open color picker"
-      />
+    {/* Color preview button */}
+    <button
+      type="button"
+      onClick={togglePicker}
+      disabled={disabled}
+      className={cn(
+        "w-5 h-5 min-w-[20px] min-h-[20px]",
+        "border border-gray-300 dark:border-gray-600",
+        "hover:border-gray-400 dark:hover:border-gray-500 transition-colors",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}
+      style={{ backgroundColor: color }}
+      title={`Current color: ${color}`}
+      aria-label="Open color picker"
+    />
+
 
       {/* Hidden native color input */}
       <input

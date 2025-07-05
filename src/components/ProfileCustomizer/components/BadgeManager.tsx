@@ -217,6 +217,16 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check if badge limit reached
+    if (badges.length >= 10) {
+      toast({
+        title: "Badge Limit Reached",
+        description: "Maximum 10 badges allowed per profile",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const validation = await validateImageFile(file);
       
@@ -232,12 +242,26 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
-        setNewBadgeUrl(dataUrl);
+        
+        // Auto-add the badge with the uploaded image
+        const newBadge = {
+          id: `badge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          url: dataUrl,
+          name: file.name.replace(/\.[^/.]+$/, "") // Remove file extension for name
+        };
+        
+        setBadges(prev => [...prev, newBadge]);
+        
         toast({
-          title: "Image Loaded",
-          description: "Image successfully loaded for badge",
+          title: "Badge Added",
+          description: `"${newBadge.name}" has been added to your profile`,
           variant: "default"
         });
+
+        // Clear the file input
+        if (e.target) {
+          e.target.value = '';
+        }
       };
       reader.onerror = () => {
         toast({
@@ -255,7 +279,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
         variant: "destructive"
       });
     }
-  }, [setNewBadgeUrl, toast]);
+  }, [badges.length, setBadges, toast]);
 
   // Enhanced drag and drop for file uploads
   const handleFileDragOver = useCallback((e: React.DragEvent) => {
@@ -288,6 +312,16 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       return;
     }
 
+    // Check if badge limit reached
+    if (badges.length >= 10) {
+      toast({
+        title: "Badge Limit Reached",
+        description: "Maximum 10 badges allowed per profile",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const file = imageFiles[0];
     
     try {
@@ -306,10 +340,19 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
-        setNewBadgeUrl(dataUrl);
+        
+        // Auto-add the badge with the dropped image
+        const newBadge = {
+          id: `badge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          url: dataUrl,
+          name: file.name.replace(/\.[^/.]+$/, "") // Remove file extension for name
+        };
+        
+        setBadges(prev => [...prev, newBadge]);
+        
         toast({
-          title: "Image Loaded",
-          description: "Image successfully loaded for badge",
+          title: "Badge Added",
+          description: `"${newBadge.name}" has been added to your profile`,
           variant: "default"
         });
       };
@@ -332,7 +375,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
         variant: "destructive"
       });
     }
-  }, [setNewBadgeUrl, toast]);
+  }, [badges.length, setBadges, toast]);
 
   // Image event handlers
   const handleImageError = useCallback((badgeId: string) => {
@@ -434,7 +477,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
   return (
     <div className={cn(
       "p-4 rounded-lg border space-y-4",
-      isTheme98 ? "sunken-panel" : "bg-gray-50 dark:bg-gray-800"
+      isTheme98 ? "sunken-panel" : ""
     )}>
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -483,7 +526,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       {badges.length > 0 && (
         <div className={cn(
           "p-3 rounded border",
-          isTheme98 ? "sunken-panel" : "bg-white dark:bg-gray-700"
+          isTheme98 ? "sunken-panel" : ""
         )}>
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-medium">Badge Preview</div>
@@ -522,7 +565,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
                 className={cn(
                   "relative group cursor-pointer transition-all duration-200",
                   previewMode === 'grid' ? "aspect-square" : "flex items-center gap-3 p-2 rounded",
-                  isTheme98 ? "sunken-panel" : "bg-gray-100 dark:bg-gray-600 rounded border",
+                  isTheme98 ? "sunken-panel" : "rounded border",
                   selectedBadges.has(badge.id) && "ring-2 ring-blue-500",
                   dragOverIndex === index && "scale-105 shadow-lg",
                   draggedIndex === index && "opacity-50"
@@ -562,23 +605,21 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
                   </div>
                 )}
                 
-                <div className={cn(
-                  "absolute bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center",
-                  previewMode === 'grid' ? "inset-0 rounded" : "right-2 w-6 h-6 rounded"
-                )}>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeBadge(badge.id);
-                    }}
-                    disabled={saving}
-                    className="text-xs p-1 h-6 w-6"
-                  >
-                    ×
-                  </Button>
-                </div>
+              <div className={cn(
+                "absolute bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center",
+                previewMode === 'grid' ? "inset-0 rounded" : "right-2 w-6 h-6 rounded"
+              )}>
+                <img
+                  src="https://cdn.sekansh21.workers.dev/icons/cross.png"
+                  alt="Remove badge"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeBadge(badge.id);
+                  }}
+                  className="w-6 h-6 cursor-pointer hover:scale-110 transition-transform"
+                  style={{ filter: saving ? 'grayscale(1) opacity(0.5)' : 'none', pointerEvents: saving ? 'none' : 'auto' }}
+                />
+              </div>
                 
                 {imageErrors.has(badge.id) && (
                   <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
@@ -611,8 +652,8 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
       {/* Badge Manager Panel */}
       {isBadgeManagerOpen && (
         <div className={cn(
-          "p-4 rounded border space-y-4",
-          isTheme98 ? "sunken-panel" : "bg-white dark:bg-gray-700"
+          "p-4 border space-y-4",
+          isTheme98 ? "sunken-panel" : ""
         )}>
           <div className="flex items-center justify-between">
             <h4 className="font-medium">Add New Badge</h4>
@@ -664,12 +705,13 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
               ref={dragDropRef}
               onDragOver={handleFileDragOver}
               onDrop={handleFileDrop}
-              className={cn(
-                "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors",
-                "hover:bg-gray-50 dark:hover:bg-gray-600",
-                isTheme98 ? "border-gray-400" : "border-gray-300 dark:border-gray-600"
-              )}
               onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "group border-2 border-dashed p-4 text-center cursor-pointer transition-colors",
+                "hover:border-blue-500",
+                isTheme98 ? "border-gray-400" : "border-gray-300 dark:border-gray-600",
+                badges.length >= 10 && "opacity-50 cursor-not-allowed"
+              )}
             >
               <input
                 ref={fileInputRef}
@@ -677,10 +719,18 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
                 accept="image/*"
                 onChange={handleFileUpload}
                 className="hidden"
+                disabled={badges.length >= 10}
               />
-              <div className="text-sm text-gray-600 dark:text-gray-300">
-                <div className="mb-1">📁 Click to upload or drag & drop</div>
-                <div className="text-xs">Supports: JPG, PNG, GIF, WebP, SVG (max 5MB)</div>
+              <div className="text-sm text-gray-600 transition-colors">
+                <div className="mb-1">
+                  {badges.length >= 10 ? "🚫 Badge limit reached" : "📁 Click to upload or drag & drop"}
+                </div>
+                <div className="text-xs">
+                  {badges.length >= 10 
+                    ? "Remove some badges to add new ones" 
+                    : "Auto-adds badge • Supports: JPG, PNG, GIF, WebP, SVG (max 5MB)"
+                  }
+                </div>
               </div>
             </div>
             
