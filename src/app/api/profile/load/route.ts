@@ -1,4 +1,4 @@
-// src/app/api/profile/load/route.ts - NEW ENDPOINT FOR LOADING ANY USER'S PROFILE
+// src/app/api/profile/load/route.ts - SIMPLIFIED FOR CLERK AUTH (FIXED)
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
@@ -29,79 +29,181 @@ export async function OPTIONS() {
   });
 }
 
+// ✅ GET method for loading current user's profile (like ProfileCustomizer)
 export async function GET(req: NextRequest) {
-  console.log('API: Profile load request received');
+  console.log('API: Profile load GET request received');
   
   try {
-    // Verify requester is authenticated with Clerk
+    // Use Clerk's auth() function - this should work with cookies
     const { userId: requesterId } = await auth();
     
     if (!requesterId) {
+      console.log('API: No authenticated user found');
       return NextResponse.json(
-        { error: 'Unauthorized' }, 
+        { 
+          success: false,
+          error: 'Authentication required' 
+        }, 
         { status: 401, headers: corsHeaders }
       );
     }
 
-    // Get the target user ID from query parameters
-    const { searchParams } = new URL(req.url);
-    const targetUserId = searchParams.get('userId');
-    
-    if (!targetUserId) {
+    console.log('API: Loading profile for current user:', requesterId);
+
+    // Query the database for the current user's profile
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('clerk_id', requesterId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No profile found - this is normal for new users
+        console.log('API: No profile found for current user:', requesterId);
+        return NextResponse.json(
+          { 
+            success: true, 
+            data: null,
+            message: 'No profile found' 
+          }, 
+          { headers: corsHeaders }
+        );
+      }
+      
+      console.error('API: Database error:', error);
       return NextResponse.json(
-        { error: 'userId parameter is required' }, 
+        { 
+          success: false,
+          error: 'Database error: ' + error.message 
+        }, 
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    console.log('API: Profile loaded successfully for current user:', requesterId);
+    return NextResponse.json({ 
+      success: true, 
+      data 
+    }, { headers: corsHeaders });
+
+  } catch (error: any) {
+    console.error('API: GET error:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Server error: ' + error.message 
+      }, 
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+// ✅ POST method for loading any user's profile (for ProfilePopup)
+export async function POST(req: NextRequest) {
+  console.log('API: Profile load POST request received');
+  
+  try {
+    // Try to get authenticated user, but don't require it for basic profile viewing
+    const { userId: requesterId } = await auth();
+    
+    // Parse request body
+    let body;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error('API: Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Invalid JSON in request body' 
+        }, 
         { status: 400, headers: corsHeaders }
       );
     }
 
-    console.log('API: Loading profile for user:', targetUserId);
+    const { clerkUserId } = body;
+    
+    if (!clerkUserId) {
+      console.log('API: Missing clerkUserId in request body');
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'clerkUserId is required in request body' 
+        }, 
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    console.log('API: Loading profile for user:', clerkUserId, requesterId ? `requested by: ${requesterId}` : '(no auth)');
 
     // Query the database for the target user's profile
     const { data, error } = await supabase
       .from('user_profiles')
       .select('*')
-      .eq('clerk_id', targetUserId)
+      .eq('clerk_id', clerkUserId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('API: Load error:', error);
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No profile found - create a minimal response for users without profiles
+        console.log('API: No profile found for user:', clerkUserId);
+        
+        const minimalProfile = {
+          id: null,
+          clerk_id: clerkUserId, // ✅ Now included in the interface
+          username: clerkUserId, // Use Clerk ID as fallback
+          display_name: 'User',
+          avatar_url: '',
+          banner_url: '',
+          pronouns: '',
+          bio: '',
+          status: 'offline',
+          display_name_color: '#000000',
+          display_name_animation: 'none',
+          rainbow_speed: 3,
+          profile_complete: false,
+          badges: [],
+          profile_card_css: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        return NextResponse.json(
+          { 
+            success: true, 
+            data: minimalProfile,
+            message: 'Created minimal profile for user without database entry' 
+          }, 
+          { headers: corsHeaders }
+        );
+      }
+      
+      console.error('API: Database error:', error);
       return NextResponse.json(
-        { error: error.message }, 
+        { 
+          success: false,
+          error: 'Database error: ' + error.message 
+        }, 
         { status: 500, headers: corsHeaders }
       );
     }
 
-    if (!data) {
-      console.log('API: No profile found for user:', targetUserId);
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Profile not found',
-          data: null 
-        }, 
-        { headers: corsHeaders }
-      );
-    }
+    console.log('API: Profile loaded successfully for user:', clerkUserId);
 
-    console.log('API: Profile loaded successfully for user:', targetUserId);
-
-    // Return the profile data (excluding sensitive fields if needed)
-    const profileData = {
-      ...data,
-      // Remove sensitive fields that shouldn't be public
-      clerk_id: data.clerk_id, // Keep this for identification
-      // You might want to hide certain fields based on privacy settings
-    };
-
+    // Return the profile data
     return NextResponse.json({ 
       success: true, 
-      data: profileData 
+      data 
     }, { headers: corsHeaders });
 
   } catch (error: any) {
-    console.error('API: Load error:', error);
+    console.error('API: POST error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { 
+        success: false,
+        error: 'Server error: ' + error.message 
+      }, 
       { status: 500, headers: corsHeaders }
     );
   }

@@ -1,208 +1,288 @@
-// src/lib/fastProfileFetcher.ts - OPTIMIZED FAST PROFILE FETCHER
+// src/lib/fastProfileFetcher.ts - FIXED TO WORK WITH EXISTING API AND USER OBJECTS
+import { UserProfile, Badge } from '@/components/ProfileCustomizer/types';
 
-import { supabase } from '@/lib/supabase';
-import { profileCache } from '@/lib/profileCache';
-
-export interface FastProfileOptions {
-  useCache?: boolean;
-  timeout?: number;
-  retries?: number;
-  fields?: string[];
-  forceRefresh?: boolean;
+interface ProfileCache {
+  [userId: string]: {
+    data: UserProfile | null;
+    timestamp: number;
+    expires: number;
+  };
 }
-
-export interface ProfileData {
-  id: string;
-  username?: string;
-  display_name?: string;
-  avatar_url?: string;
-  banner_url?: string;
-  pronouns?: string;
-  bio?: string;
-  status?: 'online' | 'idle' | 'dnd' | 'offline';
-  display_name_color?: string;
-  display_name_animation?: string;
-  rainbow_speed?: number;
-  badges?: any[];
-  profile_complete?: boolean;
-  created_at?: string;
-  updated_at?: string;
-  profile_card_css?: string;
-}
-
-const DEFAULT_FIELDS = [
-  'id','username','display_name','avatar_url','pronouns','bio','status',
-  'display_name_color','display_name_animation','rainbow_speed',
-  'badges','profile_complete','created_at'
-];
-
-const MINIMAL_FIELDS = [
-  'id','username','display_name','avatar_url','profile_complete'
-];
 
 class FastProfileFetcher {
+  private cache: ProfileCache = {};
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   private abortControllers = new Map<string, AbortController>();
 
-  async fetchProfile(userId: string, options: FastProfileOptions = {}): Promise<ProfileData | null> {
-    const {
-      useCache = true,
-      timeout = 12000,
-      retries = 2,
-      fields = DEFAULT_FIELDS,
-      forceRefresh = false
-    } = options;
+  async fetchProfile(userIdOrObject: string | any, useCache = true): Promise<UserProfile | null> {
+    // ✅ Handle both string IDs and user objects
+    let userId: string;
+    let existingUserData: UserProfile | null = null;
 
-    if (!userId?.trim()) throw new Error('User ID is required');
-
-    if (!useCache || forceRefresh) this.cancelRequest(userId);
-
-    if (useCache) {
-      try {
-        return await profileCache.getOrFetch(
-          userId,
-          () => this.performFetch(userId, { timeout, retries, fields }),
-          { forceRefresh }
-        );
-      } catch (error: any) {
-        if (error.message?.includes('cancelled')) {
-          console.warn(`FastProfileFetcher: Fetch cancelled for ${userId}`);
-          return null;
-        }
-        console.error('FastProfileFetcher: Cache fetch failed:', error);
+    if (typeof userIdOrObject === 'string') {
+      userId = userIdOrObject;
+    } else if (userIdOrObject && typeof userIdOrObject === 'object') {
+      // Extract the user ID from the object
+      userId = userIdOrObject.id || userIdOrObject.clerk_id || userIdOrObject.authId;
+      
+      // If we have a user object with basic data, use it as fallback
+      if (userIdOrObject.username || userIdOrObject.display_name) {
+        existingUserData = {
+          clerk_id: userId,
+          username: userIdOrObject.username,
+          display_name: userIdOrObject.display_name,
+          avatar_url: userIdOrObject.avatar_url || '',
+          banner_url: userIdOrObject.banner_url || '',
+          pronouns: userIdOrObject.pronouns || '',
+          bio: userIdOrObject.bio || '',
+          status: userIdOrObject.status || 'offline',
+          display_name_color: userIdOrObject.display_name_color || '#000000',
+          display_name_animation: userIdOrObject.display_name_animation || 'none',
+          rainbow_speed: userIdOrObject.rainbow_speed || 3,
+          profile_complete: userIdOrObject.profile_complete || false,
+          badges: userIdOrObject.badges || [],
+          profile_card_css: userIdOrObject.profile_card_css || '',
+          created_at: userIdOrObject.created_at,
+          updated_at: userIdOrObject.updated_at
+        };
       }
+    } else {
+      throw new Error('User ID or user object is required');
     }
 
-    return this.performFetch(userId, { timeout, retries, fields });
-  }
+    if (!userId?.trim()) {
+      throw new Error('Valid user ID is required');
+    }
 
-  async fetchMinimalProfile(userId: string): Promise<ProfileData | null> {
-    return this.fetchProfile(userId, {
-      fields: MINIMAL_FIELDS,
-      timeout: 5000,
-      retries: 1
-    });
-  }
+    // Check cache first
+    if (useCache && this.isCacheValid(userId)) {
+      console.log(`FastProfileFetcher: Using cached profile for ${userId}`);
+      return this.cache[userId].data;
+    }
 
-  async fetchFullProfile(userId: string, forceRefresh = false): Promise<ProfileData | null> {
-    return this.fetchProfile(userId, {
-      fields: ['*'],
-      timeout: 8000,
-      retries: 3,
-      forceRefresh
-    });
-  }
-  //mhmmm
+    // If we have existing user data and no need to fetch from server, use it
+    if (existingUserData && useCache) {
+      console.log(`FastProfileFetcher: Using provided user data for ${userId}`);
+      this.cache[userId] = {
+        data: existingUserData,
+        timestamp: Date.now(),
+        expires: Date.now() + this.CACHE_DURATION
+      };
+      return existingUserData;
+    }
 
-  private async performFetch(
-    userId: string,
-    options: { timeout: number; retries: number; fields: string[] }
-  ): Promise<ProfileData | null> {
-    const { timeout, retries, fields } = options;
-    let lastError: Error | null = null;
+    // Cancel any existing request for this user
+    this.cancelRequest(userId);
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const controller = new AbortController();
-        this.abortControllers.set(userId, controller);
+    try {
+      const controller = new AbortController();
+      this.abortControllers.set(userId, controller);
 
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            controller.abort();
-            reject(new Error(`Profile fetch timeout after ${timeout}ms`));
-          }, timeout);
-        });
+      console.log(`FastProfileFetcher: Fetching profile for ${userId}`);
 
-        const fetchPromise = supabase
-          .from('user_profiles')
-          .select(fields.join(', '), { head: false })
-          .eq('id', userId)
-          .limit(1)
-          .abortSignal(controller.signal)
-          .single();
+      // ✅ Use your existing API endpoint instead of a new public one
+      const response = await fetch('/api/profile/load', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include session cookies
+        body: JSON.stringify({ clerkUserId: userId }),
+        signal: controller.signal,
+      });
 
-        const result = await Promise.race([fetchPromise, timeoutPromise]);
-        this.abortControllers.delete(userId);
+      // Clean up controller
+      this.abortControllers.delete(userId);
 
-        if (controller.signal.aborted) throw new Error('Request was cancelled');
-
-        const { data, error } = result as any;
-        if (error) {
-          if (error.code === 'PGRST116') return null;
-          throw new Error(error.message || 'Database error');
+      if (!response.ok) {
+        // If the API call fails but we have existing user data, use that as fallback
+        if (existingUserData) {
+          console.log(`FastProfileFetcher: API failed, using fallback data for ${userId}`);
+          this.cache[userId] = {
+            data: existingUserData,
+            timestamp: Date.now(),
+            expires: Date.now() + (this.CACHE_DURATION / 2) // Shorter cache for fallback data
+          };
+          return existingUserData;
         }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-        if (data) {
-          let profileData: any = JSON.parse(JSON.stringify(data));
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const profileData = result.data;
+        
+        // Parse badges if they exist
+        if (profileData.badges) {
           try {
-            profileData.badges = typeof profileData.badges === 'string'
-              ? JSON.parse(profileData.badges)
+            profileData.badges = typeof profileData.badges === 'string' 
+              ? JSON.parse(profileData.badges) 
               : profileData.badges;
-            if (!Array.isArray(profileData.badges)) profileData.badges = [];
-          } catch {
+            
+            if (!Array.isArray(profileData.badges)) {
+              profileData.badges = [];
+            }
+          } catch (e) {
+            console.warn('Failed to parse badges for user:', userId);
             profileData.badges = [];
           }
-          if (!profileData.id) profileData.id = userId;
-          console.log(`FastProfileFetcher: Successfully fetched ${userId} (attempt ${attempt + 1})`);
-          return profileData as ProfileData;
+        } else {
+          profileData.badges = [];
         }
+        
+        // Cache the result
+        this.cache[userId] = {
+          data: profileData,
+          timestamp: Date.now(),
+          expires: Date.now() + this.CACHE_DURATION
+        };
 
-        return null;
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`FastProfileFetcher: Attempt ${attempt + 1} failed for ${userId}:`, error.message);
-        if (error.message.includes('cancelled') || attempt === retries) break;
-        const delay = 250 * Math.pow(2, attempt);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(`FastProfileFetcher: Profile fetched and cached for ${userId}`);
+        return profileData;
+      } else {
+        // If API returns no data but we have existing user data, use that
+        if (existingUserData) {
+          console.log(`FastProfileFetcher: No API data, using fallback for ${userId}`);
+          this.cache[userId] = {
+            data: existingUserData,
+            timestamp: Date.now(),
+            expires: Date.now() + (this.CACHE_DURATION / 2)
+          };
+          return existingUserData;
+        }
+        throw new Error(result.error || 'Failed to fetch profile');
       }
+    } catch (error: any) {
+      this.abortControllers.delete(userId);
+      
+      if (error.name === 'AbortError') {
+        console.log(`FastProfileFetcher: Request cancelled for ${userId}`);
+        return null;
+      }
+      
+      // If fetch failed but we have existing user data, use that as fallback
+      if (existingUserData) {
+        console.log(`FastProfileFetcher: Fetch failed, using fallback data for ${userId}:`, error.message);
+        this.cache[userId] = {
+          data: existingUserData,
+          timestamp: Date.now(),
+          expires: Date.now() + 60000 // 1 minute cache for error fallback
+        };
+        return existingUserData;
+      }
+      
+      console.error(`FastProfileFetcher: Error fetching ${userId}:`, error);
+      throw error;
     }
-
-    this.abortControllers.delete(userId);
-    throw lastError || new Error('All fetch attempts failed');
   }
 
-  cancelRequest(userId: string): void {
-    const controller = this.abortControllers.get(userId);
-    if (controller) controller.abort();
-    this.abortControllers.delete(userId);
+  async fetchMinimalProfile(userIdOrObject: string | any): Promise<UserProfile | null> {
+    return this.fetchProfile(userIdOrObject, true);
   }
 
-  cancelAllRequests(): void {
-    for (const controller of this.abortControllers.values()) controller.abort();
-    this.abortControllers.clear();
+  async fetchFullProfile(userIdOrObject: string | any, forceRefresh = false): Promise<UserProfile | null> {
+    return this.fetchProfile(userIdOrObject, !forceRefresh);
   }
 
-  async batchFetch(userIds: string[]): Promise<Map<string, ProfileData | null>> {
-    const results = new Map<string, ProfileData | null>();
+  async fetchMultipleProfiles(userIdsOrObjects: (string | any)[]): Promise<Map<string, UserProfile | null>> {
+    const results = new Map<string, UserProfile | null>();
+    
+    // Process in batches to avoid overwhelming the server
     const BATCH_SIZE = 5;
     const batches = [];
-    for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
-      batches.push(userIds.slice(i, i + BATCH_SIZE));
+    
+    for (let i = 0; i < userIdsOrObjects.length; i += BATCH_SIZE) {
+      batches.push(userIdsOrObjects.slice(i, i + BATCH_SIZE));
     }
+
     for (const batch of batches) {
-      const promises = batch.map(async (userId) => {
+      const promises = batch.map(async (userIdOrObject) => {
         try {
-          const profile = await this.fetchMinimalProfile(userId);
+          const profile = await this.fetchProfile(userIdOrObject);
+          const userId = typeof userIdOrObject === 'string' ? userIdOrObject : userIdOrObject.id;
           results.set(userId, profile);
         } catch (error) {
+          const userId = typeof userIdOrObject === 'string' ? userIdOrObject : userIdOrObject.id;
           console.warn(`Batch fetch failed for ${userId}:`, error);
           results.set(userId, null);
         }
       });
+
       await Promise.allSettled(promises);
     }
+
     return results;
   }
 
-  async preloadProfiles(userIds: string[]): Promise<void> {
-    try {
-      await profileCache.preload(userIds, (userId) =>
-        this.performFetch(userId, { timeout: 3000, retries: 1, fields: MINIMAL_FIELDS })
-      );
-    } catch (error) {
-      console.warn('Profile preload failed:', error);
+  preloadProfile(userIdOrObject: string | any): Promise<void> {
+    return this.fetchProfile(userIdOrObject).then(() => {}).catch(() => {});
+  }
+
+  preloadProfiles(userIdsOrObjects: (string | any)[]): Promise<void> {
+    return this.fetchMultipleProfiles(userIdsOrObjects).then(() => {}).catch(() => {});
+  }
+
+  invalidateCache(userId?: string): void {
+    if (userId) {
+      delete this.cache[userId];
+      console.log(`FastProfileFetcher: Cache invalidated for ${userId}`);
+    } else {
+      this.cache = {};
+      console.log('FastProfileFetcher: All cache invalidated');
     }
+  }
+
+  cancelRequest(userId: string): void {
+    const controller = this.abortControllers.get(userId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(userId);
+    }
+  }
+
+  cancelAllRequests(): void {
+    for (const controller of this.abortControllers.values()) {
+      controller.abort();
+    }
+    this.abortControllers.clear();
+  }
+
+  private isCacheValid(userId: string): boolean {
+    const cached = this.cache[userId];
+    return cached && Date.now() < cached.expires;
+  }
+
+  // Utility methods
+  getCacheStats(): { size: number; entries: string[] } {
+    return {
+      size: Object.keys(this.cache).length,
+      entries: Object.keys(this.cache)
+    };
+  }
+
+  getCachedProfile(userId: string): UserProfile | null {
+    return this.isCacheValid(userId) ? this.cache[userId].data : null;
+  }
+
+  // Alias methods to maintain compatibility with old API
+  async batchFetch(userIdsOrObjects: (string | any)[]): Promise<Map<string, UserProfile | null>> {
+    return this.fetchMultipleProfiles(userIdsOrObjects);
   }
 }
 
+// Export singleton instance
 export const fastProfileFetcher = new FastProfileFetcher();
-export { profileCache } from '@/lib/profileCache';
+
+// Export types for convenience
+export type { UserProfile, Badge } from '@/components/ProfileCustomizer/types';
+
+// Export interfaces for compatibility
+export interface FastProfileOptions {
+  useCache?: boolean;
+  timeout?: number;
+  retries?: number;
+  forceRefresh?: boolean;
+}
+
+export interface ProfileData extends UserProfile {}

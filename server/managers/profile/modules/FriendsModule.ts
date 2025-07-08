@@ -4,41 +4,44 @@ import { RedisService } from '../../../services/RedisService';
 import { FriendData, FriendshipStatus } from '../types/FriendTypes';
 import { logger } from '../../../utils/logger';
 
-// Typing the structure Supabase will return
+// ✅ FIXED: Proper type definitions with clerk_id consistency
 type FriendRow = {
-  friend_id: string;
-  created_at: string;
-  friend: {
-    id: string;
-    username: string;
-    display_name?: string;
-    avatar_url?: string;
-    status?: string | null;
-    last_seen?: string | null;
-    is_online?: boolean | null;
-  } | null;
+friend_id: string;
+created_at: string;
+friend: {
+id: string;
+clerk_id: string; // ✅ ADDED: Ensure clerk_id is always available
+username: string;
+display_name?: string;
+avatar_url?: string;
+status?: string | null;
+last_seen?: string | null;
+is_online?: boolean | null;
+} | null;
 };
 
 type FriendRequestRow = {
-  id: string;
-  sender_id?: string;
-  receiver_id?: string;
-  message?: string;
-  created_at: string;
-  sender?: {
-    id: string;
-    username: string;
-    display_name?: string;
-    avatar_url?: string;
-    is_online?: boolean;
-  } | null;
-  receiver?: {
-    id: string;
-    username: string;
-    display_name?: string;
-    avatar_url?: string;
-    is_online?: boolean;
-  } | null;
+id: string;
+sender_id?: string;
+receiver_id?: string;
+message?: string;
+created_at: string;
+sender?: {
+id: string;
+clerk_id: string; // ✅ ADDED: Clerk ID for sender
+username: string;
+display_name?: string;
+avatar_url?: string;
+is_online?: boolean;
+} | null;
+receiver?: {
+id: string;
+clerk_id: string; // ✅ ADDED: Clerk ID for receiver
+username: string;
+display_name?: string;
+avatar_url?: string;
+is_online?: boolean;
+} | null;
 };
 
 const VALID_STATUSES = ['online', 'idle', 'dnd', 'offline'];

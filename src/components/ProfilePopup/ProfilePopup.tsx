@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH PROPER DATA LOADING
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH CORRECT API ENDPOINTS
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -7,9 +7,9 @@ import { UserProfile, Badge } from '../ProfileCustomizer/types';
 
 interface ProfilePopupProps {
   isVisible: boolean;
-  userId: string | null; // Changed to userId instead of full profile
+  userId: string | any | null;
   position: { x: number; y: number } | null;
-  currentUserAuthId?: string; // For friendship operations
+  currentUserAuthId?: string;
 }
 
 interface FriendshipStatus {
@@ -17,15 +17,22 @@ interface FriendshipStatus {
   since?: string;
 }
 
-// ✅ API URLs - Use your Next.js API routes
-const PROFILE_API_URL = '/api/profile/load'; // Your profile loading endpoint
-const SOCKET_API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
+// ✅ SIMPLIFIED: Use NEXT_PUBLIC_SOCKET_SERVER_URL directly
+const API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001';
 
 function getDefaultAvatar() {
   return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }
 
-const getStatusIndicator = (status: string): { color: string; text: string } => {
+const getStatusIndicator = (status: string, isOnline?: boolean): { color: string; text: string } => {
+  // ✅ Use is_online field if available, otherwise fall back to status
+  if (isOnline !== undefined) {
+    return isOnline 
+      ? { color: 'bg-green-500', text: 'Online' }
+      : { color: 'bg-gray-500', text: 'Offline' };
+  }
+  
+  // Fallback to status field
   switch (status) {
     case 'online': return { color: 'bg-green-500', text: 'Online' };
     case 'idle': return { color: 'bg-yellow-500', text: 'Idle' };
@@ -35,13 +42,42 @@ const getStatusIndicator = (status: string): { color: string; text: string } => 
   }
 };
 
-const getDisplayNameClass = (animation?: string): string => {
+// ✅ IMPROVED: Display name styling with inline styles for independence
+const getDisplayNameStyle = (animation?: string, color?: string, speed?: number): React.CSSProperties => {
+  const baseStyle: React.CSSProperties = {
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    marginBottom: '0.25rem',
+    color: color || '#000000',
+  };
+
   switch (animation) {
-    case 'rainbow': return 'animate-rainbow';
-    case 'gradient': return 'animate-gradient';
-    case 'pulse': return 'animate-pulse';
-    case 'glow': return 'animate-glow';
-    default: return '';
+    case 'rainbow':
+      return {
+        ...baseStyle,
+        animation: `rainbow ${speed || 3}s linear infinite`,
+      };
+    case 'gradient':
+      return {
+        ...baseStyle,
+        background: 'linear-gradient(45deg, #667eea, #764ba2)',
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        animation: 'gradient 4s ease-in-out infinite',
+      };
+    case 'pulse':
+      return {
+        ...baseStyle,
+        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      };
+    case 'glow':
+      return {
+        ...baseStyle,
+        animation: 'glow 2s ease-in-out infinite alternate',
+      };
+    default:
+      return baseStyle;
   }
 };
 
@@ -57,9 +93,10 @@ export function ProfilePopup({
   const [isMounted, setIsMounted] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>({ status: 'none' });
+  const [isLoading, setIsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // ✅ NEW: Profile data state
+  // Profile data state
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [customCSS, setCustomCSS] = useState<string>('');
@@ -67,7 +104,7 @@ export function ProfilePopup({
   const [profileError, setProfileError] = useState<string | null>(null);
 
   // ✅ Check if this is the current user's own profile
-  const isOwnProfile = currentUserAuthId && userId === currentUserAuthId;
+  const isOwnProfile = currentUserAuthId && profile?.id === currentUserAuthId;
 
   // ✅ Ensure component is mounted before state updates
   useEffect(() => {
@@ -75,70 +112,208 @@ export function ProfilePopup({
     return () => setIsMounted(false);
   }, []);
 
-  // ✅ NEW: Load profile data when userId changes
+  // ✅ Load profile data from the user object only (no API calls)
   useEffect(() => {
     if (!isMounted || !userId || !isVisible) {
       return;
     }
 
-    const loadProfileData = async () => {
+    const loadProfileData = () => {
       setProfileLoading(true);
       setProfileError(null);
       
       try {
         console.log('🔍 Loading profile data for user:', userId);
 
-        // Create a profile loading endpoint that accepts any user ID
-        const response = await fetch(`${PROFILE_API_URL}?userId=${encodeURIComponent(userId)}`, {
-          method: 'GET',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
+        let userIdString: string;
+        let userObject: any = null;
 
-        console.log('📡 Profile load response:', {
-          status: response.status,
-          ok: response.ok
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (typeof userId === 'string') {
+          userIdString = userId;
+        } else if (userId && typeof userId === 'object' && userId.id) {
+          userIdString = userId.id;
+          userObject = userId;
+        } else {
+          console.error('❌ Invalid user ID format:', userId);
+          throw new Error('Invalid user ID format');
         }
 
-        const data = await response.json();
-        console.log('✅ Profile data loaded:', data);
-
-        if (data.success && data.data && isMounted) {
-          const profileData = data.data;
+        // ✅ Always create profile from user object or use minimal data
+        if (userObject) {
+          console.log('📦 Creating profile from user object:', userObject);
+          console.log('🔍 Checking badges field specifically:', {
+            badgesExists: 'badges' in userObject,
+            badgesValue: userObject.badges,
+            badgesType: typeof userObject.badges,
+            allKeys: Object.keys(userObject),
+            hasUndefinedBadges: userObject.badges === undefined,
+            hasNullBadges: userObject.badges === null,
+            hasEmptyStringBadges: userObject.badges === '',
+            hasEmptyArrayBadges: Array.isArray(userObject.badges) && userObject.badges.length === 0
+          });
           
-          // Parse badges if they exist
+          // ✅ Fix badges handling for JSONB format with better undefined handling
           let parsedBadges: Badge[] = [];
-          if (profileData.badges) {
+          
+          // Check if badges field exists and has a value
+          if (userObject.badges !== undefined && userObject.badges !== null && userObject.badges !== '') {
             try {
-              parsedBadges = Array.isArray(profileData.badges) 
-                ? profileData.badges 
-                : JSON.parse(profileData.badges);
-              parsedBadges = parsedBadges.filter(badge => 
-                badge && typeof badge === 'object' && badge.id && badge.url
-              );
+              console.log('🏷️ Processing badges - Raw data:', userObject.badges);
+              console.log('🏷️ Processing badges - Type:', typeof userObject.badges);
+              
+              // Handle different badge formats
+              if (Array.isArray(userObject.badges)) {
+                // Already an array
+                parsedBadges = userObject.badges;
+                console.log('✅ Badges already an array:', parsedBadges);
+              } else if (typeof userObject.badges === 'string') {
+                // JSONB string format - parse it
+                const trimmedBadges = userObject.badges.trim();
+                console.log('🏷️ Trimmed badges string:', trimmedBadges);
+                
+                if (trimmedBadges.startsWith('[') && trimmedBadges.endsWith(']')) {
+                  parsedBadges = JSON.parse(trimmedBadges);
+                  console.log('✅ Successfully parsed badges from JSONB string:', parsedBadges);
+                } else if (trimmedBadges === '') {
+                  console.log('ℹ️ Empty badges string - setting to empty array');
+                  parsedBadges = [];
+                } else {
+                  console.warn('❌ Invalid badges format - not a JSON array:', trimmedBadges);
+                  parsedBadges = [];
+                }
+              } else if (typeof userObject.badges === 'object' && userObject.badges !== null) {
+                // Could be an object that needs conversion
+                console.log('🏷️ Badges is an object, attempting to convert:', userObject.badges);
+                parsedBadges = Array.isArray(userObject.badges) ? userObject.badges : [userObject.badges];
+              } else {
+                // Unknown format
+                console.warn('❌ Unknown badges format:', typeof userObject.badges, userObject.badges);
+                parsedBadges = [];
+              }
+              
+              // Filter and validate badges
+              const originalLength = parsedBadges.length;
+              parsedBadges = parsedBadges.filter(badge => {
+                const isValid = badge && 
+                  typeof badge === 'object' && 
+                  badge.id && 
+                  badge.url &&
+                  typeof badge.id === 'string' &&
+                  typeof badge.url === 'string';
+                
+                if (!isValid) {
+                  console.warn('❌ Invalid badge filtered out:', badge);
+                }
+                return isValid;
+              });
+              
+              console.log(`✅ Final processed badges (${parsedBadges.length}/${originalLength}):`, parsedBadges);
             } catch (e) {
-              console.warn('Failed to parse badges:', e);
+              console.error('❌ Failed to parse badges from user object:', e);
+              console.error('❌ Raw badges data:', userObject.badges);
               parsedBadges = [];
             }
+          } else {
+            console.warn('⚠️ BADGES ISSUE DETECTED:');
+            console.warn(`⚠️ Badges field value: ${userObject.badges}`);
+            console.warn('⚠️ This means badges are not being properly fetched from the database');
+            console.warn('⚠️ Possible causes:');
+            console.warn('   1. Database query does not SELECT the badges field');
+            console.warn('   2. Database badges column is NULL for this user');
+            console.warn('   3. API is not including badges in the response');
+            console.warn('   4. Data transformation is removing badges field');
+            console.warn('⚠️ Check your database and API endpoints!');
+            
+            // Try to show what the user should have
+            console.warn('⚠️ Expected badges format in database:');
+            console.warn('   [{"id":"badge_123","url":"data:image/...","name":"badge_name"}]');
           }
+          
+          const profileFromUserObject: UserProfile = {
+            id: userObject.id,
+            clerk_id: userObject.clerk_id || userObject.id,
+            username: userObject.username || userObject.id,
+            display_name: userObject.display_name || userObject.username || userObject.id,
+            avatar_url: userObject.avatar_url || '',
+            banner_url: userObject.banner_url || '',
+            pronouns: userObject.pronouns || '',
+            bio: userObject.bio || '',
+            status: userObject.status || 'offline',
+            display_name_color: userObject.display_name_color || '#000000',
+            display_name_animation: userObject.display_name_animation || 'none',
+            rainbow_speed: userObject.rainbow_speed || 3,
+            badges: parsedBadges,
+            profile_card_css: userObject.profile_card_css || '',
+            created_at: userObject.created_at,
+            // ✅ Only include the fields you want
+            is_online: userObject.is_online || false,
+            last_seen: userObject.last_seen || undefined
+          };
 
-          setProfile(profileData);
+          console.log('✅ Profile created from user object:', profileFromUserObject);
+          console.log('✅ Badges parsed:', parsedBadges);
+          
+          setProfile(profileFromUserObject);
           setBadges(parsedBadges);
-          setCustomCSS(profileData.profile_card_css || '');
+          setCustomCSS(profileFromUserObject.profile_card_css || '');
         } else {
-          throw new Error(data.message || 'Failed to load profile');
+          // ✅ Create minimal profile for string IDs
+          console.log('📝 Creating minimal profile for string ID:', userIdString);
+          const minimalProfile: UserProfile = {
+            id: userIdString,
+            clerk_id: userIdString,
+            username: userIdString,
+            display_name: userIdString,
+            avatar_url: '',
+            banner_url: '',
+            pronouns: '',
+            bio: '',
+            status: 'offline',
+            display_name_color: '#000000',
+            display_name_animation: 'none',
+            rainbow_speed: 3,
+            badges: [],
+            profile_card_css: '',
+            created_at: new Date().toISOString(),
+            is_online: false,
+            last_seen: undefined
+          };
+          
+          console.log('📝 Minimal profile created:', minimalProfile);
+          setProfile(minimalProfile);
+          setBadges([]);
+          setCustomCSS('');
         }
+        
       } catch (error) {
         console.error('❌ Failed to load profile data:', error);
-        if (isMounted) {
-          setProfileError(error instanceof Error ? error.message : 'Failed to load profile');
-        }
+        
+        // ✅ Create error fallback profile
+        const userIdStr = typeof userId === 'string' ? userId : (userId as any)?.id || 'unknown';
+        const errorProfile: UserProfile = {
+          id: userIdStr,
+          clerk_id: userIdStr,
+          username: userIdStr,
+          display_name: userIdStr,
+          avatar_url: '',
+          banner_url: '',
+          pronouns: '',
+          bio: '',
+          status: 'offline',
+          display_name_color: '#ff0000', // Red to indicate error
+          display_name_animation: 'none',
+          rainbow_speed: 3,
+          badges: [],
+          profile_card_css: '',
+          created_at: new Date().toISOString(),
+          is_online: false,
+          last_seen: undefined
+        };
+        
+        setProfile(errorProfile);
+        setBadges([]);
+        setCustomCSS('');
+        setProfileError(error instanceof Error ? error.message : 'Failed to load profile');
       } finally {
         if (isMounted) {
           setProfileLoading(false);
@@ -151,19 +326,20 @@ export function ProfilePopup({
 
   // ✅ Load friendship status when profile changes
   useEffect(() => {
-    if (!isMounted || !userId || !currentUserAuthId || isOwnProfile || !profile) {
+    if (!isMounted || !profile?.id || !currentUserAuthId || isOwnProfile) {
       return;
     }
 
     const loadFriendshipStatus = async () => {
+      setIsLoading(true);
       try {
         console.log('🔍 Loading friendship status...', {
-          apiUrl: `${SOCKET_API_BASE_URL}/api/friends/status`,
+          apiUrl: `${API_BASE_URL}/api/friends/status`,
           currentUser: currentUserAuthId,
-          targetUser: userId
+          targetUser: profile.id
         });
 
-        const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/status`, {
+        const response = await fetch(`${API_BASE_URL}/api/friends/status`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -171,58 +347,97 @@ export function ProfilePopup({
           },
           body: JSON.stringify({
             user1AuthId: currentUserAuthId,
-            user2AuthId: userId
+            user2AuthId: profile.id
           })
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && isMounted) {
-            setFriendshipStatus(data.status);
-          }
+        console.log('📡 Friendship status response:', {
+          status: response.status,
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Friendship status data:', data);
+
+        if (data.success && isMounted) {
+          setFriendshipStatus(data.status);
+        } else {
+          console.error('❌ Friendship status failed:', data.message);
         }
       } catch (error) {
         console.error('❌ Failed to load friendship status:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadFriendshipStatus();
-  }, [isMounted, userId, currentUserAuthId, isOwnProfile, profile]);
+  }, [isMounted, profile?.id, currentUserAuthId, isOwnProfile]);
 
-  // ✅ Calculate position only after mounting
+  // ✅ FIXED: Better position calculation with proper validation
   useEffect(() => {
     if (!isMounted || !isVisible || !position) {
-      if (isMounted) {
-        setAdjustedPosition(null);
-      }
+      setAdjustedPosition(null);
       return;
     }
 
+    const POPUP_WIDTH = 300;
+    const POPUP_HEIGHT = 450;
+    const OFFSET = 10;
+    
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    const popupWidth = 300;
-    const popupHeight = 450;
+    // ✅ FIX: Validate position data and provide fallbacks
+    let x = typeof position.x === 'number' && !isNaN(position.x) ? position.x : 100;
+    let y = typeof position.y === 'number' && !isNaN(position.y) ? position.y : 100;
     
-    let { x, y } = position;
+    // Add small offset so popup doesn't appear directly under cursor
+    x += OFFSET;
+    y += OFFSET;
     
-    if (x + popupWidth > viewportWidth) {
-      x = Math.max(20, viewportWidth - popupWidth - 20);
-    }
-    if (x < 20) {
-      x = 20;
-    }
+    // Simple boundary checks with conservative margins
+    const MARGIN = 20;
     
-    if (y + popupHeight > viewportHeight) {
-      y = Math.max(20, position.y - popupHeight - 10);
-    }
-    if (y < 20) {
-      y = 20;
+    // Right edge check
+    if (x + POPUP_WIDTH > viewportWidth - MARGIN) {
+      x = Math.max(MARGIN, x - POPUP_WIDTH - OFFSET * 2);
     }
     
-    if (isMounted) {
-      setAdjustedPosition({ x, y });
+    // Bottom edge check  
+    if (y + POPUP_HEIGHT > viewportHeight - MARGIN) {
+      y = Math.max(MARGIN, y - POPUP_HEIGHT - OFFSET * 2);
     }
+    
+    // Left edge check
+    if (x < MARGIN) {
+      x = MARGIN;
+    }
+    
+    // Top edge check
+    if (y < MARGIN) {
+      y = MARGIN;
+    }
+    
+    // Final validation - ensure position is always valid numbers
+    const finalX = Math.max(0, Math.min(x, viewportWidth - POPUP_WIDTH));
+    const finalY = Math.max(0, Math.min(y, viewportHeight - POPUP_HEIGHT));
+    
+    // ✅ Double-check that final values are valid numbers
+    if (isNaN(finalX) || isNaN(finalY)) {
+      console.error('❌ Position calculation resulted in NaN, using fallback');
+      setAdjustedPosition({ x: 100, y: 100 });
+      return;
+    }
+    
+    setAdjustedPosition({ x: finalX, y: finalY });
   }, [isMounted, isVisible, position]);
 
   // ✅ Handle animation only after mounting
@@ -255,13 +470,26 @@ export function ProfilePopup({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showContextMenu]);
 
-  // ✅ Friend action handlers with correct API endpoints
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // No cleanup needed since we're not using fastProfileFetcher
+    };
+  }, [userId]);
+
+  // ✅ FIXED: Friend action handlers with correct API endpoints
   const handleSendFriendRequest = useCallback(async () => {
-    if (!userId || !currentUserAuthId) return;
+    if (!profile?.id || !currentUserAuthId) return;
 
     setActionLoading('add_friend');
     try {
-      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/send-request`, {
+      console.log('📤 Sending friend request...', {
+        apiUrl: `${API_BASE_URL}/api/friends/send-request`,
+        sender: currentUserAuthId,
+        receiver: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/send-request`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -269,31 +497,50 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           senderAuthId: currentUserAuthId,
-          receiverAuthId: userId
+          receiverAuthId: profile.id
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setFriendshipStatus({ 
-            status: data.autoAccepted ? 'friends' : 'pending_sent' 
-          });
-        }
+      console.log('📡 Friend request response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Friend request data:', data);
+
+      if (data.success) {
+        setFriendshipStatus({ 
+          status: data.autoAccepted ? 'friends' : 'pending_sent' 
+        });
+        
+        console.log('✅ Friend request sent successfully');
+      } else {
+        console.error('❌ Failed to send friend request:', data.message);
       }
     } catch (error) {
       console.error('❌ Error sending friend request:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [userId, currentUserAuthId]);
+  }, [profile?.id, currentUserAuthId]);
 
   const handleRemoveFriend = useCallback(async () => {
-    if (!userId || !currentUserAuthId) return;
+    if (!profile?.id || !currentUserAuthId) return;
 
     setActionLoading('remove_friend');
     try {
-      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/remove`, {
+      console.log('💔 Removing friend...', {
+        apiUrl: `${API_BASE_URL}/api/friends/remove`,
+        user1: currentUserAuthId,
+        user2: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/remove`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -301,31 +548,42 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           user1AuthId: currentUserAuthId,
-          user2AuthId: userId
+          user2AuthId: profile.id
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setFriendshipStatus({ status: 'none' });
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'none' });
+        console.log('✅ Friend removed successfully');
+      } else {
+        console.error('❌ Failed to remove friend:', data.message);
       }
     } catch (error) {
       console.error('❌ Error removing friend:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [userId, currentUserAuthId]);
+  }, [profile?.id, currentUserAuthId]);
 
   const handleBlockUser = useCallback(async () => {
-    if (!userId || !currentUserAuthId) return;
+    if (!profile?.id || !currentUserAuthId) return;
 
     setActionLoading('block_user');
     setShowContextMenu(false);
     
     try {
-      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/block`, {
+      console.log('🚫 Blocking user...', {
+        apiUrl: `${API_BASE_URL}/api/friends/block`,
+        blocker: currentUserAuthId,
+        blocked: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/block`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -333,29 +591,40 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: userId
+          blockedAuthId: profile.id
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setFriendshipStatus({ status: 'blocked' });
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'blocked' });
+        console.log('✅ User blocked successfully');
+      } else {
+        console.error('❌ Failed to block user:', data.message);
       }
     } catch (error) {
       console.error('❌ Error blocking user:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [userId, currentUserAuthId]);
+  }, [profile?.id, currentUserAuthId]);
 
   const handleUnblockUser = useCallback(async () => {
-    if (!userId || !currentUserAuthId) return;
+    if (!profile?.id || !currentUserAuthId) return;
 
     setActionLoading('unblock_user');
     try {
-      const response = await fetch(`${SOCKET_API_BASE_URL}/api/friends/unblock`, {
+      console.log('🔓 Unblocking user...', {
+        apiUrl: `${API_BASE_URL}/api/friends/unblock`,
+        blocker: currentUserAuthId,
+        blocked: profile.id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/friends/unblock`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -363,25 +632,32 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: userId
+          blockedAuthId: profile.id
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setFriendshipStatus({ status: 'none' });
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setFriendshipStatus({ status: 'none' });
+        console.log('✅ User unblocked successfully');
+      } else {
+        console.error('❌ Failed to unblock user:', data.message);
       }
     } catch (error) {
       console.error('❌ Error unblocking user:', error);
     } finally {
       setActionLoading(null);
     }
-  }, [userId, currentUserAuthId]);
+  }, [profile?.id, currentUserAuthId]);
 
   // ✅ Get button text and action based on friendship status
   const getFriendButtonConfig = () => {
+    if (isLoading) return { text: 'Loading...', action: null, disabled: true };
+
     switch (friendshipStatus.status) {
       case 'friends':
         return { 
@@ -420,7 +696,7 @@ export function ProfilePopup({
         };
       default:
         return { 
-          text: '+ Add Friend', 
+          text: '', 
           action: handleSendFriendRequest, 
           disabled: false,
           variant: 'primary'
@@ -428,51 +704,38 @@ export function ProfilePopup({
     }
   };
 
-  if (!isMounted || !isVisible || !userId || !adjustedPosition) {
+  if (!isMounted || !isVisible || !profile || !adjustedPosition) {
+    console.log('❌ ProfilePopup not rendering:', {
+      isMounted,
+      isVisible,
+      hasProfile: !!profile,
+      hasPosition: !!adjustedPosition,
+      profileData: profile ? {
+        id: profile.id,
+        display_name: profile.display_name,
+        bio: profile.bio,
+        status: profile.status
+      } : null
+    });
     return null;
   }
 
-  // ✅ Loading state
-  if (profileLoading) {
-    return (
-      <div 
-        className="fixed z-[1050] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6"
-        style={{
-          top: `${adjustedPosition.y}px`,
-          left: `${adjustedPosition.x}px`,
-          width: '300px'
-        }}
-      >
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <span className="ml-3 text-gray-600 dark:text-gray-400">Loading profile...</span>
-        </div>
-      </div>
-    );
-  }
+  console.log('✅ ProfilePopup rendering with:', {
+    profile: {
+      id: profile.id,
+      display_name: profile.display_name,
+      username: profile.username,
+      bio: profile.bio,
+      status: profile.status,
+      avatar_url: profile.avatar_url,
+      display_name_color: profile.display_name_color
+    },
+    badges: badges.length,
+    position: adjustedPosition,
+    statusInfo: getStatusIndicator(profile.status || 'offline')
+  });
 
-  // ✅ Error state
-  if (profileError || !profile) {
-    return (
-      <div 
-        className="fixed z-[1050] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6"
-        style={{
-          top: `${adjustedPosition.y}px`,
-          left: `${adjustedPosition.x}px`,
-          width: '300px'
-        }}
-      >
-        <div className="text-center py-4">
-          <div className="text-red-500 mb-2">⚠️</div>
-          <div className="text-gray-700 dark:text-gray-300">
-            {profileError || 'Failed to load profile'}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const statusInfo = getStatusIndicator(profile.status || 'offline');
+  const statusInfo = getStatusIndicator(profile.status || 'offline', profile.is_online);
   const buttonConfig = getFriendButtonConfig();
 
   return (
@@ -492,7 +755,8 @@ export function ProfilePopup({
           top: `${adjustedPosition.y}px`,
           left: `${adjustedPosition.x}px`,
           width: '300px',
-          maxWidth: '90vw'
+          maxWidth: '90vw',
+          minHeight: '400px'
         }}
       >
         <div className={cn(
@@ -516,31 +780,32 @@ export function ProfilePopup({
             
             <div className="absolute inset-0 bg-black bg-opacity-20" />
 
-            {/* ✅ Context Menu Button (Top Right) */}
-            {!isOwnProfile && (
-              <div className="absolute top-2 right-2">
-                <button
-                  onClick={() => setShowContextMenu(!showContextMenu)}
-                  className="context-menu-trigger w-8 h-8 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 flex items-center justify-center text-white transition-all duration-200"
-                  title="More options"
-                >
-                  <span className="text-lg font-bold leading-none">⋯</span>
-                </button>
+{/* ✅ Context Menu Button (Top Right) */}
+{!isOwnProfile && (
+ <div className="absolute top-2 right-2">
+<button
+  onClick={() => setShowContextMenu(!showContextMenu)}
+  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 !bg-black/30 hover:!bg-black/10"
+  title="More options"
+>
 
-                {/* Context Menu */}
-                {showContextMenu && (
-                  <div className="context-menu absolute top-10 right-0 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[120px] z-10">
-                    <button
-                      onClick={handleBlockUser}
-                      disabled={actionLoading === 'block_user'}
-                      className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900 dark:hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+     <span className="text-sm font-bold leading-none">⋯</span>
+   </button>
+
+   {/* Context Menu */}
+   {showContextMenu && (
+     <div className="context-menu absolute top-8 right-0 bg-black bg-opacity-10 backdrop-blur-sm rounded-lg shadow-lg border border-black border-opacity-20 py-1 min-w-[120px] z-10">
+       <button
+         onClick={handleBlockUser}
+         disabled={actionLoading === 'block_user'}
+         className="w-full px-3 py-2 text-left text-sm text-white hover:bg-black hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+       >
+         {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
+       </button>
+     </div>
+   )}
+ </div>
+)}
           </div>
 
           {/* Main Content */}
@@ -569,25 +834,22 @@ export function ProfilePopup({
 
             {/* User Info */}
             <div className="mb-3">
-              {/* Display Name */}
-              <h2
-                className={cn(
-                  "text-xl font-bold mb-1",
-                  getDisplayNameClass(profile.display_name_animation)
-                )}
-                style={{
-                  color: profile.display_name_color || undefined,
-                  animationDuration: profile.display_name_animation === 'rainbow' ? 
-                    `${profile.rainbow_speed || 3}s` : undefined
-                }}
-              >
-                {profile.display_name || profile.username || 'Unknown User'}
+              {/* ✅ IMPROVED: Display Name with inline style for independence */}
+              <h2 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}>
+                {profile.display_name || profile.username || profile.id || 'Unknown User'}
               </h2>
               
               {/* Username (if different from display name) */}
               {profile.display_name && 
                profile.username && 
                profile.display_name !== profile.username && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  @{profile.username}
+                </p>
+              )}
+              
+              {/* Always show username if no display name */}
+              {(!profile.display_name && profile.username) && (
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                   @{profile.username}
                 </p>
@@ -600,11 +862,21 @@ export function ProfilePopup({
                 </p>
               )}
 
-              {/* Status */}
+              {/* Status with better handling */}
               <div className="flex items-center gap-2 text-sm">
                 <div className={cn("w-3 h-3 rounded-full", statusInfo.color)} />
                 <span className="text-gray-700 dark:text-gray-300 capitalize">
                   {statusInfo.text}
+                </span>
+                {/* Show last seen if offline and available */}
+                {!profile.is_online && profile.last_seen && (
+                  <span className="text-xs text-gray-400 ml-2">
+                    Last seen {new Date(profile.last_seen).toLocaleDateString()}
+                  </span>
+                )}
+                {/* Debug info */}
+                <span className="text-xs text-gray-400 ml-2">
+                  (Online: {profile.is_online ? 'true' : 'false'}, Status: {profile.status || 'undefined'})
                 </span>
               </div>
             </div>
@@ -617,19 +889,35 @@ export function ProfilePopup({
                   onClick={buttonConfig.action || undefined}
                   disabled={buttonConfig.disabled || actionLoading === 'add_friend' || actionLoading === 'remove_friend'}
                   className={cn(
-                    "w-full py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200",
+                    "transition-all duration-200 flex items-center justify-center",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                     {
-                      'bg-blue-500 hover:bg-blue-600 text-white': buttonConfig.variant === 'primary',
-                      'bg-green-500 hover:bg-green-600 text-white': buttonConfig.variant === 'success',
-                      'bg-yellow-500 hover:bg-yellow-600 text-white': buttonConfig.variant === 'pending',
-                      'bg-red-500 hover:bg-red-600 text-white': buttonConfig.variant === 'danger',
-                      'bg-gray-300 text-gray-500 cursor-not-allowed': buttonConfig.variant === 'disabled',
+                      // Icon-only button for Add Friend
+                      'w-10 h-10 rounded-lg bg-blue-500 hover:bg-blue-600 text-white': buttonConfig.variant === 'primary',
+                      // Full-width buttons for other states
+                      'w-full py-2 px-4 rounded-lg font-medium text-sm bg-green-500 hover:bg-green-600 text-white': buttonConfig.variant === 'success',
+                      'w-full py-2 px-4 rounded-lg font-medium text-sm bg-yellow-500 hover:bg-yellow-600 text-white': buttonConfig.variant === 'pending',
+                      'w-full py-2 px-4 rounded-lg font-medium text-sm bg-red-500 hover:bg-red-600 text-white': buttonConfig.variant === 'danger',
+                      'w-full py-2 px-4 rounded-lg font-medium text-sm bg-gray-300 text-gray-500 cursor-not-allowed': buttonConfig.variant === 'disabled',
                     }
                   )}
+                  title={buttonConfig.variant === 'primary' ? 'Add Friend' : undefined}
                 >
-                  {(actionLoading === 'add_friend' || actionLoading === 'remove_friend') ? 
-                    'Loading...' : buttonConfig.text}
+                  {(actionLoading === 'add_friend' || actionLoading === 'remove_friend') ? (
+                    buttonConfig.variant === 'primary' ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      'Loading...'
+                    )
+                  ) : buttonConfig.variant === 'primary' ? (
+                    <img 
+                      src="https://cdn.sekansh21.workers.dev/icons/addfriend.svg" 
+                      alt="Add Friend" 
+                      className="w-5 h-5"
+                    />
+                  ) : (
+                    buttonConfig.text
+                  )}
                 </button>
 
                 {/* Message Button (placeholder for future implementation) */}
@@ -646,12 +934,12 @@ export function ProfilePopup({
             <div className="w-full h-px bg-gray-200 dark:bg-gray-600 mb-3" />
 
             {/* Bio Section */}
-            {profile.bio && (
+            {profile.bio && profile.bio.trim() && (
               <div className="mb-3">
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
                   About Me
                 </h3>
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border-l-4 border-blue-500">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border-l-4 border-blue-500 whitespace-pre-wrap">
                   {profile.bio}
                 </p>
               </div>
@@ -699,13 +987,13 @@ export function ProfilePopup({
               </div>
             )}
 
-            {/* Profile Info Footer */}
+            {/* Profile Info Footer - Simplified */}
             <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
               <div className="flex items-center justify-between">
                 <span>User Profile</span>
-                {profile.updated_at && (
-                  <span title="Last updated">
-                    Updated {new Date(profile.updated_at).toLocaleDateString()}
+                {profile.created_at && (
+                  <span title="Profile created">
+                    Joined {new Date(profile.created_at).toLocaleDateString()}
                   </span>
                 )}
               </div>

@@ -1,6 +1,4 @@
-// ===============================
-// 2. Types: src/components/ProfileCustomizer/types.ts
-// ===============================
+// src/components/ProfileCustomizer/types.ts - UPDATED WITH CLERK_ID
 
 export interface Badge {
   id: string;
@@ -10,6 +8,7 @@ export interface Badge {
 
 export interface UserProfile {
   id?: string;
+  clerk_id?: string; // ✅ Added clerk_id field
   username?: string;
   display_name?: string;
   avatar_url?: string;
