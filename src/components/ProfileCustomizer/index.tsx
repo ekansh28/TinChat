@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/index.tsx - COMPLETE FILE
+// src/components/ProfileCustomizer/index.tsx - UPDATED WITH IMAGE EDITOR
 'use client';
 import './ProfileCustomizer.css';
 import React, { useEffect, useCallback } from 'react';
@@ -9,7 +9,6 @@ import ProfileCardPreview from './components/ProfileCardPreview';
 import GoogleAd from "@/components/googleAd";
 import { LoadingSpinner98, LoadingState98 } from './components/LoadingComponents';
 import { useProfileCustomizer } from './hooks/useProfileCustomizer';
-import { useImageUpload } from './utils/imageUpload';
 
 export interface ProfileCustomizerProps {
   isOpen: boolean;
@@ -39,8 +38,45 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     discardChanges
   } = useProfileCustomizer();
 
-  // Image upload handlers
-  const { handleAvatarUpload, handleBannerUpload } = useImageUpload(setProfile);
+  // Updated image upload handlers that work with the image editor
+  const handleAvatarUpload = useCallback((imageData: string) => {
+    // This function is no longer needed as we handle updates via events
+    // Keeping it for backwards compatibility
+  }, []);
+
+  const handleBannerUpload = useCallback((imageData: string) => {
+    // This function is no longer needed as we handle updates via events
+    // Keeping it for backwards compatibility
+  }, []);
+
+  // Listen for profile update events from the ProfileCardPreview
+  useEffect(() => {
+    const handleProfileUpdate = (e: CustomEvent) => {
+      const { type, data } = e.detail;
+      
+      if (type === 'avatar') {
+        setProfile(prev => ({ ...prev, avatar_url: data }));
+        toast({
+          title: "Avatar Updated",
+          description: "Profile picture updated successfully",
+          variant: "default"
+        });
+      } else if (type === 'banner') {
+        setProfile(prev => ({ ...prev, banner_url: data }));
+        toast({
+          title: "Banner Updated", 
+          description: "Banner image updated successfully",
+          variant: "default"
+        });
+      }
+    };
+
+    window.addEventListener('profileUpdate', handleProfileUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('profileUpdate', handleProfileUpdate as EventListener);
+    };
+  }, [setProfile, toast]);
 
   // Load profile when component opens with Clerk user ID
   useEffect(() => {
@@ -336,7 +372,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                   </div>
                   <div className="window-body">
                     <div className="space-y-4">
-                      {/* Profile Card Preview with upload hover */}
+                      {/* Profile Card Preview with upload hover and image editor */}
                       <div className="field-row flex justify-center">
                         <div style={{ width: "298px", height: "358px" }}>
                           <ProfileCardPreview
@@ -344,9 +380,21 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                             badges={badges}
                             customCSS={customCSS}
                             isPreview={true}
-                            onAvatarUpload={handleAvatarUpload}
-                            onBannerUpload={handleBannerUpload}
+                            onAvatarUpload={() => {}} // The ProfileCardPreview handles file selection internally
+                            onBannerUpload={() => {}} // The ProfileCardPreview handles file selection internally
                           />
+                        </div>
+                      </div>
+                      
+                      {/* Upload Instructions */}
+                      <div className="field-row">
+                        <div className="sunken border border-gray-400 p-2 bg-blue-50">
+                          <div className="text-xs text-blue-800">
+                            <div className="font-bold mb-1">💡 Image Upload Tips:</div>
+                            <div>• Hover over your avatar or banner and click to edit</div>
+                            <div>• Drag and zoom to get the perfect crop</div>
+                            <div>• Preview shows how your image will look</div>
+                          </div>
                         </div>
                       </div>
                       

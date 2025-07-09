@@ -1,8 +1,9 @@
-// src/components/ProfileCardPreview.tsx
+// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - UPDATED WITH IMAGE EDITOR
 'use client';
 
 import React, { useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { ImageEditor } from './ImageEditor';
 import type { UserProfile, Badge } from '../types';
 
 interface ProfileCardPreviewProps {
@@ -28,6 +29,11 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
 }) => {
   const [avatarHover, setAvatarHover] = useState(false);
   const [bannerHover, setBannerHover] = useState(false);
+  const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
+  const [isBannerEditorOpen, setIsBannerEditorOpen] = useState(false);
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
+  
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,16 +51,56 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
 
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && onAvatarUpload) {
-      onAvatarUpload(file);
+    if (file) {
+      setSelectedAvatarFile(file);
+      setIsAvatarEditorOpen(true);
+      // Clear the input so the same file can be selected again
+      e.target.value = '';
     }
   };
 
   const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && onBannerUpload) {
-      onBannerUpload(file);
+    if (file) {
+      setSelectedBannerFile(file);
+      setIsBannerEditorOpen(true);
+      // Clear the input so the same file can be selected again
+      e.target.value = '';
     }
+  };
+
+  const handleAvatarApply = (croppedImageData: string) => {
+    // Update the profile directly by calling the parent's setProfile function
+    if (onAvatarUpload) {
+      // Create a synthetic event to trigger the parent's image handler
+      const updateEvent = new CustomEvent('profileUpdate', {
+        detail: { type: 'avatar', data: croppedImageData }
+      });
+      window.dispatchEvent(updateEvent);
+    }
+    setSelectedAvatarFile(null);
+  };
+
+  const handleBannerApply = (croppedImageData: string) => {
+    // Update the profile directly by calling the parent's setProfile function
+    if (onBannerUpload) {
+      // Create a synthetic event to trigger the parent's image handler
+      const updateEvent = new CustomEvent('profileUpdate', {
+        detail: { type: 'banner', data: croppedImageData }
+      });
+      window.dispatchEvent(updateEvent);
+    }
+    setSelectedBannerFile(null);
+  };
+
+  const handleAvatarEditorClose = () => {
+    setIsAvatarEditorOpen(false);
+    setSelectedAvatarFile(null);
+  };
+
+  const handleBannerEditorClose = () => {
+    setIsBannerEditorOpen(false);
+    setSelectedBannerFile(null);
   };
 
   return (
@@ -74,6 +120,28 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         onChange={handleBannerFileChange}
         style={{ display: 'none' }}
       />
+
+      {/* Avatar Image Editor */}
+      {selectedAvatarFile && (
+        <ImageEditor
+          isOpen={isAvatarEditorOpen}
+          onClose={handleAvatarEditorClose}
+          onApply={handleAvatarApply}
+          imageFile={selectedAvatarFile}
+          title="Edit Profile Picture"
+        />
+      )}
+
+      {/* Banner Image Editor */}
+      {selectedBannerFile && (
+        <ImageEditor
+          isOpen={isBannerEditorOpen}
+          onClose={handleBannerEditorClose}
+          onApply={handleBannerApply}
+          imageFile={selectedBannerFile}
+          title="Edit Banner Image"
+        />
+      )}
 
       {/* Inject custom CSS if provided */}
       {customCSS && (
@@ -105,28 +173,23 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             />
           ) : (
             <div className="w-full h-full bg-black rounded-t-lg" />
-
           )}
           
-          {/* Banner upload overlay */}
-
-{/* Banner upload overlay (with hover animation) */}
-{onBannerUpload && (
-  <div
-    className={cn(
-      "absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center rounded-t-lg transition-opacity duration-200",
-      bannerHover ? "opacity-100" : "opacity-0 pointer-events-none"
-    )}
-  >
-    <div className="text-white text-center">
-      <div className="text-xs">
-        {profile.banner_url ? 'Change Banner' : 'Add Banner'}
-      </div>
-    </div>
-  </div>
-)}
-
-
+          {/* Banner upload overlay (with hover animation) */}
+          {onBannerUpload && (
+            <div
+              className={cn(
+                "absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center rounded-t-lg transition-opacity duration-200",
+                bannerHover ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
+            >
+              <div className="text-white text-center">
+                <div className="text-xs">
+                  {profile.banner_url ? 'Change Banner' : 'Add Banner'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Main content */}
@@ -150,24 +213,19 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               />
               
               {/* Avatar upload overlay */}
-{onAvatarUpload && (
-<div
-  className={cn(
-    "absolute inset-0 flex items-center justify-center rounded-full transition-opacity duration-200",
-    avatarHover ? "opacity-100" : "opacity-0 pointer-events-none"
-  )}
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
->
-  <div className="text-white text-xs">
-<span className="text-black text-xl inline-block rotate-[135deg]">✏︎</span>
-
-
-
-  </div>
-</div>
-
-)}
-
+              {onAvatarUpload && (
+                <div
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-center rounded-full transition-opacity duration-200",
+                    avatarHover ? "opacity-100" : "opacity-0 pointer-events-none"
+                  )}
+                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                >
+                  <div className="text-white text-xs">
+                    <span className="text-black text-xl inline-block rotate-[135deg]">✏︎</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 min-w-0">
@@ -251,7 +309,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               )}
             </div>
           )}
-
         </div>
       </div>
 
