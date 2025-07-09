@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH CORRECT API ENDPOINTS
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED WITH API INTEGRATION
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -104,7 +104,7 @@ export function ProfilePopup({
   const [profileError, setProfileError] = useState<string | null>(null);
 
   // ✅ Check if this is the current user's own profile
-  const isOwnProfile = currentUserAuthId && profile?.id === currentUserAuthId;
+  const isOwnProfile = currentUserAuthId && profile?.clerk_id === currentUserAuthId;
 
   // ✅ Ensure component is mounted before state updates
   useEffect(() => {
@@ -112,158 +112,64 @@ export function ProfilePopup({
     return () => setIsMounted(false);
   }, []);
 
-  // ✅ Load profile data from the user object only (no API calls)
+  // ✅ FIXED: Load profile data from API instead of user object
   useEffect(() => {
     if (!isMounted || !userId || !isVisible) {
       return;
     }
 
-    const loadProfileData = () => {
+    const loadProfileData = async () => {
       setProfileLoading(true);
       setProfileError(null);
       
       try {
-        console.log('🔍 Loading profile data for user:', userId);
+        console.log('🔍 Loading profile data from API for user:', userId);
 
-        let userIdString: string;
-        let userObject: any = null;
-
+        // Extract clerk ID from userId (could be string or object)
+        let clerkUserId: string;
         if (typeof userId === 'string') {
-          userIdString = userId;
+          clerkUserId = userId;
+        } else if (userId && typeof userId === 'object' && userId.clerk_id) {
+          clerkUserId = userId.clerk_id;
         } else if (userId && typeof userId === 'object' && userId.id) {
-          userIdString = userId.id;
-          userObject = userId;
+          clerkUserId = userId.id;
         } else {
-          console.error('❌ Invalid user ID format:', userId);
           throw new Error('Invalid user ID format');
         }
 
-        // ✅ Always create profile from user object or use minimal data
-        if (userObject) {
-          console.log('📦 Creating profile from user object:', userObject);
-          console.log('🔍 Checking badges field specifically:', {
-            badgesExists: 'badges' in userObject,
-            badgesValue: userObject.badges,
-            badgesType: typeof userObject.badges,
-            allKeys: Object.keys(userObject),
-            hasUndefinedBadges: userObject.badges === undefined,
-            hasNullBadges: userObject.badges === null,
-            hasEmptyStringBadges: userObject.badges === '',
-            hasEmptyArrayBadges: Array.isArray(userObject.badges) && userObject.badges.length === 0
-          });
-          
-          // ✅ Fix badges handling for JSONB format with better undefined handling
-          let parsedBadges: Badge[] = [];
-          
-          // Check if badges field exists and has a value
-          if (userObject.badges !== undefined && userObject.badges !== null && userObject.badges !== '') {
-            try {
-              console.log('🏷️ Processing badges - Raw data:', userObject.badges);
-              console.log('🏷️ Processing badges - Type:', typeof userObject.badges);
-              
-              // Handle different badge formats
-              if (Array.isArray(userObject.badges)) {
-                // Already an array
-                parsedBadges = userObject.badges;
-                console.log('✅ Badges already an array:', parsedBadges);
-              } else if (typeof userObject.badges === 'string') {
-                // JSONB string format - parse it
-                const trimmedBadges = userObject.badges.trim();
-                console.log('🏷️ Trimmed badges string:', trimmedBadges);
-                
-                if (trimmedBadges.startsWith('[') && trimmedBadges.endsWith(']')) {
-                  parsedBadges = JSON.parse(trimmedBadges);
-                  console.log('✅ Successfully parsed badges from JSONB string:', parsedBadges);
-                } else if (trimmedBadges === '') {
-                  console.log('ℹ️ Empty badges string - setting to empty array');
-                  parsedBadges = [];
-                } else {
-                  console.warn('❌ Invalid badges format - not a JSON array:', trimmedBadges);
-                  parsedBadges = [];
-                }
-              } else if (typeof userObject.badges === 'object' && userObject.badges !== null) {
-                // Could be an object that needs conversion
-                console.log('🏷️ Badges is an object, attempting to convert:', userObject.badges);
-                parsedBadges = Array.isArray(userObject.badges) ? userObject.badges : [userObject.badges];
-              } else {
-                // Unknown format
-                console.warn('❌ Unknown badges format:', typeof userObject.badges, userObject.badges);
-                parsedBadges = [];
-              }
-              
-              // Filter and validate badges
-              const originalLength = parsedBadges.length;
-              parsedBadges = parsedBadges.filter(badge => {
-                const isValid = badge && 
-                  typeof badge === 'object' && 
-                  badge.id && 
-                  badge.url &&
-                  typeof badge.id === 'string' &&
-                  typeof badge.url === 'string';
-                
-                if (!isValid) {
-                  console.warn('❌ Invalid badge filtered out:', badge);
-                }
-                return isValid;
-              });
-              
-              console.log(`✅ Final processed badges (${parsedBadges.length}/${originalLength}):`, parsedBadges);
-            } catch (e) {
-              console.error('❌ Failed to parse badges from user object:', e);
-              console.error('❌ Raw badges data:', userObject.badges);
-              parsedBadges = [];
-            }
-          } else {
-            console.warn('⚠️ BADGES ISSUE DETECTED:');
-            console.warn(`⚠️ Badges field value: ${userObject.badges}`);
-            console.warn('⚠️ This means badges are not being properly fetched from the database');
-            console.warn('⚠️ Possible causes:');
-            console.warn('   1. Database query does not SELECT the badges field');
-            console.warn('   2. Database badges column is NULL for this user');
-            console.warn('   3. API is not including badges in the response');
-            console.warn('   4. Data transformation is removing badges field');
-            console.warn('⚠️ Check your database and API endpoints!');
-            
-            // Try to show what the user should have
-            console.warn('⚠️ Expected badges format in database:');
-            console.warn('   [{"id":"badge_123","url":"data:image/...","name":"badge_name"}]');
-          }
-          
-          const profileFromUserObject: UserProfile = {
-            id: userObject.id,
-            clerk_id: userObject.clerk_id || userObject.id,
-            username: userObject.username || userObject.id,
-            display_name: userObject.display_name || userObject.username || userObject.id,
-            avatar_url: userObject.avatar_url || '',
-            banner_url: userObject.banner_url || '',
-            pronouns: userObject.pronouns || '',
-            bio: userObject.bio || '',
-            status: userObject.status || 'offline',
-            display_name_color: userObject.display_name_color || '#000000',
-            display_name_animation: userObject.display_name_animation || 'none',
-            rainbow_speed: userObject.rainbow_speed || 3,
-            badges: parsedBadges,
-            profile_card_css: userObject.profile_card_css || '',
-            created_at: userObject.created_at,
-            // ✅ Only include the fields you want
-            is_online: userObject.is_online || false,
-            last_seen: userObject.last_seen || undefined
-          };
+        console.log('📡 Making API request for clerk ID:', clerkUserId);
 
-          console.log('✅ Profile created from user object:', profileFromUserObject);
-          console.log('✅ Badges parsed:', parsedBadges);
-          
-          setProfile(profileFromUserObject);
-          setBadges(parsedBadges);
-          setCustomCSS(profileFromUserObject.profile_card_css || '');
-        } else {
-          // ✅ Create minimal profile for string IDs
-          console.log('📝 Creating minimal profile for string ID:', userIdString);
+        // ✅ FIXED: Actually use the API to fetch fresh profile data
+        const response = await fetch('/api/profile/load', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            clerkUserId: clerkUserId
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('📦 API response received:', result);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load profile');
+        }
+
+        const profileData = result.data;
+
+        if (!profileData) {
+          // Create minimal profile for users without database entries
           const minimalProfile: UserProfile = {
-            id: userIdString,
-            clerk_id: userIdString,
-            username: userIdString,
-            display_name: userIdString,
+            id: clerkUserId,
+            clerk_id: clerkUserId,
+            username: clerkUserId,
+            display_name: clerkUserId,
             avatar_url: '',
             banner_url: '',
             pronouns: '',
@@ -279,14 +185,76 @@ export function ProfilePopup({
             last_seen: undefined
           };
           
-          console.log('📝 Minimal profile created:', minimalProfile);
+          console.log('📝 Created minimal profile for user without database entry');
           setProfile(minimalProfile);
           setBadges([]);
           setCustomCSS('');
+          return;
         }
+
+        // ✅ Process badges from API response
+        let processedBadges: Badge[] = [];
+        if (profileData.badges) {
+          try {
+            // Handle both array and string formats (in case API returns strings)
+            if (Array.isArray(profileData.badges)) {
+              processedBadges = profileData.badges;
+            } else if (typeof profileData.badges === 'string') {
+              processedBadges = JSON.parse(profileData.badges);
+            }
+
+            // Validate badges
+            processedBadges = processedBadges.filter(badge => {
+              return badge && 
+                typeof badge === 'object' && 
+                badge.id && 
+                badge.url &&
+                typeof badge.id === 'string' &&
+                typeof badge.url === 'string';
+            });
+
+            console.log('🏷️ Processed badges from API:', processedBadges);
+          } catch (e) {
+            console.error('❌ Failed to process badges from API:', e);
+            processedBadges = [];
+          }
+        }
+
+        // ✅ Create profile object from API data
+        const profileFromAPI: UserProfile = {
+          id: profileData.id,
+          clerk_id: profileData.clerk_id,
+          username: profileData.username || profileData.clerk_id,
+          display_name: profileData.display_name || profileData.username || profileData.clerk_id,
+          avatar_url: profileData.avatar_url || '',
+          banner_url: profileData.banner_url || '',
+          pronouns: profileData.pronouns || '',
+          bio: profileData.bio || '',
+          status: profileData.status || 'offline',
+          display_name_color: profileData.display_name_color || '#000000',
+          display_name_animation: profileData.display_name_animation || 'none',
+          rainbow_speed: profileData.rainbow_speed || 3,
+          badges: processedBadges,
+          profile_card_css: profileData.profile_card_css || '',
+          created_at: profileData.created_at,
+          updated_at: profileData.updated_at,
+          is_online: profileData.is_online || false,
+          last_seen: profileData.last_seen || undefined
+        };
+
+        console.log('✅ Profile created from API data:', {
+          id: profileFromAPI.id,
+          username: profileFromAPI.username,
+          badgeCount: processedBadges.length,
+          badges: processedBadges
+        });
+        
+        setProfile(profileFromAPI);
+        setBadges(processedBadges);
+        setCustomCSS(profileFromAPI.profile_card_css || '');
         
       } catch (error) {
-        console.error('❌ Failed to load profile data:', error);
+        console.error('❌ Failed to load profile data from API:', error);
         
         // ✅ Create error fallback profile
         const userIdStr = typeof userId === 'string' ? userId : (userId as any)?.id || 'unknown';
@@ -326,7 +294,7 @@ export function ProfilePopup({
 
   // ✅ Load friendship status when profile changes
   useEffect(() => {
-    if (!isMounted || !profile?.id || !currentUserAuthId || isOwnProfile) {
+    if (!isMounted || !profile?.clerk_id || !currentUserAuthId || isOwnProfile) {
       return;
     }
 
@@ -336,7 +304,7 @@ export function ProfilePopup({
         console.log('🔍 Loading friendship status...', {
           apiUrl: `${API_BASE_URL}/api/friends/status`,
           currentUser: currentUserAuthId,
-          targetUser: profile.id
+          targetUser: profile.clerk_id
         });
 
         const response = await fetch(`${API_BASE_URL}/api/friends/status`, {
@@ -347,7 +315,7 @@ export function ProfilePopup({
           },
           body: JSON.stringify({
             user1AuthId: currentUserAuthId,
-            user2AuthId: profile.id
+            user2AuthId: profile.clerk_id
           })
         });
 
@@ -379,7 +347,7 @@ export function ProfilePopup({
     };
 
     loadFriendshipStatus();
-  }, [isMounted, profile?.id, currentUserAuthId, isOwnProfile]);
+  }, [isMounted, profile?.clerk_id, currentUserAuthId, isOwnProfile]);
 
   // ✅ FIXED: Better position calculation with proper validation
   useEffect(() => {
@@ -479,14 +447,14 @@ export function ProfilePopup({
 
   // ✅ FIXED: Friend action handlers with correct API endpoints
   const handleSendFriendRequest = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!profile?.clerk_id || !currentUserAuthId) return;
 
     setActionLoading('add_friend');
     try {
       console.log('📤 Sending friend request...', {
         apiUrl: `${API_BASE_URL}/api/friends/send-request`,
         sender: currentUserAuthId,
-        receiver: profile.id
+        receiver: profile.clerk_id
       });
 
       const response = await fetch(`${API_BASE_URL}/api/friends/send-request`, {
@@ -497,7 +465,7 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           senderAuthId: currentUserAuthId,
-          receiverAuthId: profile.id
+          receiverAuthId: profile.clerk_id
         })
       });
 
@@ -527,17 +495,17 @@ export function ProfilePopup({
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [profile?.clerk_id, currentUserAuthId]);
 
   const handleRemoveFriend = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!profile?.clerk_id || !currentUserAuthId) return;
 
     setActionLoading('remove_friend');
     try {
       console.log('💔 Removing friend...', {
         apiUrl: `${API_BASE_URL}/api/friends/remove`,
         user1: currentUserAuthId,
-        user2: profile.id
+        user2: profile.clerk_id
       });
 
       const response = await fetch(`${API_BASE_URL}/api/friends/remove`, {
@@ -548,7 +516,7 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           user1AuthId: currentUserAuthId,
-          user2AuthId: profile.id
+          user2AuthId: profile.clerk_id
         })
       });
 
@@ -568,10 +536,10 @@ export function ProfilePopup({
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [profile?.clerk_id, currentUserAuthId]);
 
   const handleBlockUser = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!profile?.clerk_id || !currentUserAuthId) return;
 
     setActionLoading('block_user');
     setShowContextMenu(false);
@@ -580,7 +548,7 @@ export function ProfilePopup({
       console.log('🚫 Blocking user...', {
         apiUrl: `${API_BASE_URL}/api/friends/block`,
         blocker: currentUserAuthId,
-        blocked: profile.id
+        blocked: profile.clerk_id
       });
 
       const response = await fetch(`${API_BASE_URL}/api/friends/block`, {
@@ -591,7 +559,7 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: profile.id
+          blockedAuthId: profile.clerk_id
         })
       });
 
@@ -611,17 +579,17 @@ export function ProfilePopup({
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [profile?.clerk_id, currentUserAuthId]);
 
   const handleUnblockUser = useCallback(async () => {
-    if (!profile?.id || !currentUserAuthId) return;
+    if (!profile?.clerk_id || !currentUserAuthId) return;
 
     setActionLoading('unblock_user');
     try {
       console.log('🔓 Unblocking user...', {
         apiUrl: `${API_BASE_URL}/api/friends/unblock`,
         blocker: currentUserAuthId,
-        blocked: profile.id
+        blocked: profile.clerk_id
       });
 
       const response = await fetch(`${API_BASE_URL}/api/friends/unblock`, {
@@ -632,7 +600,7 @@ export function ProfilePopup({
         },
         body: JSON.stringify({
           blockerAuthId: currentUserAuthId,
-          blockedAuthId: profile.id
+          blockedAuthId: profile.clerk_id
         })
       });
 
@@ -652,7 +620,7 @@ export function ProfilePopup({
     } finally {
       setActionLoading(null);
     }
-  }, [profile?.id, currentUserAuthId]);
+  }, [profile?.clerk_id, currentUserAuthId]);
 
   // ✅ Get button text and action based on friendship status
   const getFriendButtonConfig = () => {
@@ -874,10 +842,6 @@ export function ProfilePopup({
                     Last seen {new Date(profile.last_seen).toLocaleDateString()}
                   </span>
                 )}
-                {/* Debug info */}
-                <span className="text-xs text-gray-400 ml-2">
-                  (Online: {profile.is_online ? 'true' : 'false'}, Status: {profile.status || 'undefined'})
-                </span>
               </div>
             </div>
 
@@ -961,7 +925,7 @@ export function ProfilePopup({
                       <img
                         src={badge.url}
                         alt={badge.name || 'Badge'}
-                        className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-gray-600 hover:scale-110 transition-transform duration-200"
+                        className=" h-8 rounded object-cover   transition-transform duration-200"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
                         }}

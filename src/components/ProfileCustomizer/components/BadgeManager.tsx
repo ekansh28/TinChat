@@ -522,113 +522,122 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
         </div>
       </div>
 
-      {/* Badge Preview */}
-      {badges.length > 0 && (
-        <div className={cn(
-          "p-3 rounded border",
-          isTheme98 ? "sunken-panel" : ""
-        )}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-medium">Badge Preview</div>
-            <div className="flex gap-1">
-              <Button
-                variant={previewMode === 'grid' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setPreviewMode('grid')}
-                className="text-xs px-2 py-1"
-              >
-                Grid
-              </Button>
-              <Button
-                variant={previewMode === 'list' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setPreviewMode('list')}
-                className="text-xs px-2 py-1"
-              >
-                List
-              </Button>
-            </div>
+{/* Badge Preview */}
+{badges.length > 0 && (
+  <div className={cn(
+    "p-3",
+    isTheme98 ? "sunken-panel" : ""
+  )}>
+    <div className="flex items-center justify-between mb-3">
+      <div className="text-sm font-medium">Badge Preview</div>
+      <div className="flex gap-1">
+        <Button
+          variant={previewMode === 'grid' ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() => setPreviewMode('grid')}
+          className="text-xs px-2 py-1"
+        >
+          Grid
+        </Button>
+        <Button
+          variant={previewMode === 'list' ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() => setPreviewMode('list')}
+          className="text-xs px-2 py-1"
+        >
+          List
+        </Button>
+      </div>
+    </div>
+    
+    <div className={cn(
+      previewMode === 'grid' ? "grid grid-cols-6 gap-2" : "space-y-2"
+    )}>
+      {badges.map((badge, index) => (
+        <div
+          key={badge.id}
+          draggable
+          onDragStart={(e) => handleDragStart(e, index)}
+          onDragOver={(e) => handleBadgeDragOver(e, index)}
+          onDragEnd={handleDragEnd}
+          onDragLeave={handleDragLeave}
+          onClick={() => toggleBadgeSelection(badge.id)}
+          className={cn(
+            "relative group cursor-pointer transition-all duration-200",
+            selectedBadges.has(badge.id) && "ring-2 ring-blue-500",
+            dragOverIndex === index && "scale-105 shadow-lg",
+            draggedIndex === index && "opacity-50",
+            previewMode === 'list' && "flex items-center gap-3"
+          )}
+          title={badge.name || `Badge ${index + 1}`}
+        >
+          <div className={cn(
+            "relative flex items-center justify-center overflow-hidden",
+            previewMode === 'grid' ? "w-full aspect-square" : "h-8 min-w-[32px]"
+          )}>
+            {imageLoading.has(badge.id) && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            
+            <img
+              src={imageErrors.has(badge.id) ? getBrokenImageSrc() : badge.url}
+              alt={badge.name || `Badge ${index + 1}`}
+              className={cn(
+                "transition-opacity duration-200 object-contain",
+                previewMode === 'grid' ? "h-full" : "h-full",
+                imageLoading.has(badge.id) && "opacity-0"
+              )}
+              style={{
+                width: 'auto',
+                maxWidth: '100%'
+              }}
+              onError={() => handleImageError(badge.id)}
+              onLoad={() => handleImageLoad(badge.id)}
+              onLoadStart={() => handleImageLoadStart(badge.id)}
+            />
+            
+            {imageErrors.has(badge.id) && (
+              <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs">!</span>
+              </div>
+            )}
           </div>
           
+          {previewMode === 'list' && (
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">
+                {badge.name || `Badge ${index + 1}`}
+              </div>
+              <div className="text-xs text-gray-500 truncate">
+                {badge.url.length > 30 ? `${badge.url.substring(0, 30)}...` : badge.url}
+              </div>
+            </div>
+          )}
+          
           <div className={cn(
-            previewMode === 'grid' ? "grid grid-cols-6 gap-2" : "space-y-2"
+            "absolute bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center",
+            previewMode === 'grid' ? "inset-0 rounded" : "right-2 w-6 h-6 rounded"
           )}>
-            {badges.map((badge, index) => (
-              <div
-                key={badge.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleBadgeDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                onDragLeave={handleDragLeave}
-                onClick={() => toggleBadgeSelection(badge.id)}
-                className={cn(
-                  "relative group cursor-pointer transition-all duration-200",
-                  previewMode === 'grid' ? "aspect-square" : "flex items-center gap-3 p-2 rounded",
-                  isTheme98 ? "sunken-panel" : "rounded border",
-                  selectedBadges.has(badge.id) && "ring-2 ring-blue-500",
-                  dragOverIndex === index && "scale-105 shadow-lg",
-                  draggedIndex === index && "opacity-50"
-                )}
-                title={badge.name || `Badge ${index + 1}`}
-              >
-                {imageLoading.has(badge.id) && (
-                  <div className={cn(
-                    "absolute flex items-center justify-center",
-                    previewMode === 'grid' ? "inset-0" : "left-2 w-8 h-8"
-                  )}>
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
-                
-                <img
-                  src={imageErrors.has(badge.id) ? getBrokenImageSrc() : badge.url}
-                  alt={badge.name || `Badge ${index + 1}`}
-                  className={cn(
-                    "object-cover transition-opacity duration-200",
-                    previewMode === 'grid' ? "w-full h-full rounded" : "w-8 h-8 rounded",
-                    imageLoading.has(badge.id) && "opacity-0"
-                  )}
-                  onError={() => handleImageError(badge.id)}
-                  onLoad={() => handleImageLoad(badge.id)}
-                  onLoadStart={() => handleImageLoadStart(badge.id)}
-                />
-                
-                {previewMode === 'list' && (
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {badge.name || `Badge ${index + 1}`}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {badge.url.length > 30 ? `${badge.url.substring(0, 30)}...` : badge.url}
-                    </div>
-                  </div>
-                )}
-                
-              <div className={cn(
-                "absolute bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center",
-                previewMode === 'grid' ? "inset-0 rounded" : "right-2 w-6 h-6 rounded"
-              )}>
-                <img
-                  src="https://cdn.sekansh21.workers.dev/icons/cross.png"
-                  alt="Remove badge"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeBadge(badge.id);
-                  }}
-                  className="w-6 h-6 cursor-pointer hover:scale-110 transition-transform"
-                  style={{ filter: saving ? 'grayscale(1) opacity(0.5)' : 'none', pointerEvents: saving ? 'none' : 'auto' }}
-                />
-              </div>
-                
-                {imageErrors.has(badge.id) && (
-                  <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs">!</span>
-                  </div>
-                )}
-              </div>
-            ))}
+            <img
+              src="https://cdn.sekansh21.workers.dev/icons/cross.png"
+              alt="Remove badge"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeBadge(badge.id);
+              }}
+              className="w-6 h-6 cursor-pointer hover:scale-110 transition-transform"
+              style={{ filter: saving ? 'grayscale(1) opacity(0.5)' : 'none', pointerEvents: saving ? 'none' : 'auto' }}
+            />
           </div>
+        </div>
+      ))}
+    </div>
+
+  
+
+
 
           {/* Bulk actions */}
           {showAdvanced && badges.length > 0 && (
@@ -655,7 +664,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
           "p-4 border space-y-4",
           isTheme98 ? "sunken-panel" : ""
         )}>
-          <div className="flex items-center justify-between">
+          <div className=" field-row flex items-center justify-between">
             <h4 className="font-medium">Add New Badge</h4>
             {badges.length > 0 && (
               <Input
@@ -672,7 +681,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
             {/* URL Input */}
             <div>
               <Label htmlFor="badge-url">Badge Image URL</Label>
-              <div className="relative">
+              <div className=" field-row relative">
                 <Input
                   id="badge-url"
                   value={newBadgeUrl}
@@ -735,10 +744,10 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
             </div>
             
             {/* Badge Name */}
-            <div>
+            <div className='field-row'>
               <Label htmlFor="badge-name">Badge Name (Optional)</Label>
               <Input
-                id="badge-name"
+                id=" badge-name"
                 value={newBadgeName}
                 onChange={(e) => setNewBadgeName(e.target.value.slice(0, 30))}
                 placeholder="Badge name for tooltip..."

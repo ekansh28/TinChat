@@ -174,37 +174,39 @@ export default function SelectionLobby() {
             </div>
           </div>
           
-          {/* Sponsored Ad - Right Side */}
-          {!isMobile && (
-            <div className="fixed top-20 right-4 z-10 " >
-              <div className="window" style={{ width: 300 }}>
-                <div className="title-bar">
-                  <div className="title-bar-text">Sponsored Ad</div>
-                  <div className="title-bar-controls">
-                    <button aria-label="Minimize"></button>
-                    <button aria-label="Maximize"></button>
-                  <button
-                    aria-label="Close"
-                    onClick={() => {
-                      const el = document.getElementById("google-ad-window");
-                      if (el) el.style.display = "none";
-                    }}
-                  ></button>
-                  </div>
-                </div>
-                <div className="window-body">
-                  <ins
-                    className="adsbygoogle"
-                    style={{ display: "block" }}
-                    data-ad-client="ca-pub-5670235631357216"
-                    data-ad-slot="9984806773"
-                    data-ad-format="auto"
-                    data-full-width-responsive="true"
-                  ></ins>
-                </div>
-              </div>
-            </div>
-          )}
+{/* Sponsored Ad - Right Side */}
+{!isMobile && (
+  <div className="fixed top-20 right-4 z-10" id="google-ad-window">
+    <div className="window" style={{ width: 300 }}>
+      <div className="title-bar">
+        <div className="title-bar-text">Sponsored Ad</div>
+        <div className="title-bar-controls">
+          <button aria-label="Minimize"></button>
+          <button aria-label="Maximize"></button>
+          <button
+            aria-label="Close"
+            onClick={() => {
+              const adWindow = document.getElementById("google-ad-window");
+              if (adWindow) {
+                adWindow.style.display = "none";
+              }
+            }}
+          ></button>
+        </div>
+      </div>
+      <div className="window-body">
+        <ins
+          className="adsbygoogle"
+          style={{ display: "block" }}
+          data-ad-client="ca-pub-5670235631357216"
+          data-ad-slot="9984806773"
+          data-ad-format="auto"
+          data-full-width-responsive="true"
+        ></ins>
+      </div>
+    </div>
+  </div>
+)}
         </div>
       </div>
 

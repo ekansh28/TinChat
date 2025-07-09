@@ -1,4 +1,4 @@
-// src/app/api/profile/load/route.ts - SIMPLIFIED FOR CLERK AUTH (FIXED)
+// src/app/api/profile/load/route.ts - FIXED VERSION WITH EXPLICIT BADGES
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
@@ -50,10 +50,32 @@ export async function GET(req: NextRequest) {
 
     console.log('API: Loading profile for current user:', requesterId);
 
-    // Query the database for the current user's profile
+    // ✅ FIXED: Explicitly select all fields including badges
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        id,
+        clerk_id,
+        username,
+        display_name,
+        avatar_url,
+        banner_url,
+        pronouns,
+        bio,
+        status,
+        display_name_color,
+        display_name_animation,
+        rainbow_speed,
+        profile_complete,
+        created_at,
+        updated_at,
+        is_online,
+        last_seen,
+        blocked_users,
+        profile_card_css,
+        easy_customization_data,
+        badges
+      `)
       .eq('clerk_id', requesterId)
       .single();
 
@@ -79,6 +101,28 @@ export async function GET(req: NextRequest) {
         }, 
         { status: 500, headers: corsHeaders }
       );
+    }
+
+    // ✅ ADD DEBUGGING: Log the actual data received
+    console.log('API: Raw data from database:', {
+      id: data.id,
+      username: data.username,
+      badges: data.badges,
+      badgesType: typeof data.badges,
+      badgesLength: Array.isArray(data.badges) ? data.badges.length : 'not array'
+    });
+
+    // ✅ FIXED: Handle badges that are stored as JSON strings
+    if (data.badges && typeof data.badges === 'string') {
+      try {
+        data.badges = JSON.parse(data.badges);
+        console.log('API: Parsed badges from string:', data.badges);
+      } catch (e) {
+        console.error('API: Failed to parse badges string:', e);
+        data.badges = [];
+      }
+    } else if (!Array.isArray(data.badges)) {
+      data.badges = [];
     }
 
     console.log('API: Profile loaded successfully for current user:', requesterId);
@@ -137,10 +181,32 @@ export async function POST(req: NextRequest) {
 
     console.log('API: Loading profile for user:', clerkUserId, requesterId ? `requested by: ${requesterId}` : '(no auth)');
 
-    // Query the database for the target user's profile
+    // ✅ FIXED: Explicitly select all fields including badges
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        id,
+        clerk_id,
+        username,
+        display_name,
+        avatar_url,
+        banner_url,
+        pronouns,
+        bio,
+        status,
+        display_name_color,
+        display_name_animation,
+        rainbow_speed,
+        profile_complete,
+        created_at,
+        updated_at,
+        is_online,
+        last_seen,
+        blocked_users,
+        profile_card_css,
+        easy_customization_data,
+        badges
+      `)
       .eq('clerk_id', clerkUserId)
       .single();
 
@@ -151,8 +217,8 @@ export async function POST(req: NextRequest) {
         
         const minimalProfile = {
           id: null,
-          clerk_id: clerkUserId, // ✅ Now included in the interface
-          username: clerkUserId, // Use Clerk ID as fallback
+          clerk_id: clerkUserId,
+          username: clerkUserId,
           display_name: 'User',
           avatar_url: '',
           banner_url: '',
@@ -163,7 +229,7 @@ export async function POST(req: NextRequest) {
           display_name_animation: 'none',
           rainbow_speed: 3,
           profile_complete: false,
-          badges: [],
+          badges: [], // ✅ Ensure badges is always an array
           profile_card_css: '',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -187,6 +253,28 @@ export async function POST(req: NextRequest) {
         }, 
         { status: 500, headers: corsHeaders }
       );
+    }
+
+    // ✅ ADD DEBUGGING: Log the actual data received
+    console.log('API: Raw data from database:', {
+      id: data.id,
+      username: data.username,
+      badges: data.badges,
+      badgesType: typeof data.badges,
+      badgesRaw: JSON.stringify(data.badges)
+    });
+
+    // ✅ FIXED: Handle badges that are stored as JSON strings
+    if (data.badges && typeof data.badges === 'string') {
+      try {
+        data.badges = JSON.parse(data.badges);
+        console.log('API: Parsed badges from string:', data.badges);
+      } catch (e) {
+        console.error('API: Failed to parse badges string:', e);
+        data.badges = [];
+      }
+    } else if (!Array.isArray(data.badges)) {
+      data.badges = [];
     }
 
     console.log('API: Profile loaded successfully for user:', clerkUserId);

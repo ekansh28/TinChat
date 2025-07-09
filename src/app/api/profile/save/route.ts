@@ -1,4 +1,4 @@
-// src/app/api/profile/save/route.ts - FIXED VERSION
+// src/app/api/profile/save/route.ts - FIXED BADGES STORAGE
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate badges
+    // ✅ FIXED: Validate badges and store as proper JSONB
     let parsedBadges = [];
     if (profileData.badges) {
       try {
@@ -104,6 +104,18 @@ export async function POST(req: NextRequest) {
             { status: 400, headers: corsHeaders }
           );
         }
+
+        // Validate each badge
+        parsedBadges = parsedBadges.filter(badge => {
+          return badge && 
+            typeof badge === 'object' && 
+            badge.id && 
+            badge.url &&
+            typeof badge.id === 'string' &&
+            typeof badge.url === 'string';
+        });
+
+        console.log('API: Processed badges:', parsedBadges);
       } catch (e) {
         console.warn('API: Invalid badges data, using empty array:', e);
         parsedBadges = [];
@@ -141,10 +153,18 @@ export async function POST(req: NextRequest) {
       display_name_animation: profileData.display_name_animation || 'none',
       rainbow_speed: Math.max(1, Math.min(10, profileData.rainbow_speed || 3)),
       profile_card_css: profileData.profile_card_css?.trim() || null,
-      badges: parsedBadges.length > 0 ? JSON.stringify(parsedBadges) : null,
+      // ✅ FIXED: Store badges as JSONB array, not stringified JSON
+      badges: parsedBadges.length > 0 ? parsedBadges : null,
       profile_complete: true,
       updated_at: new Date().toISOString()
     };
+
+    console.log('API: Profile data to save:', {
+      ...profileUpdateData,
+      badges: parsedBadges,
+      badgesLength: parsedBadges.length,
+      badgesType: typeof parsedBadges
+    });
 
     let result;
 
