@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/components/CustomizerPanel.tsx - UPDATED WITH COMBINED TABS
+// src/components/ProfileCustomizer/components/CustomizerPanel.tsx - UPDATED WITH ACE EDITOR
 import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea-themed';
 import { cn } from '@/lib/utils';
 import { BadgeManager } from './BadgeManager';
 import { ColorPicker } from './ColorPicker';
-import { CSSEditor } from './CSSEditor';
+import { CSSEditor } from './CSSEditor'; // Updated ACE Editor
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, Badge } from '../types';
 
@@ -25,7 +25,6 @@ interface CustomizerPanelProps {
 // Enhanced image validation
 const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}> => {
   return new Promise((resolve) => {
-    // Basic checks
     if (!file.type.startsWith('image/')) {
       resolve({ valid: false, error: 'File must be an image' });
       return;
@@ -36,7 +35,6 @@ const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}
       return;
     }
 
-    // Advanced validation: try to load the image
     const img = new Image();
     const url = URL.createObjectURL(file);
     
@@ -51,7 +49,6 @@ const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}
       clearTimeout(timeout);
       cleanup();
       
-      // Check image dimensions
       if (img.width < 32 || img.height < 32) {
         resolve({ valid: false, error: 'Image must be at least 32x32 pixels' });
         return;
@@ -83,7 +80,6 @@ const validateCSS = (css: string): { valid: boolean; errors: string[] } => {
     return { valid: true, errors: [] };
   }
 
-  // Basic CSS validation checks
   const openBraces = (css.match(/\{/g) || []).length;
   const closeBraces = (css.match(/\}/g) || []).length;
   
@@ -91,7 +87,6 @@ const validateCSS = (css: string): { valid: boolean; errors: string[] } => {
     errors.push('Mismatched braces in CSS');
   }
 
-  // Check for dangerous CSS properties
   const dangerousProps = ['position: fixed', 'position: absolute', 'z-index: 999'];
   dangerousProps.forEach(prop => {
     if (css.toLowerCase().includes(prop)) {
@@ -99,7 +94,6 @@ const validateCSS = (css: string): { valid: boolean; errors: string[] } => {
     }
   });
 
-  // Check for missing semicolons (basic check)
   const lines = css.split('\n');
   lines.forEach((line, index) => {
     const trimmed = line.trim();
@@ -289,15 +283,15 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         </div>
       </div>
 
-      {/* Tab Content - 98.css styled windows */}
-      <div className=" no-scrollbar">
+      {/* Tab Content */}
+      <div className="no-scrollbar">
         <div className="legend-tab">
-          <div className="legend ">
+          <div className="legend">
             {tabs.find(t => t.id === activeTab)?.icon} {tabs.find(t => t.id === activeTab)?.label}
           </div>
         </div>
         <div className="fieldset no-scrollbar">
-          {/* Combined Basic Info + Appearance + Badges Tab */}
+          {/* Basic Info + Appearance + Badges Tab */}
           {activeTab === 'basic' && (
             <div className="space-y-4">
               {/* Basic Info Section */}
@@ -305,7 +299,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                 <legend className="font-bold text-xs">Basic Information</legend>
 
                 {/* Username */}
-                <div className="field-row flex items-start ">
+                <div className="field-row flex items-start">
                   <label htmlFor="username" className="font-bold w-28">Username</label>
                   <div className="flex w-full">
                     <input
@@ -325,7 +319,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                 </div>
 
                 {/* Display Name */}
-                <div className="field-row flex items-start ">
+                <div className="field-row flex items-start">
                   <label htmlFor="display_name" className="font-bold w-28 mt-1">Display Name</label>
                   <div className="flex w-full">
                     <input
@@ -345,15 +339,15 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                 </div>
 
                 {/* Pronouns */}
-                <div className="field-row flex items-start ">
+                <div className="field-row flex items-start">
                   <label htmlFor="pronouns" className="font-bold w-28 mt-1">Pronouns</label>
-                  <div className="flex  w-full">
+                  <div className="flex w-full">
                     <input
                       id="pronouns"
                       type="text"
                       value={profile.pronouns || ''}
                       onChange={(e) => updateProfile({ pronouns: e.target.value.slice(0, 20) })}
-                      placeholder="e.g., he/him , she/her"
+                      placeholder="e.g., he/him, she/her"
                       maxLength={20}
                       disabled={saving || loading}
                       className="w-1/3"
@@ -365,19 +359,18 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                 </div>
 
                 {/* Bio */}
-                <div className="field-row flex items-start ">
+                <div className="field-row flex items-start">
                   <label htmlFor="bio" className="font-bold w-28 mt-1">About Me</label>
-                  <div className="flex  w-full">
+                  <div className="flex w-full">
                     <textarea
                       id="bio"
                       value={profile.bio || ''}
-                      onChange={(e) => updateProfile({ bio: e.target.value.slice(0, 500) })}
+                      onChange={(e) => updateProfile({ bio: e.target.value.slice(0, 200) })}
                       placeholder="Tell people about yourself..."
                       maxLength={200}
                       rows={4}
                       disabled={saving || loading}
                       className="w-1/2 resize-none"
-                       
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       {(profile.bio || '').length}/200 
@@ -386,151 +379,150 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                 </div>
               </fieldset>
 
-            {/* Appearance Section */}
-            <fieldset className="p-4 space-y-2" style={{ border: 'groove' }}>
-              <legend className="font-bold text-xs">Appearance</legend>
+              {/* Appearance Section */}
+              <fieldset className="p-4 space-y-2" style={{ border: 'groove' }}>
+                <legend className="font-bold text-xs">Appearance</legend>
 
-              {/* Hidden file inputs */}
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImageUpload(file, 'avatar', setAvatarUploading);
-                }}
-                style={{ display: 'none' }}
-              />
-              <input
-                ref={bannerInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImageUpload(file, 'banner', setBannerUploading);
-                }}
-                style={{ display: 'none' }}
-              />
+                {/* Hidden file inputs */}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file, 'avatar', setAvatarUploading);
+                  }}
+                  style={{ display: 'none' }}
+                />
+                <input
+                  ref={bannerInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file, 'banner', setBannerUploading);
+                  }}
+                  style={{ display: 'none' }}
+                />
 
-              {/* Avatar Upload Info */}
-              <div className="field-row flex items-start gap-4">
-                <label className="font-bold w-28 pt-1">Profile Picture</label>
-                <div className="flex flex-col">
-                  <div className="text-xs text-gray-600 mb-1">
-                    Hover over your profile picture in the preview to upload a new image
+                {/* Avatar Upload Info */}
+                <div className="field-row flex items-start gap-4">
+                  <label className="font-bold w-28 pt-1">Profile Picture</label>
+                  <div className="flex flex-col">
+                    <div className="text-xs text-gray-600 mb-1">
+                      Hover over your profile picture in the preview to upload a new image
+                    </div>
+                    {avatarUploading && (
+                      <div className="text-xs text-blue-600">Uploading avatar...</div>
+                    )}
                   </div>
-                  {avatarUploading && (
-                    <div className="text-xs text-blue-600">Uploading avatar...</div>
-                  )}
                 </div>
-              </div>
 
-              {/* Banner Upload Info */}
-              <div className="field-row flex items-start gap-4">
-                <label className="font-bold w-28 pt-1">Banner Image</label>
-                <div className="flex flex-col">
-                  <div className="text-xs text-gray-600 mb-1">
-                    Hover over the banner area in the preview to upload a new image
+                {/* Banner Upload Info */}
+                <div className="field-row flex items-start gap-4">
+                  <label className="font-bold w-28 pt-1">Banner Image</label>
+                  <div className="flex flex-col">
+                    <div className="text-xs text-gray-600 mb-1">
+                      Hover over the banner area in the preview to upload a new image
+                    </div>
+                    {bannerUploading && (
+                      <div className="text-xs text-blue-600">Uploading banner...</div>
+                    )}
                   </div>
-                  {bannerUploading && (
-                    <div className="text-xs text-blue-600">Uploading banner...</div>
-                  )}
                 </div>
-              </div>
 
-              {/* Display Name Color */}
-              <div className="field-row flex items-start gap-4">
-                <label htmlFor="display_name_color" className="font-bold w-28 pt-1">Display Name Color</label>
-                <div className="flex flex-col w-full gap-1">
-                  <div className="flex gap-2 items-center">
-                    <ColorPicker
-                      color={profile.display_name_color || '#000000'}
-                      onChange={(color) => updateProfile({ display_name_color: color })}
-                      disabled={saving || loading}
-                    />
-                    <input
-                      id="display_name_color"
-                      type="text"
-                      value={profile.display_name_color || '#000000'}
-                      onChange={(e) => updateProfile({ display_name_color: e.target.value })}
-                      placeholder="#000000"
+                {/* Display Name Color */}
+                <div className="field-row flex items-start gap-4">
+                  <label htmlFor="display_name_color" className="font-bold w-28 pt-1">Display Name Color</label>
+                  <div className="flex flex-col w-full gap-1">
+                    <div className="flex gap-2 items-center">
+                      <ColorPicker
+                        color={profile.display_name_color || '#000000'}
+                        onChange={(color) => updateProfile({ display_name_color: color })}
+                        disabled={saving || loading}
+                      />
+                      <input
+                        id="display_name_color"
+                        type="text"
+                        value={profile.display_name_color || '#000000'}
+                        onChange={(e) => updateProfile({ display_name_color: e.target.value })}
+                        placeholder="#000000"
+                        disabled={saving || loading}
+                        className="w-1/6"
+                      />
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      This color appears when you send messages in chat
+                    </div>
+                  </div>
+                </div>
+
+                {/* Display Name Animation */}
+                <div className="field-row flex items-start gap-4">
+                  <label htmlFor="display_name_animation" className="font-bold w-28 pt-1">Display Name Animation</label>
+                  <div className="flex flex-col w-full">
+                    <select
+                      id="display_name_animation"
+                      value={profile.display_name_animation || 'none'}
+                      onChange={(e) => updateProfile({ display_name_animation: e.target.value })}
                       disabled={saving || loading}
                       className="w-1/6"
-                    />
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    This color appears when you send messages in chat
+                    >
+                      <option value="none">None</option>
+                      <option value="rainbow">Rainbow</option>
+                      <option value="pulse">Pulse</option>
+                      <option value="glow">Glow</option>
+                      <option value="gradient">Gradient</option>
+                    </select>
                   </div>
                 </div>
-              </div>
 
-              {/* Display Name Animation */}
-              <div className="field-row flex items-start gap-4">
-                <label htmlFor="display_name_animation" className="font-bold w-28 pt-1">Display Name Animation</label>
-                <div className="flex flex-col w-full">
-                  <select
-                    id="display_name_animation"
-                    value={profile.display_name_animation || 'none'}
-                    onChange={(e) => updateProfile({ display_name_animation: e.target.value })}
-                    disabled={saving || loading}
-                    className="w-1/6"
-                  >
-                    <option value="none">None</option>
-                    <option value="rainbow">Rainbow</option>
-                    <option value="pulse">Pulse</option>
-                    <option value="glow">Glow</option>
-                    <option value="gradient">Gradient</option>
-                  </select>
-                </div>
-              </div>
+                {/* Rainbow Speed */}
+                {profile.display_name_animation === 'rainbow' && (
+                  <div className="field-row flex items-start gap-4">
+                    <label htmlFor="rainbow_speed" className="font-bold w-28 pt-1">Rainbow Speed</label>
+                    <div className="flex flex-col w-full">
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          id="rainbow_speed"
+                          min="1"
+                          max="10"
+                          value={profile.rainbow_speed || 3}
+                          onChange={(e) => updateProfile({ rainbow_speed: parseInt(e.target.value) })}
+                          disabled={saving || loading}
+                          className="flex-1"
+                        />
+                        <span className="text-sm text-gray-600 min-w-[60px] font-bold">
+                          {profile.rainbow_speed || 3}s
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        How fast the rainbow animation cycles (1 = fastest, 10 = slowest)
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-              {/* Rainbow Speed */}
-              {profile.display_name_animation === 'rainbow' && (
+                {/* Status */}
                 <div className="field-row flex items-start gap-4">
-                  <label htmlFor="rainbow_speed" className="font-bold w-28 pt-1">Rainbow Speed</label>
+                  <label htmlFor="status" className="font-bold w-28 pt-1">Status</label>
                   <div className="flex flex-col w-full">
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        id="rainbow_speed"
-                        min="1"
-                        max="10"
-                        value={profile.rainbow_speed || 3}
-                        onChange={(e) => updateProfile({ rainbow_speed: parseInt(e.target.value) })}
-                        disabled={saving || loading}
-                        className="flex-1"
-                      />
-                      <span className="text-sm text-gray-600 min-w-[60px] font-bold">
-                        {profile.rainbow_speed || 3}s
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      How fast the rainbow animation cycles (1 = fastest, 10 = slowest)
-                    </div>
+                    <select
+                      id="status"
+                      value={profile.status || 'online'}
+                      onChange={(e) => updateProfile({ status: e.target.value as any })}
+                      disabled={saving || loading}
+                      className="w-1/4"
+                    >
+                      <option value="online">🟢 Online</option>
+                      <option value="idle">🟡 Idle</option>
+                      <option value="dnd">🔴 Do Not Disturb</option>
+                      <option value="offline">⚫ Offline</option>
+                    </select>
                   </div>
                 </div>
-              )}
-
-              {/* Status */}
-              <div className="field-row flex items-start gap-4">
-                <label htmlFor="status" className="font-bold w-28 pt-1">Status</label>
-                <div className="flex flex-col w-full">
-                  <select
-                    id="status"
-                    value={profile.status || 'online'}
-                    onChange={(e) => updateProfile({ status: e.target.value as any })}
-                    disabled={saving || loading}
-                    className="w-1/4"
-                  >
-                    <option value="online">🟢 Online</option>
-                    <option value="idle">🟡 Idle</option>
-                    <option value="dnd">🔴 Do Not Disturb</option>
-                    <option value="offline">⚫ Offline</option>
-                  </select>
-                </div>
-              </div>
-            </fieldset>
-
+              </fieldset>
 
               {/* Badges Section */}
               <fieldset style={{ border: 'groove'}}>
@@ -547,7 +539,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
             </div>
           )}
 
-          {/* Advanced CSS Tab */}
+          {/* Advanced CSS Tab with ACE Editor */}
           {activeTab === 'css' && (
             <div className="space-y-4">
               {/* CSS File Upload */}
@@ -599,12 +591,13 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
               )}
 
               <div className="field-row">
-                <label className="font-bold">Custom CSS Editor</label>
+                <label className="font-bold">Custom CSS Editor (ACE)</label>
                 <div className="text-sm text-gray-600 mb-2">
-                  Customize your profile card with CSS. Target the <code style={{padding: '2px 4px' }}>.profile-card-custom</code> class.
+                  Professional code editor with syntax highlighting, auto-completion, and more. Target the <code style={{padding: '2px 4px' }}>.profile-card-custom</code> class.
                 </div>
               </div>
               
+              {/* ACE CSS Editor */}
               <CSSEditor
                 value={customCSS}
                 onChange={handleCSSChange}
@@ -618,11 +611,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Neon glow effect */
-                    .profile-card-custom {
-                      box-shadow: 0 0 20px #00ffff, 0 0 40px #00ffff, 0 0 60px #00ffff;
-                      border: 2px solid #00ffff;
-                      background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
-                    }`)}
+.profile-card-custom {
+  box-shadow: 0 0 20px #00ffff, 0 0 40px #00ffff, 0 0 60px #00ffff;
+  border: 2px solid #00ffff;
+  background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
+  color: #ffffff;
+}`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -632,11 +626,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Retro gradient */
-                    .profile-card-custom {
-                      background: linear-gradient(45deg, #ff6b9d, #c44569, #f8b500, #feca57);
-                      color: white;
-                      border-radius: 20px;
-                    }`)}
+.profile-card-custom {
+  background: linear-gradient(45deg, #ff6b9d, #c44569, #f8b500, #feca57);
+  color: white;
+  border-radius: 20px;
+  border: none;
+}`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -646,12 +641,12 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Glass effect */
-                    .profile-card-custom {
-                      background: rgba(255, 255, 255, 0.1);
-                      backdrop-filter: blur(10px);
-                      border: 1px solid rgba(255, 255, 255, 0.2);
-                      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-                    }`)}
+.profile-card-custom {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -661,27 +656,28 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   <button
                     className="btn"
                     onClick={() => handleCSSChange(`/* Animated border */
-                    .profile-card-custom {
-                      position: relative;
-                      background: #000;
-                      border-radius: 15px;
-                    }
+.profile-card-custom {
+  position: relative;
+  background: #000;
+  border-radius: 15px;
+  overflow: hidden;
+}
 
-                    .profile-card-custom::before {
-                      content: '';
-                      position: absolute;
-                      inset: -2px;
-                      padding: 2px;
-                      background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #00ff00, #0080ff, #8000ff);
-                      border-radius: 15px;
-                      z-index: -1;
-                      animation: rotate 2s linear infinite;
-                    }
+.profile-card-custom::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  background: linear-gradient(45deg, #ff0000, #ff8000, #ffff00, #00ff00, #0080ff, #8000ff);
+  border-radius: 15px;
+  z-index: -1;
+  animation: rotate 2s linear infinite;
+}
 
-                    @keyframes rotate {
-                      0% { transform: rotate(0deg); }
-                      100% { transform: rotate(360deg); }
-                    }`)}
+@keyframes rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
                   >
@@ -692,27 +688,37 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
 
               {/* CSS Help */}
               <fieldset style={{ border: 'groove'}}>
-                <legend>CSS Tips:</legend>
-              <div className="field-row">
-                
-               
-              
-                  <ul className="text-sm space-y-1 text-gray-700" style={{ fontSize: '11px', lineHeight: '1.3' }}>
-                    <li>• Use <code>background</code> to change the card background</li>
-                    <li>• Use <code>border</code> and <code>border-radius</code> for shape styling</li>
-                    <li>• Use <code>box-shadow</code> for glow and shadow effects</li>
-                    <li>• Use <code>backdrop-filter</code> for glass effects</li>
-                    <li>• Use <code>@keyframes</code> for animations</li>
-                    <li>• Use <code>transform</code> for rotations and scaling</li>
-                  </ul>
-                
-              </div>
+                <legend>CSS Tips & ACE Editor Shortcuts:</legend>
+                <div className="field-row">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="font-bold text-xs mb-2">CSS Properties:</div>
+                      <ul className="text-xs space-y-1 text-gray-700">
+                        <li>• <code>background</code> - Change card background</li>
+                        <li>• <code>border</code> & <code>border-radius</code> - Shape styling</li>
+                        <li>• <code>box-shadow</code> - Glow and shadow effects</li>
+                        <li>• <code>backdrop-filter</code> - Glass effects</li>
+                        <li>• <code>@keyframes</code> - Custom animations</li>
+                        <li>• <code>transform</code> - Rotations and scaling</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs mb-2">Editor Shortcuts:</div>
+                      <ul className="text-xs space-y-1 text-gray-700">
+                        <li>• <code>Ctrl+Space</code> - Auto-completion</li>
+                        <li>• <code>Ctrl+F</code> - Find & Replace</li>
+                        <li>• <code>Ctrl+Z/Y</code> - Undo/Redo</li>
+                        <li>• <code>Ctrl+Alt+↑/↓</code> - Multi-cursor</li>
+                        <li>• <code>Ctrl+/</code> - Toggle comment</li>
+                        <li>• <code>Alt+↑/↓</code> - Move lines</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </fieldset>
             </div>
-            
           )}
         </div>
-        
       </div>
 
       {/* Export avatar/banner upload functions */}
@@ -745,13 +751,11 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         .field-row input:disabled,
         .field-row textarea:disabled,
         .field-row select:disabled {
-          
           color: #808080;
         }
         
         .btn.pressed {
           border-style: inset;
-         
         }
         
         .sunken {
@@ -759,7 +763,6 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         }
         
         code {
-         
           padding: 1px 3px;
           border: 1px inset #c0c0c0;
           font-family: 'MS Sans Serif', sans-serif;
@@ -821,11 +824,27 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
         .mb-2 {
           margin-bottom: 8px;
         }
-     
+        
+        .grid {
+          display: grid;
+        }
+        
+        .grid-cols-1 {
+          grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        
+        .grid-cols-2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         
         legend {
           padding: 0 8px;
-          
+        }
+        
+        @media (min-width: 768px) {
+          .md\\:grid-cols-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
       `}</style>
     </div>

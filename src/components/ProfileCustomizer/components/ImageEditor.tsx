@@ -1,6 +1,4 @@
-// src/components/ProfileCustomizer/components/ImageEditor.tsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { cn } from '@/lib/utils';
 
 interface ImageEditorProps {
   isOpen: boolean;
@@ -8,6 +6,7 @@ interface ImageEditorProps {
   onApply: (croppedImageData: string) => void;
   imageFile: File;
   title?: string;
+  cropType?: 'circle' | 'banner'; // Add crop type
 }
 
 interface ImageState {
@@ -20,12 +19,18 @@ interface ImageState {
   sliderValue: number; // Add slider value (0-100)
 }
 
+interface ContainerSize {
+  width: number;
+  height: number;
+}
+
 export const ImageEditor: React.FC<ImageEditorProps> = ({
   isOpen,
   onClose,
   onApply,
   imageFile,
-  title = "Edit Image"
+  title = "Edit Image",
+  cropType = "circle"
 }) => {
   const [imageUrl, setImageUrl] = useState<string>('');
   const [imageState, setImageState] = useState<ImageState>({
@@ -39,7 +44,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [containerSize, setContainerSize] = useState({ width: 400, height: 400 });
+  const [containerSize, setContainerSize] = useState<ContainerSize>({ width: 400, height: 400 });
   
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,17 +59,29 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       // Load image to get natural dimensions
       const img = new Image();
       img.onload = () => {
-        // Calculate container size - always 400x400 for consistent circle size
+        // Calculate container size - always 400x400 for consistent size
         const containerWidth = 400;
         const containerHeight = 400;
         
-        // Circle properties (30% smaller)
-        const circleRadius = ((Math.min(containerWidth, containerHeight) / 2) - 10) * 0.7;
+        // Crop area properties based on type
+        let cropWidth, cropHeight, cropRadius;
         
-        // Calculate minimum scale needed for circle to fit in image
-        const minScaleForCircleX = (circleRadius * 2) / img.naturalWidth;
-        const minScaleForCircleY = (circleRadius * 2) / img.naturalHeight;
-        const minScaleForCircle = Math.max(minScaleForCircleX, minScaleForCircleY);
+        if (cropType === 'circle') {
+          // Circle crop (30% smaller than container)
+          cropRadius = ((Math.min(containerWidth, containerHeight) / 2) - 10) * 0.7;
+          cropWidth = cropRadius * 2;
+          cropHeight = cropRadius * 2;
+        } else {
+          // Banner crop (larger horizontal rectangle to better fit images)
+          cropWidth = containerWidth * 0.95; // 95% of container width (380px)
+          cropHeight = containerHeight * 0.45; // 45% of container height (180px)
+          cropRadius = 0; // Not used for rectangle
+        }
+        
+        // Calculate minimum scale needed for crop area to fit in image
+        const minScaleForCropX = cropWidth / img.naturalWidth;
+        const minScaleForCropY = cropHeight / img.naturalHeight;
+        const minScaleForCrop = Math.max(minScaleForCropX, minScaleForCropY);
         
         // Calculate scale to fit entire image in container  
         const scaleToFitWidth = containerWidth / img.naturalWidth;
@@ -72,7 +89,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         const scaleToFitContainer = Math.min(scaleToFitWidth, scaleToFitHeight);
         
         // The minimum scale we'll actually use (for the image to work properly)
-        const actualMinScale = Math.max(minScaleForCircle, Math.min(scaleToFitContainer, 1));
+        const actualMinScale = Math.max(minScaleForCrop, Math.min(scaleToFitContainer, 1));
         
         // Always start with slider at 0, but use the actual minimum scale for the image
         const initialScale = actualMinScale;
@@ -83,34 +100,44 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         let initialX = (containerWidth - scaledWidth) / 2;
         let initialY = (containerHeight - scaledHeight) / 2;
         
-        // Apply bounds checking for circle (but allow movement if image is larger)
-        const circleCenterX = containerWidth / 2;
-        const circleCenterY = containerHeight / 2;
+        // Apply bounds checking for crop area (but allow movement if image is larger)
+        const cropCenterX = containerWidth / 2;
+        const cropCenterY = containerHeight / 2;
         
-        // Only constrain position if the image at minimum scale would put circle out of bounds
-        const circleLeft = circleCenterX - initialX - circleRadius;
-        const circleRight = circleCenterX - initialX + circleRadius;
-        const circleTop = circleCenterY - initialY - circleRadius;
-        const circleBottom = circleCenterY - initialY + circleRadius;
+        // Calculate crop bounds based on type
+        let cropLeft, cropRight, cropTop, cropBottom;
+        
+        if (cropType === 'circle') {
+          cropLeft = cropCenterX - initialX - cropRadius;
+          cropRight = cropCenterX - initialX + cropRadius;
+          cropTop = cropCenterY - initialY - cropRadius;
+          cropBottom = cropCenterY - initialY + cropRadius;
+        } else {
+          // Rectangle bounds
+          cropLeft = cropCenterX - initialX - cropWidth / 2;
+          cropRight = cropCenterX - initialX + cropWidth / 2;
+          cropTop = cropCenterY - initialY - cropHeight / 2;
+          cropBottom = cropCenterY - initialY + cropHeight / 2;
+        }
         
         // Check if we need to adjust position
-        let needsXAdjustment = circleLeft < 0 || circleRight > scaledWidth;
-        let needsYAdjustment = circleTop < 0 || circleBottom > scaledHeight;
+        let needsXAdjustment = cropLeft < 0 || cropRight > scaledWidth;
+        let needsYAdjustment = cropTop < 0 || cropBottom > scaledHeight;
         
         // Only adjust if necessary, and allow movement room when possible
         if (needsXAdjustment) {
-          if (circleLeft < 0) {
-            initialX = circleCenterX - circleRadius;
-          } else if (circleRight > scaledWidth) {
-            initialX = circleCenterX + circleRadius - scaledWidth;
+          if (cropLeft < 0) {
+            initialX = cropCenterX - (cropType === 'circle' ? cropRadius : cropWidth / 2);
+          } else if (cropRight > scaledWidth) {
+            initialX = cropCenterX + (cropType === 'circle' ? cropRadius : cropWidth / 2) - scaledWidth;
           }
         }
         
         if (needsYAdjustment) {
-          if (circleTop < 0) {
-            initialY = circleCenterY - circleRadius;
-          } else if (circleBottom > scaledHeight) {
-            initialY = circleCenterY + circleRadius - scaledHeight;
+          if (cropTop < 0) {
+            initialY = cropCenterY - (cropType === 'circle' ? cropRadius : cropHeight / 2);
+          } else if (cropBottom > scaledHeight) {
+            initialY = cropCenterY + (cropType === 'circle' ? cropRadius : cropHeight / 2) - scaledHeight;
           }
         }
         
@@ -129,7 +156,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       
       return () => URL.revokeObjectURL(url);
     }
-  }, [imageFile]);
+  }, [imageFile, cropType]);
 
   // Handle image load
   const handleImageLoad = useCallback(() => {
@@ -153,7 +180,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     });
   }, [imageState.x, imageState.y]);
 
-  // Handle mouse move for dragging - simplified bounds checking
+  // Handle mouse move for dragging - support both crop types
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging) return;
     
@@ -164,28 +191,51 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     const scaledWidth = imageState.naturalWidth * imageState.scale;
     const scaledHeight = imageState.naturalHeight * imageState.scale;
     
-    // Circle properties
-    const circleCenterX = containerSize.width / 2;
-    const circleCenterY = containerSize.height / 2;
-    const circleRadius = ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7;
+    // Crop area properties based on type
+    const cropCenterX = containerSize.width / 2;
+    const cropCenterY = containerSize.height / 2;
     
-    // Simple bounds checking - only ensure circle stays within image
-    const circleLeft = circleCenterX - newX - circleRadius;
-    const circleRight = circleCenterX - newX + circleRadius;
-    const circleTop = circleCenterY - newY - circleRadius;
-    const circleBottom = circleCenterY - newY + circleRadius;
+    let cropLeft, cropRight, cropTop, cropBottom;
     
-    // Constrain only if circle goes outside image bounds
-    if (circleLeft < 0) {
-      newX = circleCenterX - circleRadius;
-    } else if (circleRight > scaledWidth) {
-      newX = circleCenterX + circleRadius - scaledWidth;
+    if (cropType === 'circle') {
+      const circleRadius = ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7;
+      cropLeft = cropCenterX - newX - circleRadius;
+      cropRight = cropCenterX - newX + circleRadius;
+      cropTop = cropCenterY - newY - circleRadius;
+      cropBottom = cropCenterY - newY + circleRadius;
+    } else {
+      // Banner rectangle
+      const cropWidth = containerSize.width * 0.95;
+      const cropHeight = containerSize.height * 0.45;
+      cropLeft = cropCenterX - newX - cropWidth / 2;
+      cropRight = cropCenterX - newX + cropWidth / 2;
+      cropTop = cropCenterY - newY - cropHeight / 2;
+      cropBottom = cropCenterY - newY + cropHeight / 2;
     }
     
-    if (circleTop < 0) {
-      newY = circleCenterY - circleRadius;
-    } else if (circleBottom > scaledHeight) {
-      newY = circleCenterY + circleRadius - scaledHeight;
+    // Constrain only if crop area goes outside image bounds
+    if (cropLeft < 0) {
+      newX = cropCenterX - (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.width * 0.95) / 2
+      );
+    } else if (cropRight > scaledWidth) {
+      newX = cropCenterX + (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.width * 0.95) / 2
+      ) - scaledWidth;
+    }
+    
+    if (cropTop < 0) {
+      newY = cropCenterY - (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.height * 0.45) / 2
+      );
+    } else if (cropBottom > scaledHeight) {
+      newY = cropCenterY + (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.height * 0.45) / 2
+      ) - scaledHeight;
     }
     
     setImageState(prev => ({
@@ -193,7 +243,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       x: newX,
       y: newY
     }));
-  }, [isDragging, dragStart, imageState.naturalWidth, imageState.scale, containerSize]);
+  }, [isDragging, dragStart, imageState.naturalWidth, imageState.scale, containerSize, cropType]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
@@ -213,7 +263,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  // Handle scale change with slider mapping
+  // Handle scale change with slider mapping - support both crop types
   const handleScaleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const sliderValue = parseFloat(e.target.value);
     
@@ -222,45 +272,69 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     const maxScale = 3;
     const actualScale = minScale + (sliderValue / 100) * (maxScale - minScale);
     
-    // Use the existing zoom-from-circle logic
+    // Use the existing zoom-from-crop-center logic
     const oldScale = imageState.scale;
     
     if (oldScale === 0) return;
     
-    // Fixed circle center (always at container center)
-    const circleCenterX = containerSize.width / 2;
-    const circleCenterY = containerSize.height / 2;
-    const circleRadius = ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7;
+    // Fixed crop center (always at container center)
+    const cropCenterX = containerSize.width / 2;
+    const cropCenterY = containerSize.height / 2;
     
-    // Calculate the point in the image that the circle center is currently viewing
-    const imagePointX = (circleCenterX - imageState.x) / oldScale;
-    const imagePointY = (circleCenterY - imageState.y) / oldScale;
+    // Calculate the point in the image that the crop center is currently viewing
+    const imagePointX = (cropCenterX - imageState.x) / oldScale;
+    const imagePointY = (cropCenterY - imageState.y) / oldScale;
     
-    // Calculate new position to keep the same image point at circle center
-    let newX = circleCenterX - (imagePointX * actualScale);
-    let newY = circleCenterY - (imagePointY * actualScale);
+    // Calculate new position to keep the same image point at crop center
+    let newX = cropCenterX - (imagePointX * actualScale);
+    let newY = cropCenterY - (imagePointY * actualScale);
     
     // Calculate new image dimensions
     const newImageWidth = imageState.naturalWidth * actualScale;
     const newImageHeight = imageState.naturalHeight * actualScale;
     
-    // Apply bounds checking (but less restrictive than before)
-    const circleLeft = circleCenterX - newX - circleRadius;
-    const circleRight = circleCenterX - newX + circleRadius;
-    const circleTop = circleCenterY - newY - circleRadius;
-    const circleBottom = circleCenterY - newY + circleRadius;
+    // Apply bounds checking based on crop type
+    let cropLeft, cropRight, cropTop, cropBottom;
     
-    // Only constrain if circle actually goes outside image
-    if (circleLeft < 0) {
-      newX = circleCenterX - circleRadius;
-    } else if (circleRight > newImageWidth) {
-      newX = circleCenterX + circleRadius - newImageWidth;
+    if (cropType === 'circle') {
+      const circleRadius = ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7;
+      cropLeft = cropCenterX - newX - circleRadius;
+      cropRight = cropCenterX - newX + circleRadius;
+      cropTop = cropCenterY - newY - circleRadius;
+      cropBottom = cropCenterY - newY + circleRadius;
+    } else {
+      // Banner rectangle
+      const cropWidth = containerSize.width * 0.95;
+      const cropHeight = containerSize.height * 0.45;
+      cropLeft = cropCenterX - newX - cropWidth / 2;
+      cropRight = cropCenterX - newX + cropWidth / 2;
+      cropTop = cropCenterY - newY - cropHeight / 2;
+      cropBottom = cropCenterY - newY + cropHeight / 2;
     }
     
-    if (circleTop < 0) {
-      newY = circleCenterY - circleRadius;
-    } else if (circleBottom > newImageHeight) {
-      newY = circleCenterY + circleRadius - newImageHeight;
+    // Only constrain if crop area actually goes outside image
+    if (cropLeft < 0) {
+      newX = cropCenterX - (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.width * 0.95) / 2
+      );
+    } else if (cropRight > newImageWidth) {
+      newX = cropCenterX + (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.width * 0.95) / 2
+      ) - newImageWidth;
+    }
+    
+    if (cropTop < 0) {
+      newY = cropCenterY - (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.height * 0.45) / 2
+      );
+    } else if (cropBottom > newImageHeight) {
+      newY = cropCenterY + (cropType === 'circle' ? 
+        ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7 : 
+        (containerSize.height * 0.45) / 2
+      ) - newImageHeight;
     }
     
     setImageState(prev => ({ 
@@ -270,7 +344,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       x: newX,
       y: newY
     }));
-  }, [imageState, containerSize]);
+  }, [imageState, containerSize, cropType]);
 
   // Reset to default position and scale
   const handleReset = useCallback(() => {
@@ -348,8 +422,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     onClose();
   }, [generateCroppedImage, onApply, onClose]);
 
-  // Calculate image style
-  const imageStyle = {
+  // Calculate image style with proper typing
+  const imageStyle: React.CSSProperties = {
     transform: `translate(${imageState.x}px, ${imageState.y}px) scale(${imageState.scale})`,
     transformOrigin: 'top left',
     width: imageState.naturalWidth ? `${imageState.naturalWidth}px` : 'auto',
@@ -400,25 +474,60 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 />
               )}
               
-              {/* Fixed Circle Overlay - never changes size or position - 30% smaller */}
-              <div 
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: `radial-gradient(circle at center, transparent ${((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7}px, rgba(0,0,0,0.6) ${(((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7) + 5}px)`
-                }}
-              />
-              
-              {/* Fixed Circle Border - never changes size or position - 30% smaller */}
-              <div 
-                className="absolute border-4 border-white rounded-full pointer-events-none"
-                style={{
-                  width: `${(Math.min(containerSize.width, containerSize.height) - 20) * 0.7}px`,
-                  height: `${(Math.min(containerSize.width, containerSize.height) - 20) * 0.7}px`,
-                  left: '50%',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)'
-                }}
-              />
+              {/* Crop overlay based on type */}
+              {cropType === 'circle' ? (
+                <>
+                  {/* Circle overlay */}
+                  <div 
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: `radial-gradient(circle at center, transparent ${((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7}px, rgba(0,0,0,0.6) ${(((Math.min(containerSize.width, containerSize.height) / 2) - 10) * 0.7) + 5}px)`
+                    }}
+                  />
+                  
+                  {/* Circle border */}
+                  <div 
+                    className="absolute border-4 border-white rounded-full pointer-events-none"
+                    style={{
+                      width: `${(Math.min(containerSize.width, containerSize.height) - 20) * 0.7}px`,
+                      height: `${(Math.min(containerSize.width, containerSize.height) - 20) * 0.7}px`,
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  {/* Rectangle overlay for banner */}
+                  <div 
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: `linear-gradient(
+                        to bottom,
+                        rgba(0,0,0,0.6) 0%,
+                        rgba(0,0,0,0.6) ${(50 - 22.5)}%,
+                        transparent ${(50 - 22.5)}%,
+                        transparent ${(50 + 22.5)}%,
+                        rgba(0,0,0,0.6) ${(50 + 22.5)}%,
+                        rgba(0,0,0,0.6) 100%
+                      )`
+                    }}
+                  />
+                  
+                  {/* Rectangle border for banner */}
+                  <div 
+                    className="absolute border-4 border-white pointer-events-none"
+                    style={{
+                      width: `${containerSize.width * 0.95}px`,
+                      height: `${containerSize.height * 0.45}px`,
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
           

@@ -1,4 +1,4 @@
-/* ProfileCustomizer CSS - Complete Styles */
+/* ProfileCustomizer CSS - Updated with Hidden Scrollbars */
 
 /* =================================
    ANIMATIONS
@@ -27,6 +27,32 @@
 @keyframes rotate {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* =================================
+   HIDDEN SCROLLBARS - GLOBAL
+   ================================= */
+
+/* Hide all scrollbars completely but keep functionality */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Ensure scrolling still works */
+.overflow-y-auto,
+.overflow-x-auto {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+  display: none;
 }
 
 /* =================================
@@ -166,57 +192,12 @@
   min-width: 240px;
 }
 
-/* CSSEditor */
-.css-editor-container {
-  position: relative;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #f9fafb;
-}
-
-.css-editor-line-numbers {
-  flex-shrink: 0;
-  background: #f3f4f6;
-  padding: 12px;
-  font-size: 12px;
-  color: #6b7280;
-  font-family: 'Courier New', monospace;
-  user-select: none;
-}
-
-.css-editor-textarea {
-  width: 100%;
-  padding: 12px;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #374151;
-}
-
-.css-editor-textarea::placeholder {
-  color: #9ca3af;
-}
-
-.css-editor-expanded {
-  height: 384px;
-}
-
-.css-editor-collapsed {
-  height: 192px;
-}
-
 /* ProfileCardPreview */
 .profile-card-custom {
   position: relative;
   background: white;
   border-radius: 8px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-
   max-width: 320px;
   min-height: 200px;
   overflow: hidden;
@@ -269,6 +250,13 @@
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
+  /* Hidden scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.profile-badges-container::-webkit-scrollbar {
+  display: none;
 }
 
 .profile-badge {
@@ -281,12 +269,13 @@
   flex-shrink: 0;
 }
 
-.scrollbar-hide {
-  -ms-overflow-style: none;
+/* Bio sections with hidden scrollbars */
+.profile-bio {
   scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
+.profile-bio::-webkit-scrollbar {
   display: none;
 }
 
@@ -295,7 +284,6 @@
    ================================= */
 
 .loading-spinner {
-
   border-top: 2px solid transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -323,15 +311,12 @@
 .loading-progress-track {
   border: 2px inset #c0c0c0;
   height: 16px;
- 
 }
 
 .loading-progress-fill {
   height: 100%;
   background: #3b82f6;
-
 }
-
 
 /* =================================
    UTILITY CLASSES
@@ -423,8 +408,6 @@
 
 .bg-white { background-color: #ffffff; }
 .bg-gray-50 { background-color: #f9fafb; }
-
-
 .bg-gray-700 { background-color: #374151; }
 .bg-gray-800 { background-color: #1f2937; }
 .bg-red-50 { background-color: #fef2f2; }
@@ -500,10 +483,24 @@
 .inline { display: inline; }
 .hidden { display: none; }
 
-/* Overflow */
+/* Overflow - with hidden scrollbars */
 .overflow-hidden { overflow: hidden; }
-.overflow-y-auto { overflow-y: auto; }
-.overflow-x-auto { overflow-x: auto; }
+.overflow-y-auto { 
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.overflow-y-auto::-webkit-scrollbar {
+  display: none;
+}
+.overflow-x-auto { 
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  display: none;
+}
 
 /* Interactions */
 .cursor-pointer { cursor: pointer; }
@@ -536,7 +533,6 @@
 
 /* Pseudo-classes */
 .hover\:bg-gray-100:hover { background-color: #f3f4f6; }
-
 .hover\:bg-gray-600:hover { background-color: #4b5563; }
 .hover\:bg-gray-800:hover { background-color: #1f2937; }
 .hover\:border-gray-400:hover { border-color: #9ca3af; }
@@ -559,25 +555,6 @@
 .unsaved-changes {
   box-shadow: 0 0 0 2px #fbbf24;
   animation: pulse-warning 2s infinite;
-}
-
-/* Scrollbar styles */
-.overflow-y-auto::-webkit-scrollbar {
-  width: 16px;
-}
-
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: #c0c0c0;
-  border: 1px inset #c0c0c0;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #808080;
-  border: 1px outset #808080;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #606060;
 }
 
 /* Space utilities */
@@ -621,14 +598,34 @@ code {
   font-size: 10px;
 }
 
+/* =================================
+   NO-SCROLLBAR UTILITY CLASS
+   ================================= */
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* =================================
+   SPECIAL EVENT ISOLATION
+   ================================= */
+
+/* Prevent scroll events from bubbling up when interacting with badges */
+.badge-scroll-container {
+  /* This will be handled by event.stopPropagation() in JavaScript */
+}
+
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .dark\:bg-gray-600 { background-color: #4b5563; }
   .dark\:bg-gray-700 { background-color: #374151; }
   .dark\:bg-gray-800 { background-color: #1f2937; }
   .dark\:bg-gray-900 { background-color: #111827; }
-
-
   .dark\:text-gray-300 { color: #d1d5db; }
   .dark\:text-gray-400 { color: #9ca3af; }
   .dark\:text-gray-500 { color: #6b7280; }

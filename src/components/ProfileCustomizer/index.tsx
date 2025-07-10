@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/index.tsx - UPDATED WITH IMAGE EDITOR
+// src/components/ProfileCustomizer/index.tsx - FIXED WITH SCROLL LOCK
 'use client';
 import './ProfileCustomizer.css';
 import React, { useEffect, useCallback } from 'react';
@@ -37,6 +37,95 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
     resetToDefaults,
     discardChanges
   } = useProfileCustomizer();
+
+  // ✅ SCROLL LOCK: Disable body scrolling when customizer is open
+  useEffect(() => {
+    if (isOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      
+      // Disable body scrolling
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.overflow = 'hidden';
+      
+      // Cleanup function
+      return () => {
+        // Re-enable body scrolling
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.overflow = '';
+        
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
+
+  // ✅ PREVENT ESCAPE KEY FROM SCROLLING
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent arrow keys, page up/down, space, etc. from scrolling
+      const scrollKeys = [
+        'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+        'PageUp', 'PageDown', 'Home', 'End', ' '
+      ];
+      
+      if (scrollKeys.includes(e.key)) {
+        // Only prevent if the target is not an input, textarea, or contenteditable
+        const target = e.target as HTMLElement;
+        const isInputElement = target.tagName === 'INPUT' || 
+                              target.tagName === 'TEXTAREA' || 
+                              target.contentEditable === 'true' ||
+                              target.closest('.ace_editor'); // Allow ACE editor navigation
+        
+        if (!isInputElement) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, { passive: false });
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  // ✅ PREVENT WHEEL EVENTS OUTSIDE SPECIFIC CONTAINERS
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Allow scrolling only in specific containers
+      const allowedScrollContainers = [
+        '.overflow-y-auto',
+        '.overflow-x-auto', 
+        '.profile-badges-container',
+        '.badge-scroll-container',
+        '.ace_editor',
+        '.window-body'
+      ];
+      
+      const isInAllowedContainer = allowedScrollContainers.some(selector => 
+        target.closest(selector)
+      );
+      
+      if (!isInAllowedContainer) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    // Use passive: false to allow preventDefault
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    return () => document.removeEventListener('wheel', handleWheel);
+  }, [isOpen]);
 
   // Updated image upload handlers that work with the image editor
   const handleAvatarUpload = useCallback((imageData: string) => {
@@ -221,8 +310,16 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="window" style={{ width: '90vw', maxWidth: '1200px', height: '90vh', maxHeight: '800px' }}>
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center" 
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      onWheel={(e) => e.preventDefault()} // Prevent any wheel events on the overlay
+    >
+      <div 
+        className="window" 
+        style={{ width: '90vw', maxWidth: '1200px', height: '90vh', maxHeight: '800px' }}
+        onWheel={(e) => e.stopPropagation()} // Allow wheel events inside the window
+      >
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
@@ -311,11 +408,14 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           {isLoaded && isSignedIn && user && !loading && !error && (
             <div className="flex h-full">
               {/* Left Panel - Customization Controls */}
-              <div className="flex-1 p-4 overflow-y-auto border-r border-gray-400" style={{ 
-                borderStyle: 'inset',
-                width: '60%',
-                maxWidth: '60%'
-              }}>
+              <div 
+                className="flex-1 p-4 overflow-y-auto border-r border-gray-400 no-scrollbar" 
+                style={{ 
+                  borderStyle: 'inset',
+                  width: '60%',
+                  maxWidth: '60%'
+                }}
+              >
                 {/* Welcome message for new users */}
                 {!profile.profile_complete && (
                   <div className="mb-4 p-3 field-row sunken border border-gray-400 bg-green-50">
@@ -363,7 +463,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
               </div>
 
               {/* Right Panel - Live Preview */}
-              <div className="w-80 h-100 p-4 overflow-y-auto" style={{ width: '40%' }}>
+              <div className="w-80 h-100 p-4 overflow-y-auto no-scrollbar" style={{ width: '40%' }}>
                 <div className="window">
                   <div className="title-bar">
                     <div className="title-bar-text">
@@ -434,27 +534,6 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                         </div>
                       </div>
 
-                      {/* Debug panel for development */}
-                      {process.env.NODE_ENV === 'development' && (
-                        <div className="field-row">
-                          <div className="sunken border border-gray-400 p-2 bg-yellow-50">
-                            <div className="text-xs text-gray-600">
-                              <div className="font-bold mb-1">🔧 Debug Panel:</div>
-                              <button 
-                                className="btn text-xs mb-1" 
-                                onClick={testConnection}
-                                style={{ fontSize: '10px', padding: '2px 4px' }}
-                              >
-                                Test API Connection
-                              </button>
-                              <div>Has Changes: {hasChanges ? 'Yes' : 'No'}</div>
-                              <div>Saving: {saving ? 'Yes' : 'No'}</div>
-                              <div>Loading: {loading ? 'Yes' : 'No'}</div>
-                              <div>Error: {error ? 'Yes' : 'No'}</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -467,12 +546,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
             <div className="absolute bottom-0 left-0 right-0 p-4" style={{ borderStyle: 'inset' }}>
               <div className="flex justify-between items-center">
                 <div className="flex gap-2 items-center">
-                  {/* Debug info for development */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <div className="text-xs text-gray-500">
-                      URL: {typeof window !== 'undefined' ? window.location.href : 'N/A'}
-                    </div>
-                  )}
+   
                 </div>
                 
                 <div className="flex gap-6 items-center">
@@ -535,7 +609,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
         </div>
       </div>
 
-      {/* CSS for rainbow animation and styles */}
+      {/* CSS for rainbow animation and scroll prevention */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -565,22 +639,14 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
           position: relative;
         }
 
-        .overflow-y-auto::-webkit-scrollbar {
-          width: 16px;
+        /* Hide all scrollbars */
+        .no-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
 
-        .overflow-y-auto::-webkit-scrollbar-track {
-          background: #c0c0c0;
-          border: 1px inset #c0c0c0;
-        }
-
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-          background: #808080;
-          border: 1px outset #808080;
-        }
-
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-          background: #606060;
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
         }
 
         .space-y-4 > * + * {

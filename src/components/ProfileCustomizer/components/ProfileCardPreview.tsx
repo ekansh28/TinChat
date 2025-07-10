@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - UPDATED WITH IMAGE EDITOR
+// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - FIXED BIO AND BADGES + BANNER CROP TYPE
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -36,6 +36,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const badgesContainerRef = useRef<HTMLDivElement>(null);
 
   const handleAvatarClick = () => {
     if (onAvatarUpload) {
@@ -54,7 +55,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     if (file) {
       setSelectedAvatarFile(file);
       setIsAvatarEditorOpen(true);
-      // Clear the input so the same file can be selected again
       e.target.value = '';
     }
   };
@@ -64,15 +64,12 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     if (file) {
       setSelectedBannerFile(file);
       setIsBannerEditorOpen(true);
-      // Clear the input so the same file can be selected again
       e.target.value = '';
     }
   };
 
   const handleAvatarApply = (croppedImageData: string) => {
-    // Update the profile directly by calling the parent's setProfile function
     if (onAvatarUpload) {
-      // Create a synthetic event to trigger the parent's image handler
       const updateEvent = new CustomEvent('profileUpdate', {
         detail: { type: 'avatar', data: croppedImageData }
       });
@@ -82,9 +79,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   };
 
   const handleBannerApply = (croppedImageData: string) => {
-    // Update the profile directly by calling the parent's setProfile function
     if (onBannerUpload) {
-      // Create a synthetic event to trigger the parent's image handler
       const updateEvent = new CustomEvent('profileUpdate', {
         detail: { type: 'banner', data: croppedImageData }
       });
@@ -101,6 +96,37 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const handleBannerEditorClose = () => {
     setIsBannerEditorOpen(false);
     setSelectedBannerFile(null);
+  };
+
+  // ✅ FIXED: Badges scroll handling with event isolation
+  const handleBadgesWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling to parent elements
+    if (badgesContainerRef.current) {
+      badgesContainerRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const handleBadgesMouseMove = (e: React.MouseEvent) => {
+    if (!badgesContainerRef.current) return;
+    
+    const container = badgesContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const containerWidth = rect.width;
+    
+    // Auto-scroll based on mouse position
+    const scrollZoneWidth = 50; // Pixels from edge to trigger scroll
+    const scrollSpeed = 2;
+    
+    if (x < scrollZoneWidth && container.scrollLeft > 0) {
+      // Left edge - scroll left
+      container.scrollLeft -= scrollSpeed;
+    } else if (x > containerWidth - scrollZoneWidth && 
+               container.scrollLeft < container.scrollWidth - container.clientWidth) {
+      // Right edge - scroll right
+      container.scrollLeft += scrollSpeed;
+    }
   };
 
   return (
@@ -121,7 +147,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         style={{ display: 'none' }}
       />
 
-      {/* Avatar Image Editor */}
+      {/* Avatar Image Editor with circle crop */}
       {selectedAvatarFile && (
         <ImageEditor
           isOpen={isAvatarEditorOpen}
@@ -129,10 +155,11 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           onApply={handleAvatarApply}
           imageFile={selectedAvatarFile}
           title="Edit Profile Picture"
+          cropType="circle"
         />
       )}
 
-      {/* Banner Image Editor */}
+      {/* Banner Image Editor with banner crop */}
       {selectedBannerFile && (
         <ImageEditor
           isOpen={isBannerEditorOpen}
@@ -140,6 +167,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           onApply={handleBannerApply}
           imageFile={selectedBannerFile}
           title="Edit Banner Image"
+          cropType="banner"
         />
       )}
 
@@ -175,7 +203,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             <div className="w-full h-full bg-black rounded-t-lg" />
           )}
           
-          {/* Banner upload overlay (with hover animation) */}
+          {/* Banner upload overlay */}
           {onBannerUpload && (
             <div
               className={cn(
@@ -267,52 +295,77 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             </div>
           </div>
 
-          {/* Bio */}
+          {/* ✅ FIXED: Bio with proper text wrapping and overflow handling */}
           {profile.bio && (
             <div className="mb-3">
-              <p className="text-sm text-gray-700 dark:text-gray-300 p-2 bg-gray-50 dark:bg-gray-700 rounded border-l-4 border-blue-500">
+              <div 
+                className="text-sm text-gray-700 dark:text-gray-300 p-2 bg-gray-50 dark:bg-gray-700 rounded border-l-4 border-blue-500 break-words"
+                style={{ 
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word',
+                  hyphens: 'auto',
+                  maxHeight: '80px',
+                  overflowY: 'auto',
+                  lineHeight: '1.4',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
+                }}
+              >
                 {profile.bio}
-              </p>
+              </div>
             </div>
           )}
 
-          {/* Badges - Scrollable container */}
+          {/* ✅ FIXED: Badges with proper scrolling */}
           {badges.length > 0 && (
             <div className="mb-3">
               <p className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-400">
                 Badges ({badges.length}):
               </p>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {badges.map((badge) => (
-                  <div key={badge.id} className="flex-shrink-0">
-                    <img
-                      src={badge.url}
-                      alt={badge.name || 'Badge'}
-                      title={badge.name || 'Badge'}
-                      className="h-6 rounded object-contain"
-                      style={{ 
-                        minWidth: '24px',
-                        maxWidth: '48px',
-                        width: 'auto'
-                      }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-              {badges.length > 4 && (
-                <div className="text-xs text-gray-500 mt-1">
-                  ← Scroll to see more badges →
+              <div className="relative">
+                <div 
+                  ref={badgesContainerRef}
+                  className="flex gap-2 overflow-x-auto pb-1"
+                  style={{ 
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none'
+                  }}
+                  onWheel={handleBadgesWheel}
+                  onMouseMove={handleBadgesMouseMove}
+                >
+                  {badges.map((badge) => (
+                    <div key={badge.id} className="flex-shrink-0">
+                      <img
+                        src={badge.url}
+                        alt={badge.name || 'Badge'}
+                        title={badge.name || 'Badge'}
+                        className="h-6 rounded object-contain"
+                        style={{ 
+                          minWidth: '24px',
+                          maxWidth: '48px',
+                          width: 'auto'
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
-              )}
+                
+                {/* Scroll indicators */}
+                {badges.length > 4 && (
+                  <div className="text-xs text-gray-500 mt-1 text-center">
+                    ← Scroll or use mouse wheel →
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* CSS for rainbow animation */}
+      {/* CSS for rainbow animation and hidden scrollbars */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -322,6 +375,16 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           66.66% { color: #0080ff; }
           83.33% { color: #8000ff; }
           100% { color: #ff0000; }
+        }
+
+        /* Hide all scrollbars completely */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+        
+        * {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
 
         /* Upload hover transitions */
