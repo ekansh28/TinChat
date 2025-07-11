@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/components/ImageEditor.tsx - ENHANCED WITH PERFORMANCE IMPROVEMENTS
+// src/components/ProfileCustomizer/components/ImageEditor.tsx - UPDATED FOR 680x240 BANNER
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 interface ImageEditorProps {
@@ -26,7 +26,7 @@ interface ContainerSize {
 }
 
 // ✅ PERFORMANCE: Memoized constants
-const CONTAINER_WIDTH = 400;
+const CONTAINER_WIDTH = 600; // Increased for better banner editing
 const CONTAINER_HEIGHT = 400;
 const CIRCLE_RADIUS_FACTOR = 0.7;
 const BANNER_WIDTH_FACTOR = 0.95;
@@ -35,6 +35,10 @@ const OUTPUT_SIZE = 200;
 const MAX_SCALE = 3;
 const MIN_IMAGE_SIZE = 32;
 const MAX_IMAGE_SIZE = 4096;
+
+// ✅ UPDATED: New banner output dimensions (300x140)
+const BANNER_OUTPUT_WIDTH = 300;
+const BANNER_OUTPUT_HEIGHT = 140;
 
 // ✅ PERFORMANCE: Enhanced image validation with WebP and AVIF support
 const validateImageFile = (file: File): Promise<{valid: boolean, error?: string}> => {
@@ -144,7 +148,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     height: CONTAINER_HEIGHT
   }), []);
 
-  // ✅ PERFORMANCE: Memoized crop dimensions with FIXED banner aspect ratio
+  // ✅ UPDATED: Memoized crop dimensions with FIXED 680x240 banner aspect ratio
   const cropDimensions = useMemo(() => {
     if (cropType === 'circle') {
       const radius = ((Math.min(containerSize.width, containerSize.height) / 2) - 10) * CIRCLE_RADIUS_FACTOR;
@@ -156,11 +160,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         centerY: containerSize.height / 2
       };
     } else {
-      // ✅ FIXED: Banner crop should match actual banner aspect ratio
-      // ProfileCardPreview and ProfilePopup both use h-24 (96px) and h-20 (80px)
-      // Let's use a 6:1 aspect ratio to match typical banner proportions
-      const bannerWidth = containerSize.width * BANNER_WIDTH_FACTOR; // 380px
-      const bannerHeight = bannerWidth / 6; // 63px height (6:1 ratio)
+      // ✅ UPDATED: Banner crop should match actual 300x140 banner aspect ratio
+      // Scale down to fit in the editor container while maintaining 300:140 ratio
+      const aspectRatio = BANNER_OUTPUT_WIDTH / BANNER_OUTPUT_HEIGHT; // 300/140 ≈ 2.14
+      
+      let bannerWidth = containerSize.width * BANNER_WIDTH_FACTOR; // 570px
+      let bannerHeight = bannerWidth / aspectRatio; // 201px
+      
+      // If height is too tall for container, scale based on height instead
+      if (bannerHeight > containerSize.height * 0.6) {
+        bannerHeight = containerSize.height * 0.6; // 240px max
+        bannerWidth = bannerHeight * aspectRatio; // 300px scaled
+      }
       
       return {
         width: bannerWidth,
@@ -377,7 +388,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     }
   }, [imageState.naturalWidth, imageState.naturalHeight, calculateInitialState]);
 
-  // ✅ PERFORMANCE: Optimized canvas rendering with proper banner aspect ratio
+  // ✅ UPDATED: Optimized canvas rendering with proper 680x240 banner output
   const generateCroppedImage = useCallback((): string | null => {
     if (!imageRef.current) return null;
 
@@ -400,18 +411,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           ctx = canvas.getContext('2d');
         }
       } else {
-        // ✅ FIXED: Banner output with proper aspect ratio
-        const bannerOutputWidth = 380; // Match actual banner width
-        const bannerOutputHeight = 80;  // Match actual banner height (h-20)
-        
+        // ✅ UPDATED: Banner output with exact 680x240 dimensions
         if (useOffscreenCanvas) {
-          canvas = new OffscreenCanvas(bannerOutputWidth, bannerOutputHeight);
+          canvas = new OffscreenCanvas(BANNER_OUTPUT_WIDTH, BANNER_OUTPUT_HEIGHT);
           ctx = canvas.getContext('2d');
         } else {
           if (!canvasRef.current) return null;
           canvas = canvasRef.current;
-          canvas.width = bannerOutputWidth;
-          canvas.height = bannerOutputHeight;
+          canvas.width = BANNER_OUTPUT_WIDTH;
+          canvas.height = BANNER_OUTPUT_HEIGHT;
           ctx = canvas.getContext('2d');
         }
       }
@@ -445,13 +453,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           0, 0, OUTPUT_SIZE, OUTPUT_SIZE
         );
       } else {
-        // ✅ FIXED: Banner with proper dimensions
-        const bannerOutputWidth = canvas.width;
-        const bannerOutputHeight = canvas.height;
+        // ✅ UPDATED: Banner with exact 300x140 output dimensions
         ctx.drawImage(
           imageRef.current,
           sourceX, sourceY, sourceWidth, sourceHeight,
-          0, 0, bannerOutputWidth, bannerOutputHeight
+          0, 0, BANNER_OUTPUT_WIDTH, BANNER_OUTPUT_HEIGHT
         );
       }
 
@@ -532,7 +538,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       {/* Hidden canvas for image processing */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       
-      <div className="window" style={{ width: '500px', height: '600px' }}>
+      <div className="window" style={{ width: '700px', height: '600px' }}>
         <div className="title-bar">
           <div className="title-bar-text">{title}</div>
           <div className="title-bar-controls">
@@ -609,7 +615,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     </>
                   ) : (
                     <>
-                      {/* ✅ FIXED: Banner overlay with proper aspect ratio */}
+                      {/* ✅ UPDATED: Banner overlay with 300:140 aspect ratio */}
                       <div 
                         className="absolute inset-0 pointer-events-none"
                         style={{
@@ -634,11 +640,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                           transform: 'translate(-50%, -50%)'
                         }}
                       />
-                      {/* ✅ Banner crop info */}
+                      {/* ✅ UPDATED: Banner crop info with 300x140 dimensions */}
                       <div 
                         className="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded pointer-events-none"
                       >
-                        Banner: {Math.round(cropDimensions.width)}×{Math.round(cropDimensions.height)}
+                        Banner: 300×140 (Output: {BANNER_OUTPUT_WIDTH}×{BANNER_OUTPUT_HEIGHT})
                       </div>
                     </>
                   )}
@@ -664,7 +670,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     <label className="text-xs">Large</label>
                   </div>
                   <div className="text-xs text-gray-600 mt-1 text-center">
-                    Zoom: {Math.round(imageState.scale * 100)}% • Quality: High
+                    Zoom: {Math.round(imageState.scale * 100)}% • Quality: High • Output: {cropType === 'banner' ? '300×140' : '200×200'}
                   </div>
                 </div>
               </div>
@@ -889,4 +895,4 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       `}</style>
     </div>
   );
-}
+};

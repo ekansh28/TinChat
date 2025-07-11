@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - COMPLETE CLEAN VERSION
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED TypeScript Errors
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -315,7 +315,7 @@ export function ProfilePopup({
     loadFriendshipStatus();
   }, [isMounted, profile?.clerk_id, currentUserAuthId, isOwnProfile]);
 
-  // Position calculation
+  // Position calculation - Updated for smaller popup
   useEffect(() => {
     if (!isMounted || !isVisible || !position) {
       setAdjustedPosition(null);
@@ -323,7 +323,7 @@ export function ProfilePopup({
     }
 
     const POPUP_WIDTH = 300;
-    const POPUP_HEIGHT = 450;
+    const POPUP_HEIGHT = 400;
     const OFFSET = 10;
     
     const viewportWidth = window.innerWidth;
@@ -606,6 +606,22 @@ export function ProfilePopup({
     }
   };
 
+  // Image error handlers
+  const handleAvatarError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.src = getDefaultAvatar();
+  };
+
+  const handleBannerError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.style.display = 'none';
+  };
+
+  const handleBadgeError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.style.display = 'none';
+  };
+
   if (!isMounted || !isVisible || !profile || !adjustedPosition) {
     return null;
   }
@@ -630,63 +646,16 @@ export function ProfilePopup({
           top: `${adjustedPosition.y}px`,
           left: `${adjustedPosition.x}px`,
           width: '300px',
-          maxWidth: '90vw',
-          minHeight: '400px'
+          maxWidth: '95vw',
+          minHeight: '350px'
         }}
       >
         <div className={cn(
           "profile-card-custom relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden",
           "transform transition-all duration-200 ease-out"
         )}>
-          {/* Banner Section */}
-          <div className="relative h-20 bg-gradient-to-r from-blue-400 to-purple-500 overflow-hidden">
-            {profile.banner_url ? (
-              <img
-                src={profile.banner_url}
-                alt="Profile Banner"
-                className="w-full h-full object-cover"
-                style={{
-                  imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
-                }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-r from-blue-400 to-purple-500" />
-            )}
-            
-            <div className="absolute inset-0 bg-black bg-opacity-20" />
-
-            {/* Context Menu Button */}
-            {!isOwnProfile && (
-              <div className="absolute top-2 right-2">
-                <button
-                  onClick={() => setShowContextMenu(!showContextMenu)}
-                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-30 hover:bg-opacity-10 rounded"
-                  title="More options"
-                >
-                  <span className="text-sm font-bold leading-none">⋯</span>
-                </button>
-
-                {/* Context Menu */}
-                {showContextMenu && (
-                  <div className="context-menu absolute top-8 right-0 bg-black bg-opacity-10 backdrop-blur-sm rounded-lg shadow-lg border border-black border-opacity-20 py-1 min-w-[120px] z-10">
-                    <button
-                      onClick={handleBlockUser}
-                      disabled={actionLoading === 'block_user'}
-                      className="w-full px-3 py-2 text-left text-sm text-white hover:bg-black hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Main Content */}
-          <div className="px-4 pb-4 -mt-8 relative z-10">
+          {/* Main Content - Above banner */}
+          <div className="px-4 pt-4 pb-4 relative z-10">
             {/* Avatar */}
             <div className="mb-3">
               <div className="relative w-16 h-16">
@@ -697,9 +666,7 @@ export function ProfilePopup({
                   style={{
                     imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
                   }}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = getDefaultAvatar();
-                  }}
+                  onError={handleAvatarError}
                 />
                 
                 {/* Status indicator */}
@@ -831,7 +798,6 @@ export function ProfilePopup({
                     onWheel={handleBadgesWheel}
                     onMouseMove={handleBadgesMouseMove}
                   >
-                    {/* ✅ SHOW ALL BADGES - No slice limit, but keep horizontal scroll */}
                     {badges.map((badge) => (
                       <div
                         key={badge.id}
@@ -848,9 +814,7 @@ export function ProfilePopup({
                             width: 'auto',
                             imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
                           }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
+                          onError={handleBadgeError}
                         />
                         
                         {/* Tooltip */}
@@ -885,10 +849,60 @@ export function ProfilePopup({
               </div>
             </div>
           </div>
+
+          {/* Banner Section - Bottom */}
+          <div className="relative overflow-hidden">
+            {profile.banner_url ? (
+              <img
+                src={profile.banner_url}
+                alt="Profile Banner"
+                className="w-full h-full object-cover"
+                style={{
+                  width: '100%',
+                  height: '140px',
+                  imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
+                }}
+                onError={handleBannerError}
+              />
+            ) : (
+              <div 
+                className="w-full bg-gradient-to-r from-blue-400 to-purple-500" 
+                style={{ width: '100%', height: '140px' }}
+              />
+            )}
+            
+            <div className="absolute inset-0 bg-black bg-opacity-20" />
+
+            {/* Context Menu Button */}
+            {!isOwnProfile && (
+              <div className="absolute top-2 right-2">
+                <button
+                  onClick={() => setShowContextMenu(!showContextMenu)}
+                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-30 hover:bg-opacity-10 rounded"
+                  title="More options"
+                >
+                  <span className="text-sm font-bold leading-none">⋯</span>
+                </button>
+
+                {/* Context Menu */}
+                {showContextMenu && (
+                  <div className="context-menu absolute top-8 right-0 bg-black bg-opacity-10 backdrop-blur-sm rounded-lg shadow-lg border border-black border-opacity-20 py-1 min-w-[120px] z-10">
+                    <button
+                      onClick={handleBlockUser}
+                      disabled={actionLoading === 'block_user'}
+                      className="w-full px-3 py-2 text-left text-sm text-white hover:bg-black hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* CSS Animations and Styles with hidden scrollbars and GIF optimization */}
+      {/* CSS Animations and Styles */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -970,7 +984,7 @@ export function ProfilePopup({
         @media (max-width: 768px) {
           .profile-popup-custom {
             width: calc(100vw - 40px) !important;
-            max-width: 280px !important;
+            max-width: 300px !important;
           }
         }
 
