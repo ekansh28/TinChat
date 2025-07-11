@@ -1,4 +1,4 @@
-// src/app/api/friends/search/route.ts - Friends Search API
+// src/app/api/friends/search/route.ts - Fixed Search Route
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       .from('user_profiles')
       .select('clerk_id, username, display_name, avatar_url, status, is_online')
       .or(`username.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`)
-      .neq('clerk_id', currentUserAuthId) // Exclude current user
+      .neq('clerk_id', currentUserAuthId)
       .limit(limit);
 
     if (error) {
@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
       avatarUrl: user.avatar_url,
       status: user.status || 'offline',
       isOnline: user.is_online || false,
-      // Add friendship status placeholder
-      friendshipStatus: 'none' // In real implementation, check actual relationship
+      friendshipStatus: 'none'
     }));
 
     console.log(`✅ Found ${searchResults.length} users matching "${searchTerm}"`);

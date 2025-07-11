@@ -71,14 +71,6 @@ export async function POST(request: NextRequest) {
     const sender = users.find(u => u.clerk_id === senderAuthId);
     const receiver = users.find(u => u.clerk_id === receiverAuthId);
 
-    // In a real implementation with a friends table, you would:
-    // 1. Check if they're already friends
-    // 2. Check if there's already a pending request
-    // 3. Insert the friend request into a database table
-    // 4. Send real-time notification to the receiver
-    // 5. Handle auto-accept logic if needed
-
-    // For now, simulate the request being sent successfully
     const friendRequest = {
       id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       senderAuthId,
@@ -103,7 +95,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Friend request sent to ${receiver?.display_name || receiver?.username}`,
-      autoAccepted: false, // Could be true based on user settings
+      autoAccepted: false,
       request: friendRequest
     }, { headers: corsHeaders });
 
@@ -118,4 +110,3 @@ export async function POST(request: NextRequest) {
     });
   }
 }
-

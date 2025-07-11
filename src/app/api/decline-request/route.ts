@@ -1,4 +1,3 @@
-
 // src/app/api/friends/decline-request/route.ts - Decline Friend Request
 import { NextRequest, NextResponse } from 'next/server';
 
