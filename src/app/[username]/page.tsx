@@ -1,4 +1,4 @@
-// app/[username]/page.tsx
+// app/[username]/page.tsx - FIXED FOR NEXT.JS 15
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,16 +7,20 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export default async function UserProfilePage({
-  params,
-}: {
-  params: { username: string };
-}) {
+// ✅ FIXED: Next.js 15 requires params to be awaited
+interface PageProps {
+  params: Promise<{ username: string }>;
+}
+
+export default async function UserProfilePage({ params }: PageProps) {
+  // ✅ FIXED: Await the params object
+  const { username } = await params;
+  
   // Fetch user data from Supabase
   const { data: user, error } = await supabase
     .from('user_profiles')
     .select('username, display_name, avatar_url')
-    .eq('username', params.username.toLowerCase())
+    .eq('username', username.toLowerCase())
     .single();
 
   if (error || !user) {
