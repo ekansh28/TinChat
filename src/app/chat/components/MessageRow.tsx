@@ -1,4 +1,4 @@
-// src/app/chat/components/MessageRow.tsx - FIXED SELF USERNAME BADGE COUNT
+// src/app/chat/components/MessageRow.tsx - FIXED SHOWPROFILE SIGNATURE
 'use client';
 
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
@@ -150,42 +150,9 @@ const MessageRow: React.FC<MessageRowProps> = ({
     }
   }, [ownInfo, message.senderUsername, partnerInfo]);
 
-  // Profile data construction
-  const getUserProfile = useCallback((isSelfUser: boolean): UserProfile => {
-    if (isSelfUser) {
-      return {
-        id: ownInfo.authId || undefined,
-        username: ownInfo.username,
-        display_name: ownInfo.displayName || ownInfo.username,
-        avatar_url: ownInfo.avatar || undefined,
-        display_name_color: ownInfo.displayNameColor || '#000000',
-        display_name_animation: ownInfo.displayNameAnimation || 'none',
-        rainbow_speed: 3,
-        bio: ownInfo.bio || undefined,
-        status: ownInfo.status || 'online',
-        profile_card_css: ownInfo.customCSS || undefined,
-        badges: ownInfo.badges || []
-      };
-    } else {
-      const resolvedUsername = getDisplayedUsername(false);
-      
-      return {
-        id: message.senderAuthId || partnerInfo?.authId,
-        username: resolvedUsername,
-        display_name: resolvedUsername,
-        avatar_url: partnerInfo?.avatar,
-        display_name_color: message.senderDisplayNameColor || partnerInfo?.displayNameColor || '#000000',
-        display_name_animation: message.senderDisplayNameAnimation || partnerInfo?.displayNameAnimation || 'none',
-        rainbow_speed: message.senderRainbowSpeed || partnerInfo?.rainbowSpeed || 3,
-        bio: partnerInfo?.bio,
-        status: partnerInfo?.status || 'online',
-        profile_card_css: partnerInfo?.profile_card_css,
-        badges: partnerInfo?.badges || []
-      };
-    }
-  }, [ownInfo, message, partnerInfo, getDisplayedUsername]);
 
-  // ✅ FIXED: Enhanced click handler with proper self profile support
+
+  // ✅ FIXED: Enhanced click handler with correct ProfilePopup signature
   const handleUsernameClick = useCallback(async (e: React.MouseEvent) => {
     if (!isMounted) {
       console.warn('[MessageRow] Component not mounted, skipping click');
@@ -205,111 +172,23 @@ const MessageRow: React.FC<MessageRowProps> = ({
         setProfileLoading(true);
       }
       
-      // Get basic profile data immediately
-      let userProfile = getUserProfile(isSelfUser);
-      let badges: Badge[] = [];
-      let customCSS = '';
-
-      if (isSelfUser) {
-        // ✅ FIXED: For self user, get badges and CSS from ownInfo first
-        badges = ownInfo.badges || [];
-        customCSS = ownInfo.customCSS || '';
-        
-        console.log(`[MessageRow] Self profile data:`, {
-          username: userProfile.username,
-          badgeCount: badges.length,
-          hasCSS: !!customCSS,
-          authId: ownInfo.authId,
-          badges: badges
-        });
-        
-        // ✅ NEW: If we have authId, try to fetch complete profile for most up-to-date data
-        if (ownInfo.authId) {
-          try {
-            console.log(`[MessageRow] Fetching complete self profile from server: ${ownInfo.authId}`);
-            const fullProfile = await fastProfileFetcher.fetchFullProfile(ownInfo.authId);
-            
-            if (fullProfile && isMounted) {
-              console.log(`[MessageRow] Got complete self profile:`, fullProfile);
-              
-              // Parse badges from server data
-              if (fullProfile.badges) {
-                try {
-                  const serverBadges = Array.isArray(fullProfile.badges) ? fullProfile.badges : [];
-                  const validBadges = serverBadges.filter(badge => badge && badge.id && badge.url);
-                  if (validBadges.length > 0) {
-                    badges = validBadges;
-                    console.log(`[MessageRow] Using server badges: ${badges.length} badges`);
-                  }
-                } catch (e) {
-                  console.warn('Failed to parse server badges, using local badges:', e);
-                }
-              }
-              
-              // Use server CSS if available
-              if (fullProfile.profile_card_css) {
-                customCSS = fullProfile.profile_card_css;
-              }
-              
-              // Update user profile with complete server data
-              userProfile = {
-                ...userProfile,
-                ...fullProfile,
-                badges: undefined // Remove badges from profile object
-              };
-            }
-          } catch (error) {
-            console.warn(`[MessageRow] Failed to fetch complete self profile, using local data:`, error);
-            // Continue with local ownInfo data
-          }
-        }
-        
-        // Show profile popup for self
-        if (isMounted) {
-          showProfile(userProfile, badges, customCSS, e);
-        }
-      } else if (authId) {
-        // For non-self users with authId, try to fetch complete profile data
-        try {
-          const fullProfile = await fastProfileFetcher.fetchFullProfile(authId);
-          
-          if (fullProfile && isMounted) {
-            // Parse badges if available
-            if (fullProfile.badges) {
-              try {
-                badges = Array.isArray(fullProfile.badges) ? fullProfile.badges : [];
-                badges = badges.filter(badge => badge && badge.id && badge.url);
-              } catch (e) {
-                console.warn('Failed to parse badges:', e);
-                badges = [];
-              }
-            }
-            
-            customCSS = fullProfile.profile_card_css || '';
-            
-            // Update user profile with complete data
-            userProfile = {
-              ...userProfile,
-              ...fullProfile,
-              badges: undefined
-            };
-          }
-        } catch (error) {
-          console.warn(`[MessageRow] Failed to fetch complete profile for ${authId}:`, error);
-        }
-        
-        // Show profile popup for partner
-        if (isMounted) {
-          showProfile(userProfile, badges, customCSS, e);
-        }
+      // Determine the user ID to pass to ProfilePopup
+      let userId: string;
+      
+      if (isSelfUser && ownInfo.authId) {
+        userId = ownInfo.authId;
+      } else if (!isSelfUser && authId) {
+        userId = authId;
       } else {
-        // Even for partners without authId, show basic profile
-        badges = partnerInfo?.badges || [];
-        customCSS = partnerInfo?.profile_card_css || '';
-        
-        if (isMounted) {
-          showProfile(userProfile, badges, customCSS, e);
-        }
+        // Fallback to message sender authId or generate a temporary ID
+        userId = message.senderAuthId || `temp-${Date.now()}`;
+      }
+
+      console.log(`[MessageRow] Showing profile popup for userId: ${userId}`);
+      
+      // ✅ FIXED: Use new ProfilePopup signature - just userId and click event
+      if (isMounted) {
+        showProfile(userId, e);
       }
 
       // Optional: Call the original handler if provided
@@ -325,7 +204,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
         setProfileLoading(false);
       }
     }
-  }, [isMounted, message, partnerInfo, ownInfo, showProfile, onUsernameClick, getUserProfile, getDisplayedUsername]);
+  }, [isMounted, message, partnerInfo, ownInfo, showProfile, onUsernameClick]);
 
   // Keyboard handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
