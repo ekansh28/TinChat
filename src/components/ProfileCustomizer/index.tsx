@@ -486,17 +486,7 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                         </div>
                       </div>
                       
-                      {/* Upload Instructions */}
-                      <div className="field-row">
-                        <div className="sunken border border-gray-400 p-2 bg-blue-50">
-                          <div className="text-xs text-blue-800">
-                            <div className="font-bold mb-1">💡 Image Upload Tips:</div>
-                            <div>• Hover over your avatar or banner and click to edit</div>
-                            <div>• Drag and zoom to get the perfect crop</div>
-                            <div>• Preview shows how your image will look</div>
-                          </div>
-                        </div>
-                      </div>
+
                       
                       {/* Chat Preview */}
                       <div className="field-row">

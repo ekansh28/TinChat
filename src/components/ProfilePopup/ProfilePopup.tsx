@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED BIO AND BADGES
+// src/components/ProfilePopup/ProfilePopup.tsx - COMPLETE CLEAN VERSION
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -22,6 +22,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localh
 function getDefaultAvatar() {
   return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }
+
+// ✅ Check if URL is a GIF
+const isGifUrl = (url: string): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.toLowerCase().split('?')[0];
+  return cleanUrl.endsWith('.gif') || url.includes('data:image/gif');
+};
 
 const getStatusIndicator = (status: string, isOnline?: boolean): { color: string; text: string } => {
   if (isOnline !== undefined) {
@@ -521,10 +528,10 @@ export function ProfilePopup({
     }
   }, [profile?.clerk_id, currentUserAuthId]);
 
-  // ✅ FIXED: Badges scroll handling with event isolation
+  // Badges scroll handling
   const handleBadgesWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Prevent event bubbling to parent elements
+    e.stopPropagation();
     if (badgesContainerRef.current) {
       badgesContainerRef.current.scrollLeft += e.deltaY;
     }
@@ -638,6 +645,9 @@ export function ProfilePopup({
                 src={profile.banner_url}
                 alt="Profile Banner"
                 className="w-full h-full object-cover"
+                style={{
+                  imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
+                }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
@@ -653,7 +663,7 @@ export function ProfilePopup({
               <div className="absolute top-2 right-2">
                 <button
                   onClick={() => setShowContextMenu(!showContextMenu)}
-                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 !bg-black/30 hover:!bg-black/10"
+                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-30 hover:bg-opacity-10 rounded"
                   title="More options"
                 >
                   <span className="text-sm font-bold leading-none">⋯</span>
@@ -678,12 +688,15 @@ export function ProfilePopup({
           {/* Main Content */}
           <div className="px-4 pb-4 -mt-8 relative z-10">
             {/* Avatar */}
-            <div className="flex items-end justify-between mb-3">
-              <div className="relative">
+            <div className="mb-3">
+              <div className="relative w-16 h-16">
                 <img
                   src={profile.avatar_url || getDefaultAvatar()}
                   alt="Profile Avatar"
                   className="w-16 h-16 rounded-full border-4 border-white dark:border-gray-800 object-cover shadow-lg"
+                  style={{
+                    imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
+                  }}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = getDefaultAvatar();
                   }}
@@ -699,48 +712,38 @@ export function ProfilePopup({
               </div>
             </div>
 
-            {/* User Info */}
-            <div className="mb-3">
-              {/* Display Name with style */}
-              <h2 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}>
-                {profile.display_name || profile.username || profile.id || 'Unknown User'}
-              </h2>
-              
-              {/* Username */}
-              {profile.display_name && 
-               profile.username && 
-               profile.display_name !== profile.username && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  @{profile.username}
-                </p>
-              )}
-              
-              {(!profile.display_name && profile.username) && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  @{profile.username}
-                </p>
-              )}
-
-              {/* Pronouns */}
-              {profile.pronouns && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  {profile.pronouns}
-                </p>
-              )}
-
-              {/* Status */}
-              <div className="flex items-center gap-2 text-sm">
-                <div className={cn("w-3 h-3 rounded-full", statusInfo.color)} />
-                <span className="text-gray-700 dark:text-gray-300 capitalize">
-                  {statusInfo.text}
-                </span>
-                {!profile.is_online && profile.last_seen && (
-                  <span className="text-xs text-gray-400 ml-2">
-                    Last seen {new Date(profile.last_seen).toLocaleDateString()}
+            {/* Display name and pronouns */}
+            <div className="mb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}>
+                  {profile.display_name || profile.username || profile.id || 'Unknown User'}
+                </h2>
+                {profile.pronouns && (
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    - {profile.pronouns}
                   </span>
                 )}
               </div>
             </div>
+
+            {/* Username */}
+            {profile.display_name && 
+             profile.username && 
+             profile.display_name !== profile.username && (
+              <div className="mb-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  @{profile.username}
+                </p>
+              </div>
+            )}
+            
+            {(!profile.display_name && profile.username) && (
+              <div className="mb-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  @{profile.username}
+                </p>
+              </div>
+            )}
 
             {/* Action Buttons Section */}
             {!isOwnProfile && (
@@ -790,12 +793,9 @@ export function ProfilePopup({
             {/* Divider */}
             <div className="w-full h-px bg-gray-200 dark:bg-gray-600 mb-3" />
 
-            {/* ✅ FIXED: Bio Section with proper text wrapping and hidden scrollbar */}
+            {/* Bio Section */}
             {profile.bio && profile.bio.trim() && (
               <div className="mb-3">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                  About Me
-                </h3>
                 <div 
                   className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border-l-4 border-blue-500 break-words"
                   style={{ 
@@ -814,7 +814,7 @@ export function ProfilePopup({
               </div>
             )}
 
-            {/* ✅ FIXED: Badges Section with proper scrolling */}
+            {/* Badges Section */}
             {badges.length > 0 && (
               <div className="mb-3">
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
@@ -831,7 +831,8 @@ export function ProfilePopup({
                     onWheel={handleBadgesWheel}
                     onMouseMove={handleBadgesMouseMove}
                   >
-                    {badges.slice(0, 8).map((badge) => (
+                    {/* ✅ SHOW ALL BADGES - No slice limit, but keep horizontal scroll */}
+                    {badges.map((badge) => (
                       <div
                         key={badge.id}
                         className="relative group flex-shrink-0"
@@ -844,7 +845,8 @@ export function ProfilePopup({
                           style={{ 
                             minWidth: '32px',
                             maxWidth: '64px',
-                            width: 'auto'
+                            width: 'auto',
+                            imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
                           }}
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
@@ -859,20 +861,12 @@ export function ProfilePopup({
                         )}
                       </div>
                     ))}
-                    
-                    {badges.length > 8 && (
-                      <div className="w-8 h-8 rounded border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs text-gray-600 dark:text-gray-400 font-semibold">
-                          +{badges.length - 8}
-                        </span>
-                      </div>
-                    )}
                   </div>
                   
                   {/* Scroll indicators */}
                   {badges.length > 4 && (
                     <div className="text-xs text-gray-500 mt-1 text-center">
-                      ← Scroll or use mouse wheel →
+                      ← Scroll horizontally to see all {badges.length} badges →
                     </div>
                   )}
                 </div>
@@ -894,7 +888,7 @@ export function ProfilePopup({
         </div>
       </div>
 
-      {/* CSS Animations and Styles with hidden scrollbars */}
+      {/* CSS Animations and Styles with hidden scrollbars and GIF optimization */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -941,8 +935,17 @@ export function ProfilePopup({
           }
         }
 
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
         .animate-popup-enter {
           animation: popup-enter 200ms ease-out;
+        }
+
+        .animate-spin {
+          animation: spin 1s linear infinite;
         }
 
         /* Hide all scrollbars completely */
@@ -955,6 +958,14 @@ export function ProfilePopup({
           -ms-overflow-style: none;
         }
 
+        /* GIF optimization - ensure smooth playback */
+        img[src*=".gif"],
+        img[src*="data:image/gif"] {
+          image-rendering: auto;
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
+        }
+
         /* Mobile responsive adjustments */
         @media (max-width: 768px) {
           .profile-popup-custom {
@@ -965,10 +976,8 @@ export function ProfilePopup({
 
         /* Reduced motion support */
         @media (prefers-reduced-motion: reduce) {
-          .animate-rainbow,
-          .animate-gradient,
-          .animate-glow,
-          .animate-popup-enter {
+          .animate-popup-enter,
+          .animate-spin {
             animation: none;
           }
           

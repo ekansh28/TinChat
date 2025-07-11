@@ -1,7 +1,7 @@
-// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - FIXED BIO AND BADGES + BANNER CROP TYPE
+// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - ORIGINAL + GIF SUPPORT ONLY
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ImageEditor } from './ImageEditor';
 import type { UserProfile, Badge } from '../types';
@@ -19,6 +19,13 @@ function getDefaultAvatar() {
   return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjNTg2NUY0Ii8+CjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE0IiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAgNjBDMjAgNTIuMjY4IDI2LjI2OCA0NiAzNCA0NkM0MS43MzIgNDYgNDggNTIuMjY4IDQ4IDYwVjgwSDIwVjYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+';
 }
 
+// ✅ NEW: Check if URL is a GIF
+const isGifUrl = (url: string): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.toLowerCase().split('?')[0];
+  return cleanUrl.endsWith('.gif') || url.includes('data:image/gif');
+};
+
 const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({ 
   profile, 
   badges, 
@@ -33,6 +40,15 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const [isBannerEditorOpen, setIsBannerEditorOpen] = useState(false);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null);
+  
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('Avatar editor state:', { selectedAvatarFile: !!selectedAvatarFile, isAvatarEditorOpen });
+  }, [selectedAvatarFile, isAvatarEditorOpen]);
+  
+  useEffect(() => {
+    console.log('Banner editor state:', { selectedBannerFile: !!selectedBannerFile, isBannerEditorOpen });
+  }, [selectedBannerFile, isBannerEditorOpen]);
   
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +69,10 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.log('Avatar file selected:', file.name, 'Type:', file.type); // Debug log
+      
+      // All images (including GIFs) go through the image editor
+      console.log('Opening image editor for file'); // Debug log
       setSelectedAvatarFile(file);
       setIsAvatarEditorOpen(true);
       e.target.value = '';
@@ -62,30 +82,44 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.log('Banner file selected:', file.name, 'Type:', file.type); // Debug log
+      
+      // All images (including GIFs) go through the image editor
+      console.log('Opening image editor for file'); // Debug log
       setSelectedBannerFile(file);
       setIsBannerEditorOpen(true);
       e.target.value = '';
     }
   };
 
-  const handleAvatarApply = (croppedImageData: string) => {
-    if (onAvatarUpload) {
-      const updateEvent = new CustomEvent('profileUpdate', {
-        detail: { type: 'avatar', data: croppedImageData }
-      });
-      window.dispatchEvent(updateEvent);
-    }
-    setSelectedAvatarFile(null);
+  const handleBannerApply = (croppedImageData: string) => {
+    setSelectedBannerFile(null);
+    setIsBannerEditorOpen(false);
+    
+    // Use setTimeout to avoid state update during render
+    setTimeout(() => {
+      if (onBannerUpload) {
+        const updateEvent = new CustomEvent('profileUpdate', {
+          detail: { type: 'banner', data: croppedImageData }
+        });
+        window.dispatchEvent(updateEvent);
+      }
+    }, 0);
   };
 
-  const handleBannerApply = (croppedImageData: string) => {
-    if (onBannerUpload) {
-      const updateEvent = new CustomEvent('profileUpdate', {
-        detail: { type: 'banner', data: croppedImageData }
-      });
-      window.dispatchEvent(updateEvent);
-    }
-    setSelectedBannerFile(null);
+  const handleAvatarApply = (croppedImageData: string) => {
+    setSelectedAvatarFile(null);
+    setIsAvatarEditorOpen(false);
+    
+    // Use setTimeout to avoid state update during render
+    setTimeout(() => {
+      if (onAvatarUpload) {
+        const updateEvent = new CustomEvent('profileUpdate', {
+          detail: { type: 'avatar', data: croppedImageData }
+        });
+        window.dispatchEvent(updateEvent);
+      }
+    }, 0);
   };
 
   const handleAvatarEditorClose = () => {
@@ -131,23 +165,23 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
 
   return (
     <>
-      {/* Hidden file inputs */}
+      {/* Hidden file inputs with enhanced accept for GIFs */}
       <input
         ref={avatarInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.gif"
         onChange={handleAvatarFileChange}
         style={{ display: 'none' }}
       />
       <input
         ref={bannerInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.gif"
         onChange={handleBannerFileChange}
         style={{ display: 'none' }}
       />
 
-      {/* Avatar Image Editor with circle crop */}
+      {/* Avatar Image Editor with circle crop (only for non-GIFs) */}
       {selectedAvatarFile && (
         <ImageEditor
           isOpen={isAvatarEditorOpen}
@@ -159,7 +193,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         />
       )}
 
-      {/* Banner Image Editor with banner crop */}
+      {/* Banner Image Editor with banner crop (only for non-GIFs) */}
       {selectedBannerFile && (
         <ImageEditor
           isOpen={isBannerEditorOpen}
@@ -195,6 +229,10 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               src={profile.banner_url}
               alt="Profile Banner"
               className="w-full h-full object-cover rounded-t-lg"
+              style={{
+                // ✅ Preserve GIF animation
+                imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
+              }}
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
@@ -221,12 +259,11 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         </div>
 
         {/* Main content */}
-        <div className="px-4 pb-4">
-          {/* Avatar and basic info */}
-          <div className="flex items-start gap-3 mb-3">
-            {/* Avatar with upload hover */}
+        <div className="px-4 pb-4 -mt-8 relative z-10">
+          {/* Avatar */}
+          <div className="mb-3">
             <div 
-              className="relative cursor-pointer group"
+              className="relative cursor-pointer group w-12 h-12"
               onClick={handleAvatarClick}
               onMouseEnter={() => setAvatarHover(true)}
               onMouseLeave={() => setAvatarHover(false)}
@@ -234,11 +271,25 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               <img
                 src={profile.avatar_url || getDefaultAvatar()}
                 alt="Profile Avatar"
-                className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-600"
+                className="w-12 h-12 rounded-full object-cover border-4 border-white dark:border-gray-600 shadow-lg"
+                style={{
+                  // ✅ Preserve GIF animation
+                  imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
+                }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = getDefaultAvatar();
                 }}
               />
+              
+              {/* Status indicator dot - bottom right */}
+              {profile.status && (
+                <div className="absolute -bottom-1 -right-1 flex items-center justify-center">
+                  <div className={cn(
+                    "w-4 h-4 rounded-full border-2 border-white dark:border-gray-600",
+                    getStatusIndicator(profile.status).replace('text-', 'bg-')
+                  )} />
+                </div>
+              )}
               
               {/* Avatar upload overlay */}
               {onAvatarUpload && (
@@ -255,11 +306,13 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="flex-1 min-w-0">
-              {/* Display name */}
+          {/* Display name and pronouns */}
+          <div className="mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2
-                className="text-lg font-bold truncate"
+                className="text-lg font-bold"
                 style={{
                   color: profile.display_name_color || undefined,
                   animation: profile.display_name_animation === 'rainbow' ? 
@@ -268,34 +321,24 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               >
                 {profile.display_name || profile.username || 'User'}
               </h2>
-              
-              {/* Username */}
-              {profile.display_name && profile.username && profile.display_name !== profile.username && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  @{profile.username}
-                </p>
-              )}
-
-              {/* Pronouns */}
               {profile.pronouns && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {profile.pronouns}
-                </p>
-              )}
-
-              {/* Status */}
-              {profile.status && (
-                <div className="flex items-center gap-1 text-xs">
-                  <span className={getStatusIndicator(profile.status)}>●</span>
-                  <span className="capitalize text-gray-600 dark:text-gray-300">
-                    {profile.status}
-                  </span>
-                </div>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  - {profile.pronouns}
+                </span>
               )}
             </div>
           </div>
 
-          {/* ✅ FIXED: Bio with proper text wrapping and overflow handling */}
+          {/* Username */}
+          {profile.display_name && profile.username && profile.display_name !== profile.username && (
+            <div className="mb-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                @{profile.username}
+              </p>
+            </div>
+          )}
+
+          {/* Bio */}
           {profile.bio && (
             <div className="mb-3">
               <div 
@@ -316,7 +359,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             </div>
           )}
 
-          {/* ✅ FIXED: Badges with proper scrolling */}
+          {/* Badges */}
           {badges.length > 0 && (
             <div className="mb-3">
               <p className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-400">
@@ -333,22 +376,32 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                   onWheel={handleBadgesWheel}
                   onMouseMove={handleBadgesMouseMove}
                 >
+                  {/* ✅ SHOW ALL BADGES - No slice limit, horizontal scroll */}
                   {badges.map((badge) => (
-                    <div key={badge.id} className="flex-shrink-0">
+                    <div key={badge.id} className="flex-shrink-0 relative group">
                       <img
                         src={badge.url}
                         alt={badge.name || 'Badge'}
                         title={badge.name || 'Badge'}
-                        className="h-6 rounded object-contain"
+                        className="h-6 rounded object-contain transition-transform duration-200"
                         style={{ 
                           minWidth: '24px',
                           maxWidth: '48px',
-                          width: 'auto'
+                          width: 'auto',
+                          // ✅ Preserve GIF animation for badges
+                          imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
                         }}
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
                         }}
                       />
+                      
+                      {/* Tooltip */}
+                      {badge.name && (
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                          {badge.name}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -356,7 +409,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                 {/* Scroll indicators */}
                 {badges.length > 4 && (
                   <div className="text-xs text-gray-500 mt-1 text-center">
-                    ← Scroll or use mouse wheel →
+                    ← Scroll horizontally to see all {badges.length} badges →
                   </div>
                 )}
               </div>
@@ -390,6 +443,14 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         /* Upload hover transitions */
         .group .transition-opacity {
           transition: opacity 0.2s ease-in-out;
+        }
+
+        /* ✅ GIF optimization - ensure smooth playback */
+        img[src*=".gif"],
+        img[src*="data:image/gif"] {
+          image-rendering: auto;
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
         }
       `}</style>
     </>
