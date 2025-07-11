@@ -1,4 +1,4 @@
-// src/components/ProfilePopup/ProfilePopup.tsx - FIXED TypeScript Errors
+// src/components/ProfilePopup/ProfilePopup.tsx - FIXED with Top Banner and Banner CSS Controls
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -30,19 +30,19 @@ const isGifUrl = (url: string): boolean => {
   return cleanUrl.endsWith('.gif') || url.includes('data:image/gif');
 };
 
-const getStatusIndicator = (status: string, isOnline?: boolean): { color: string; text: string } => {
+const getStatusIndicator = (status: string, isOnline?: boolean): { icon: string; text: string } => {
   if (isOnline !== undefined) {
     return isOnline 
-      ? { color: 'bg-green-500', text: 'Online' }
-      : { color: 'bg-gray-500', text: 'Offline' };
+      ? { icon: 'https://cdn.sekansh21.workers.dev/icons/online.png', text: 'Online' }
+      : { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Offline' };
   }
   
   switch (status) {
-    case 'online': return { color: 'bg-green-500', text: 'Online' };
-    case 'idle': return { color: 'bg-yellow-500', text: 'Idle' };
-    case 'dnd': return { color: 'bg-red-500', text: 'Do Not Disturb' };
-    case 'offline': return { color: 'bg-gray-500', text: 'Offline' };
-    default: return { color: 'bg-gray-500', text: 'Unknown' };
+    case 'online': return { icon: 'https://cdn.sekansh21.workers.dev/icons/online.png', text: 'Online' };
+    case 'idle': return { icon: 'https://cdn.sekansh21.workers.dev/icons/idle.png', text: 'Idle' };
+    case 'dnd': return { icon: 'https://cdn.sekansh21.workers.dev/icons/dnd.png', text: 'Do Not Disturb' };
+    case 'offline': return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Offline' };
+    default: return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Unknown' };
   }
 };
 
@@ -654,15 +654,68 @@ export function ProfilePopup({
           "profile-card-custom relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden",
           "transform transition-all duration-200 ease-out"
         )}>
-          {/* Main Content - Above banner */}
-          <div className="px-4 pt-4 pb-4 relative z-10">
+          {/* ✅ MOVED: Banner Section - Now at TOP like ProfileCardPreview */}
+          <div 
+            className="profile-popup-banner profile-banner relative overflow-hidden rounded-t-lg"
+            style={{ width: '100%', height: 140 }}
+          >
+            {profile.banner_url ? (
+              <img
+                src={profile.banner_url}
+                alt="Profile Banner"
+                className="profile-popup-banner-image w-full h-full object-cover"
+                style={{
+                  width: '100%',
+                  height: '140px',
+                  imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
+                }}
+                onError={handleBannerError}
+              />
+            ) : (
+              <div 
+                className="profile-popup-banner-placeholder w-full h-full bg-gradient-to-r from-blue-400 to-purple-500" 
+                style={{ width: '100%', height: '140px' }}
+              />
+            )}
+            
+            {/* Banner overlay removed - no visual effects */}
+
+            {/* Context Menu Button */}
+            {!isOwnProfile && (
+              <div className="absolute top-2 right-2">
+                <button
+                  onClick={() => setShowContextMenu(!showContextMenu)}
+                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-30 hover:bg-opacity-50 rounded"
+                  title="More options"
+                >
+                  <span className="text-sm font-bold leading-none">⋯</span>
+                </button>
+
+                {/* Context Menu */}
+                {showContextMenu && (
+                  <div className="context-menu absolute top-8 right-0 bg-white dark:bg-gray-800 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 py-1 min-w-[120px] z-10">
+                    <button
+                      onClick={handleBlockUser}
+                      disabled={actionLoading === 'block_user'}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Main Content - Below banner with overlap */}
+          <div className="px-4 pb-4 -mt-8 relative z-10">
             {/* Avatar */}
-            <div className="mb-3">
-              <div className="relative w-16 h-16">
+            <div className="mb-3 profile-avatar-container">
+              <div className="relative w-20 h-20">
                 <img
                   src={profile.avatar_url || getDefaultAvatar()}
                   alt="Profile Avatar"
-                  className="w-16 h-16 rounded-full border-4 border-white dark:border-gray-800 object-cover shadow-lg"
+                  className="w-20 h-20 rounded-full border border-gray-800 object-cover shadow-lg profile-avatar"
                   style={{
                     imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
                   }}
@@ -670,23 +723,29 @@ export function ProfilePopup({
                 />
                 
                 {/* Status indicator */}
-                <div className="absolute -bottom-1 -right-1 flex items-center justify-center">
-                  <div className={cn(
-                    "w-5 h-5 rounded-full border-2 border-white dark:border-gray-800",
-                    statusInfo.color
-                  )} />
+                <div className="absolute -bottom-1 -right-1 flex items-center justify-center profile-status-container">
+                  <img
+                    src={statusInfo.icon}
+                    alt={statusInfo.text}
+                    className="w-4 h-4 profile-status-icon"
+                    title={statusInfo.text}
+                    onError={(e) => {
+                      // Fallback to default offline icon if status icon fails to load
+                      (e.target as HTMLImageElement).src = 'https://cdn.sekansh21.workers.dev/icons/offline.png';
+                    }}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Display name and pronouns */}
-            <div className="mb-2">
+            <div className="mb-2 profile-name-container">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}>
+                <h2 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)} className="profile-display-name">
                   {profile.display_name || profile.username || profile.id || 'Unknown User'}
                 </h2>
                 {profile.pronouns && (
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                  <span className="text-sm text-black profile-pronouns">
                     - {profile.pronouns}
                   </span>
                 )}
@@ -698,7 +757,7 @@ export function ProfilePopup({
              profile.username && 
              profile.display_name !== profile.username && (
               <div className="mb-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-black">
                   @{profile.username}
                 </p>
               </div>
@@ -758,13 +817,13 @@ export function ProfilePopup({
             )}
 
             {/* Divider */}
-            <div className="w-full h-px bg-gray-200 dark:bg-gray-600 mb-3" />
+            <div className="w-full h-px bg-gray-800 mb-3 profile-divider" />
 
             {/* Bio Section */}
             {profile.bio && profile.bio.trim() && (
-              <div className="mb-3">
+              <div className="mb-3 profile-bio-container">
                 <div 
-                  className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border-l-4 border-blue-500 break-words"
+                  className="text-sm text-white leading-relaxed p-3 bg-gray-800 rounded-lg border-l-4 border-blue-500 break-words profile-bio"
                   style={{ 
                     wordWrap: 'break-word',
                     overflowWrap: 'break-word',
@@ -783,14 +842,14 @@ export function ProfilePopup({
 
             {/* Badges Section */}
             {badges.length > 0 && (
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
+              <div className="mb-3 profile-badges-container">
+                <h3 className="text-sm font-semibold text-black mb-2 profile-badges-title">
                   Badges ({badges.length})
                 </h3>
                 <div className="relative">
                   <div 
                     ref={badgesContainerRef}
-                    className="flex gap-2 overflow-x-auto pb-1"
+                    className="flex gap-2 overflow-x-auto pb-1 profile-badges-list"
                     style={{ 
                       scrollbarWidth: 'none',
                       msOverflowStyle: 'none'
@@ -801,13 +860,13 @@ export function ProfilePopup({
                     {badges.map((badge) => (
                       <div
                         key={badge.id}
-                        className="relative group flex-shrink-0"
+                        className="relative group flex-shrink-0 profile-badge-item"
                         title={badge.name || 'Badge'}
                       >
                         <img
                           src={badge.url}
                           alt={badge.name || 'Badge'}
-                          className="h-8 rounded object-cover transition-transform duration-200"
+                          className="h-8 rounded object-cover transition-transform duration-200 profile-badge-image"
                           style={{ 
                             minWidth: '32px',
                             maxWidth: '64px',
@@ -819,90 +878,33 @@ export function ProfilePopup({
                         
                         {/* Tooltip */}
                         {badge.name && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20 profile-badge-tooltip">
                             {badge.name}
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
-                  
-                  {/* Scroll indicators */}
-                  {badges.length > 4 && (
-                    <div className="text-xs text-gray-500 mt-1 text-center">
-                      ← Scroll horizontally to see all {badges.length} badges →
-                    </div>
-                  )}
                 </div>
               </div>
             )}
 
             {/* Profile Info Footer */}
-            <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
+            <div className="text-xs text-black border-t border-gray-800 pt-3 mt-3 profile-footer">
               <div className="flex items-center justify-between">
-                <span>User Profile</span>
+                <span className="profile-footer-label">User Profile</span>
                 {profile.created_at && (
-                  <span title="Profile created">
+                  <span title="Profile created" className="profile-footer-date">
                     Joined {new Date(profile.created_at).toLocaleDateString()}
                   </span>
                 )}
               </div>
             </div>
           </div>
-
-          {/* Banner Section - Bottom */}
-          <div className="relative overflow-hidden">
-            {profile.banner_url ? (
-              <img
-                src={profile.banner_url}
-                alt="Profile Banner"
-                className="w-full h-full object-cover"
-                style={{
-                  width: '100%',
-                  height: '140px',
-                  imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
-                }}
-                onError={handleBannerError}
-              />
-            ) : (
-              <div 
-                className="w-full bg-gradient-to-r from-blue-400 to-purple-500" 
-                style={{ width: '100%', height: '140px' }}
-              />
-            )}
-            
-            <div className="absolute inset-0 bg-black bg-opacity-20" />
-
-            {/* Context Menu Button */}
-            {!isOwnProfile && (
-              <div className="absolute top-2 right-2">
-                <button
-                  onClick={() => setShowContextMenu(!showContextMenu)}
-                  className="context-menu-trigger w-6 h-6 flex items-center justify-center text-white hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-30 hover:bg-opacity-10 rounded"
-                  title="More options"
-                >
-                  <span className="text-sm font-bold leading-none">⋯</span>
-                </button>
-
-                {/* Context Menu */}
-                {showContextMenu && (
-                  <div className="context-menu absolute top-8 right-0 bg-black bg-opacity-10 backdrop-blur-sm rounded-lg shadow-lg border border-black border-opacity-20 py-1 min-w-[120px] z-10">
-                    <button
-                      onClick={handleBlockUser}
-                      disabled={actionLoading === 'block_user'}
-                      className="w-full px-3 py-2 text-left text-sm text-white hover:bg-black hover:bg-opacity-20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading === 'block_user' ? 'Blocking...' : '🚫 Block User'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* CSS Animations and Styles */}
+      {/* ✅ CSS Animations, Styles, and Banner Customization Options */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -962,6 +964,76 @@ export function ProfilePopup({
           animation: spin 1s linear infinite;
         }
 
+        /* ✅ BANNER CUSTOMIZATION CLASSES - Users can override these in their CSS */
+        
+        /* Default banner styling - can be overridden by user CSS */
+        .profile-popup-banner {
+          /* Users can customize with CSS like:
+           * height: 200px; 
+           * background: linear-gradient(...);
+           */
+        }
+        
+        .profile-popup-banner-image {
+          /* Default banner image styling - fully customizable */
+          object-fit: cover; /* Can be changed to: contain, fill, scale-down, none */
+          object-position: center; /* Can be: top, bottom, left, right, center */
+          /* Users can add:
+           * filter: blur(2px) brightness(0.8);
+           * transform: scale(1.1);
+           * transition: transform 0.3s ease;
+           */
+        }
+        
+        .profile-popup-banner-placeholder {
+          /* Default placeholder when no banner - fully customizable */
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          /* Users can override with:
+           * background: url('pattern.png') repeat;
+           * background: radial-gradient(circle, #ff6b9d, #c44569);
+           * background-size: cover;
+           * background-position: center;
+           */
+        }
+
+        /* ✅ EXAMPLE CSS OVERRIDES FOR BANNER CUSTOMIZATION */
+        
+        /* Example: Stretched banner */
+        .profile-card-custom .profile-popup-banner {
+          height: 180px; /* Taller banner */
+        }
+        
+        .profile-card-custom .profile-popup-banner-image {
+          object-fit: fill; /* Stretch to fill completely */
+          width: 100%;
+          height: 100%;
+        }
+        
+        /* Example: Centered banner - no hover effects */
+        .profile-card-custom .profile-popup-banner-image {
+          object-fit: cover;
+          object-position: center;
+        }
+        
+        /* Example: Repeated pattern banner */
+        .profile-card-custom .profile-popup-banner-placeholder {
+          background: url('data:image/svg+xml,<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="%23667eea"/><circle cx="10" cy="10" r="3" fill="%23764ba2"/></svg>') repeat;
+          background-size: 20px 20px;
+        }
+        
+        /* Example: Animated gradient banner */
+        .profile-card-custom .profile-popup-banner-placeholder {
+          background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+          background-size: 400% 400%;
+          animation: gradientShift 4s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+
         /* Hide all scrollbars completely */
         ::-webkit-scrollbar {
           display: none;
@@ -986,12 +1058,18 @@ export function ProfilePopup({
             width: calc(100vw - 40px) !important;
             max-width: 300px !important;
           }
+          
+          /* Adjust banner height on mobile */
+          .profile-popup-banner {
+            height: 120px !important;
+          }
         }
 
         /* Reduced motion support */
         @media (prefers-reduced-motion: reduce) {
           .animate-popup-enter,
-          .animate-spin {
+          .animate-spin,
+          .gradientShift {
             animation: none;
           }
           
