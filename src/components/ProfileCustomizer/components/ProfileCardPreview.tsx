@@ -1,4 +1,4 @@
-// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - COMPLETE FINAL VERSION
+// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - FIXED LAYOUT VERSION
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -259,12 +259,21 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           "profile-card-custom relative bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden",
           isPreview && "ring-2 ring-blue-400 ring-opacity-50"
         )}
-        style={{ width: 300, minHeight: 200, overflow: 'hidden' }}
+        style={{ 
+          width: 300, 
+          minHeight: 200
+        }}
       >
         {/* Banner area - Top of card */}
         <div 
-          className="profile-popup-banner profile-banner relative overflow-hidden rounded-t-lg"
-          style={{ width: '100%', height: 140 }}
+          className="profile-popup-banner profile-banner relative overflow-hidden"
+          style={{ 
+            width: '100%', 
+            height: 140,
+            borderTopLeftRadius: '8px',
+            borderTopRightRadius: '8px',
+            cursor: onBannerUpload ? 'pointer' : 'default'
+          }}
           onClick={handleBannerClick}
           onMouseEnter={() => setBannerHover(true)}
           onMouseLeave={() => setBannerHover(false)}
@@ -273,34 +282,49 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             <img
               src={profile.banner_url}
               alt="Profile Banner"
-              className="profile-popup-banner-image w-full h-full object-cover"
+              className="profile-popup-banner-image"
               style={{
                 width: '100%',
                 height: '140px',
+                objectFit: 'cover',
                 imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
               }}
               onError={handleBannerError}
             />
           ) : (
             <div 
-              className="profile-popup-banner-placeholder w-full h-full bg-gradient-to-r from-blue-400 to-purple-500" 
-              style={{ width: '100%', height: '140px' }}
+              className="profile-popup-banner-placeholder"
+              style={{ 
+                width: '100%', 
+                height: '140px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              }}
             />
           )}
           
           {/* Banner upload overlay */}
           {onBannerUpload && (
             <div
-              className={cn(
-                "absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center transition-opacity duration-200",
-                bannerHover ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: bannerHover ? 1 : 0,
+                transition: 'opacity 0.2s',
+                pointerEvents: bannerHover ? 'auto' : 'none'
+              }}
             >
-              <div className="text-white text-center">
-                <div className="text-sm">
+              <div style={{ textAlign: 'center', color: 'white' }}>
+                <div style={{ fontSize: '14px' }}>
                   {profile.banner_url ? 'Change Banner' : 'Add Banner'}
                 </div>
-                <div className="text-xs text-gray-300 mt-1">
+                <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '4px' }}>
                   300×140 recommended
                 </div>
               </div>
@@ -309,15 +333,22 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         </div>
 
         {/* Main content - Below banner with overlap */}
-        <div className="px-4 pb-4 -mt-8 relative z-10">
+        <div style={{ padding: '16px', paddingTop: '0', marginTop: '-32px', position: 'relative', zIndex: 10 }}>
           {/* Avatar */}
-          <div className="mb-3 profile-avatar-container">
-            <div className="relative w-20 h-20">
+          <div style={{ marginBottom: '12px' }} className="profile-avatar-container">
+            <div style={{ position: 'relative', width: '80px', height: '80px' }}>
               <img
                 src={profile.avatar_url || getDefaultAvatar()}
                 alt="Profile Avatar"
-                className="w-20 h-20 rounded-full border border-gray-800 object-cover shadow-lg profile-avatar cursor-pointer"
+                className="profile-avatar"
                 style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  border: '3px solid #1f2937',
+                  objectFit: 'cover',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  cursor: onAvatarUpload ? 'pointer' : 'default',
                   imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
                 }}
                 onError={handleAvatarError}
@@ -327,14 +358,21 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               />
               
               {/* Status indicator */}
-              <div className="absolute -bottom-1 -right-1 flex items-center justify-center profile-status-container">
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '-4px', 
+                right: '-4px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }} className="profile-status-container">
                 <img
                   src={getStatusIndicator(profile.status || 'offline').icon}
                   alt={getStatusIndicator(profile.status || 'offline').text}
-                  className="w-4 h-4 profile-status-icon"
+                  className="profile-status-icon"
+                  style={{ width: '16px', height: '16px' }}
                   title={getStatusIndicator(profile.status || 'offline').text}
                   onError={(e) => {
-                    // Fallback to default offline icon if status icon fails to load
                     (e.target as HTMLImageElement).src = 'https://cdn.sekansh21.workers.dev/icons/offline.png';
                   }}
                 />
@@ -343,14 +381,24 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               {/* Avatar upload overlay */}
               {onAvatarUpload && (
                 <div
-                  className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded-full transition-opacity duration-200",
-                    avatarHover ? "opacity-100" : "opacity-0 pointer-events-none"
-                  )}
-                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: avatarHover ? 1 : 0,
+                    transition: 'opacity 0.2s',
+                    pointerEvents: 'none'
+                  }}
                 >
-                  <div className="text-white text-xs">
-                    <span className="text-white text-xl inline-block rotate-[135deg]">✏︎</span>
+                  <div style={{ color: 'white', fontSize: '12px' }}>
+                    <span style={{ fontSize: '20px', display: 'inline-block', transform: 'rotate(135deg)' }}>✏︎</span>
                   </div>
                 </div>
               )}
@@ -358,8 +406,8 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           </div>
 
           {/* Display name and pronouns */}
-          <div className="mb-2 profile-name-container">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div style={{ marginBottom: '8px' }} className="profile-name-container">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h2
                 className="profile-display-name"
                 style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}
@@ -367,7 +415,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                 {profile.display_name || profile.username || profile.id || 'Unknown User'}
               </h2>
               {profile.pronouns && (
-                <span className="text-sm text-black profile-pronouns">
+                <span style={{ fontSize: '14px', color: '#000000' }} className="profile-pronouns">
                   - {profile.pronouns}
                 </span>
               )}
@@ -378,38 +426,47 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           {profile.display_name && 
            profile.username && 
            profile.display_name !== profile.username && (
-            <div className="mb-3 profile-username-container">
-              <p className="text-sm text-black profile-username">
+            <div style={{ marginBottom: '12px' }} className="profile-username-container">
+              <p style={{ fontSize: '14px', color: '#000000' }} className="profile-username">
                 @{profile.username}
               </p>
             </div>
           )}
           
           {(!profile.display_name && profile.username) && (
-            <div className="mb-3 profile-username-container">
-              <p className="text-sm text-black profile-username">
+            <div style={{ marginBottom: '12px' }} className="profile-username-container">
+              <p style={{ fontSize: '14px', color: '#000000' }} className="profile-username">
                 @{profile.username}
               </p>
             </div>
           )}
 
-          {/* Action Buttons Section - Only in ProfilePopup, removed from ProfileCardPreview */}
-
           {/* Divider */}
-          <div className="w-full h-px bg-gray-800 mb-3 profile-divider" />
+          <div style={{ 
+            width: '100%', 
+            height: '1px', 
+            backgroundColor: '#1f2937', 
+            marginBottom: '12px' 
+          }} className="profile-divider" />
 
           {/* Bio Section */}
           {profile.bio && profile.bio.trim() && (
-            <div className="mb-3 profile-bio-container">
+            <div style={{ marginBottom: '12px' }} className="profile-bio-container">
               <div 
-                className="text-sm text-white leading-relaxed p-3 bg-gray-800 rounded-lg border-l-4 border-blue-500 break-words profile-bio"
+                className="profile-bio"
                 style={{ 
+                  fontSize: '14px',
+                  color: '#ffffff',
+                  lineHeight: '1.4',
+                  padding: '12px',
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  borderLeft: '4px solid #3b82f6',
                   wordWrap: 'break-word',
                   overflowWrap: 'break-word',
                   hyphens: 'auto',
                   maxHeight: '100px',
                   overflowY: 'auto',
-                  lineHeight: '1.4',
                   scrollbarWidth: 'none',
                   msOverflowStyle: 'none'
                 }}
@@ -421,17 +478,29 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
 
           {/* Badges Section */}
           {badges.length > 0 && (
-            <div className="mb-3 profile-badges-container">
-              <h3 className="text-sm font-semibold text-black mb-2 profile-badges-title">
-                Badges ({badges.length})
+            <div style={{ marginBottom: '12px', display: 'block' }} className="profile-badges-container">
+              <h3 style={{ 
+                fontSize: '14px', 
+                fontWeight: '600', 
+                color: '#000000', 
+                marginBottom: '8px',
+                display: 'block',
+                width: '100%'
+              }} className="profile-badges-title">
+                Badges
               </h3>
-              <div className="relative">
+              <div style={{ position: 'relative', display: 'block', width: '100%' }}>
                 <div 
                   ref={badgesContainerRef}
-                  className="flex gap-2 overflow-x-auto pb-1 profile-badges-list"
+                  className="profile-badges-list"
                   style={{ 
+                    display: 'flex',
+                    gap: '8px',
+                    overflowX: 'auto',
+                    paddingBottom: '4px',
                     scrollbarWidth: 'none',
-                    msOverflowStyle: 'none'
+                    msOverflowStyle: 'none',
+                    width: '100%'
                   }}
                   onWheel={handleBadgesWheel}
                   onMouseMove={handleBadgesMouseMove}
@@ -439,17 +508,26 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                   {badges.map((badge) => (
                     <div
                       key={badge.id}
-                      className="relative group flex-shrink-0 profile-badge-item"
+                      className="profile-badge-item"
+                      style={{ 
+                        position: 'relative',
+                        flexShrink: 0,
+                        cursor: 'pointer'
+                      }}
                       title={badge.name || 'Badge'}
                     >
                       <img
                         src={badge.url}
                         alt={badge.name || 'Badge'}
-                        className="h-8 rounded object-cover transition-transform duration-200 profile-badge-image"
+                        className="profile-badge-image"
                         style={{ 
+                          height: '32px',
                           minWidth: '32px',
                           maxWidth: '64px',
                           width: 'auto',
+                          borderRadius: '4px',
+                          objectFit: 'cover',
+                          transition: 'transform 0.2s',
                           imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
                         }}
                         onError={handleBadgeError}
@@ -457,7 +535,26 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                       
                       {/* Tooltip */}
                       {badge.name && (
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20 profile-badge-tooltip">
+                        <div 
+                          className="profile-badge-tooltip"
+                          style={{
+                            position: 'absolute',
+                            bottom: '100%',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            marginBottom: '8px',
+                            padding: '4px 8px',
+                            backgroundColor: '#000000',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            borderRadius: '4px',
+                            opacity: 0,
+                            transition: 'opacity 0.2s',
+                            whiteSpace: 'nowrap',
+                            zIndex: 20,
+                            pointerEvents: 'none'
+                          }}
+                        >
                           {badge.name}
                         </div>
                       )}
@@ -469,8 +566,14 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           )}
 
           {/* Profile Info Footer */}
-          <div className="text-xs text-black border-t border-gray-800 pt-3 mt-3 profile-footer">
-            <div className="flex items-center justify-between">
+          <div style={{ 
+            fontSize: '10px', 
+            color: '#000000', 
+            borderTop: '1px solid #1f2937', 
+            paddingTop: '12px', 
+            marginTop: '12px' 
+          }} className="profile-footer">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="profile-footer-label">User Profile</span>
               {profile.created_at && (
                 <span title="Profile created" className="profile-footer-date">
@@ -518,38 +621,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           }
         }
 
-        /* ✅ BANNER CUSTOMIZATION CLASSES - Users can override these in their CSS */
-        
-        /* Default banner styling - can be overridden by user CSS */
-        .profile-popup-banner {
-          /* Users can customize with CSS like:
-           * height: 200px; 
-           * background: linear-gradient(...);
-           */
-        }
-        
-        .profile-popup-banner-image {
-          /* Default banner image styling - fully customizable */
-          object-fit: cover; /* Can be changed to: contain, fill, scale-down, none */
-          object-position: center; /* Can be: top, bottom, left, right, center */
-          /* Users can add:
-           * filter: blur(2px) brightness(0.8);
-           * transform: scale(1.1);
-           * transition: transform 0.3s ease;
-           */
-        }
-        
-        .profile-popup-banner-placeholder {
-          /* Default placeholder when no banner - fully customizable */
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          /* Users can override with:
-           * background: url('pattern.png') repeat;
-           * background: radial-gradient(circle, #ff6b9d, #c44569);
-           * background-size: cover;
-           * background-position: center;
-           */
-        }
-
         /* Hide all scrollbars completely */
         ::-webkit-scrollbar {
           display: none;
@@ -560,7 +631,12 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           -ms-overflow-style: none;
         }
 
-        /* GIF optimization - ensure smooth playback */
+        /* Badge tooltip hover effect */
+        .profile-badge-item:hover .profile-badge-tooltip {
+          opacity: 1 !important;
+        }
+
+        /* GIF optimization */
         img[src*=".gif"],
         img[src*="data:image/gif"] {
           image-rendering: auto;
@@ -573,11 +649,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           .profile-card-custom {
             width: calc(100vw - 40px) !important;
             max-width: 300px !important;
-          }
-          
-          /* Adjust banner height on mobile */
-          .profile-popup-banner {
-            height: 120px !important;
           }
         }
 

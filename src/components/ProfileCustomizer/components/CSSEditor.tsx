@@ -1,7 +1,7 @@
-// src/components/ProfileCustomizer/components/CSSEditor.tsx - UPDATED WITH ACE EDITOR
+// src/components/ProfileCustomizer/components/CSSEditor.tsx - FIXED THEME PERSISTENCE
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
   const [aceLoaded, setAceLoaded] = useState(false);
   const [editor, setEditor] = useState<any>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const themeAppliedRef = useRef(false);
 
   // Load ACE Editor
   useEffect(() => {
@@ -66,6 +67,31 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
     loadACE();
   }, [aceLoaded]);
 
+  // Force theme application
+  const applyTheme = useCallback((aceEditor: any) => {
+    if (!aceEditor || !window.ace) return;
+    
+    try {
+      // Force apply monokai theme
+      aceEditor.setTheme('ace/theme/monokai');
+      
+      // Additional theme enforcement
+      setTimeout(() => {
+        aceEditor.setTheme('ace/theme/monokai');
+        themeAppliedRef.current = true;
+      }, 100);
+      
+      // Ensure theme persists after any operations
+      setTimeout(() => {
+        if (aceEditor && aceEditor.setTheme) {
+          aceEditor.setTheme('ace/theme/monokai');
+        }
+      }, 500);
+    } catch (error) {
+      console.error('Error applying theme:', error);
+    }
+  }, []);
+
   // Initialize ACE Editor
   useEffect(() => {
     if (!aceLoaded || !editorRef.current || editor || disabled) return;
@@ -73,7 +99,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
     try {
       const aceEditor = window.ace.edit(editorRef.current);
       
-      // Configure editor
+      // Configure editor with persistent theme
       aceEditor.setTheme('ace/theme/monokai');
       aceEditor.session.setMode('ace/mode/css');
       aceEditor.setFontSize(12);
@@ -95,47 +121,95 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
         cursorStyle: 'ace',
         mergeUndoDeltas: false,
         behavioursEnabled: true,
-        wrapBehavioursEnabled: true
+        wrapBehavioursEnabled: true,
+        theme: 'ace/theme/monokai' // Explicit theme in options
       });
 
-      // Set up change listener
+      // Apply theme with multiple attempts
+      applyTheme(aceEditor);
+
+      // Set up change listener with theme preservation
       aceEditor.session.on('change', () => {
         const newValue = aceEditor.getValue();
         onChange(newValue);
+        
+        // Ensure theme persists after changes
+        setTimeout(() => {
+          if (aceEditor && aceEditor.setTheme) {
+            aceEditor.setTheme('ace/theme/monokai');
+          }
+        }, 50);
+      });
+
+      // Theme preservation on focus/blur
+      aceEditor.on('focus', () => {
+        applyTheme(aceEditor);
+      });
+
+      aceEditor.on('blur', () => {
+        setTimeout(() => applyTheme(aceEditor), 100);
       });
 
       // Store editor reference
       setEditor(aceEditor);
 
-      console.log('ACE Editor initialized successfully');
+      console.log('ACE Editor initialized successfully with monokai theme');
     } catch (error) {
       console.error('Failed to initialize ACE Editor:', error);
     }
-  }, [aceLoaded, editor, disabled, onChange, value]);
+  }, [aceLoaded, editor, disabled, onChange, value, applyTheme]);
 
-  // Update editor value when prop changes
+  // Update editor value when prop changes with theme preservation
   useEffect(() => {
     if (editor && editor.getValue() !== value) {
       const cursorPosition = editor.getCursorPosition();
       editor.setValue(value || '', -1);
       editor.moveCursorToPosition(cursorPosition);
+      
+      // Ensure theme persists after value updates
+      setTimeout(() => {
+        applyTheme(editor);
+      }, 50);
     }
-  }, [editor, value]);
+  }, [editor, value, applyTheme]);
 
-  // Handle resize when editor loads
+  // Handle resize when editor loads with theme preservation
   useEffect(() => {
     if (editor) {
       setTimeout(() => {
         editor.resize();
+        applyTheme(editor);
       }, 100);
     }
-  }, [editor]);
+  }, [editor, applyTheme]);
+
+  // Periodic theme enforcement (every 2 seconds when focused)
+  useEffect(() => {
+    if (!editor) return;
+
+    const interval = setInterval(() => {
+      if (editor && document.hasFocus() && themeAppliedRef.current) {
+        try {
+          const currentTheme = editor.getTheme();
+          if (currentTheme !== 'ace/theme/monokai') {
+            console.log('Theme changed detected, reapplying monokai');
+            applyTheme(editor);
+          }
+        } catch (error) {
+          // Silently handle any errors
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [editor, applyTheme]);
 
   // Clear CSS
   const clearCSS = () => {
     if (editor) {
       editor.setValue('', -1);
       onChange('');
+      setTimeout(() => applyTheme(editor), 50);
     }
   };
 
@@ -170,6 +244,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
     
     editor.setValue(template, -1);
     onChange(template);
+    setTimeout(() => applyTheme(editor), 50);
   };
 
   return (
@@ -191,6 +266,16 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
           disabled={disabled || !value.trim() || !editor}
         >
           🗑️ Clear
+        </Button>
+        {/* Theme Reset Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => editor && applyTheme(editor)}
+          disabled={disabled || !editor}
+          title="Reset to Dark Theme"
+        >
+          🎨 Fix Theme
         </Button>
       </div>
 
@@ -217,7 +302,8 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
             )}
             style={{ 
               fontSize: '12px',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              backgroundColor: '#272822' // Monokai background color
             }}
           />
         )}
@@ -229,7 +315,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
           <div className="flex items-center gap-4">
             <span>📏 {value.split('\n').length} lines</span>
             <span>📊 {value.length} characters</span>
-            <span>⚡ ACE Editor</span>
+            <span>⚡ ACE Editor (Monokai Theme)</span>
             {value.length > 5000 && (
               <span className="text-yellow-600 dark:text-yellow-400">
                 ⚠️ Large CSS file
@@ -246,7 +332,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
         </div>
         <ul className="space-y-1 text-xs text-yellow-700 dark:text-yellow-300">
           <li>• Only style the <code>.profile-card-custom</code> class and its children</li>
-          <li>• Avoid <code>position: fixed</code> or <code>position: absolute</code> that break layout</li>
+          <li>• Avoid dangerous positioning that might break layout</li>
           <li>• Be careful with <code>z-index</code> values that might cover UI elements</li>
           <li>• Test your CSS thoroughly - invalid CSS may break the profile display</li>
           <li>• Use <code>!important</code> sparingly and only when necessary</li>
@@ -260,33 +346,46 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
             ✨ Editor Features:
           </div>
           <ul className="space-y-1 text-xs text-blue-700 dark:text-blue-300">
-            <li>• Syntax highlighting for CSS</li>
+            <li>• Syntax highlighting for CSS (Dark Monokai Theme)</li>
             <li>• Auto-completion (Ctrl+Space)</li>
             <li>• Code folding and bracket matching</li>
             <li>• Find/Replace (Ctrl+F / Ctrl+H)</li>
             <li>• Multi-cursor editing (Ctrl+Alt+Up/Down)</li>
             <li>• Undo/Redo (Ctrl+Z / Ctrl+Y)</li>
+            <li>• Click "🎨 Fix Theme" if editor theme changes</li>
           </ul>
         </div>
       )}
 
       <style jsx>{`
-        /* Custom styling for ACE editor */
+        /* Force ACE Editor theme styles */
         .ace_editor {
           font-family: 'Monaco', 'Courier New', monospace !important;
+          background-color: #272822 !important;
         }
         
         .ace_gutter {
-          background: #f3f4f6 !important;
-          color: #6b7280 !important;
+          background: #3c3c3c !important;
+          color: #8f908a !important;
         }
         
-        /* Dark mode adjustments */
-        @media (prefers-color-scheme: dark) {
-          .ace_gutter {
-            background: #374151 !important;
-            color: #9ca3af !important;
-          }
+        .ace_scroller {
+          background-color: #272822 !important;
+        }
+        
+        .ace_content {
+          background-color: #272822 !important;
+        }
+
+        /* Ensure monokai colors */
+        .ace_editor.ace_monokai {
+          background-color: #272822 !important;
+          color: #f8f8f2 !important;
+        }
+
+        .ace_editor.ace_monokai .ace_gutter {
+          background: #3c3c3c !important;
+          color: #8f908a !important;
         }
 
         code {

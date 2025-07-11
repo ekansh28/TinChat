@@ -462,72 +462,77 @@ export default function ProfileCustomizer({ isOpen, onClose }: ProfileCustomizer
                 />
               </div>
 
-              {/* Right Panel - Live Preview */}
-              <div className="w-80 h-100 p-4 overflow-y-auto no-scrollbar" style={{ width: '40%' }}>
-                <div className="window">
-                  <div className="title-bar">
-                    <div className="title-bar-text">
-                      Live Preview
-                    </div>
+ {/* Right Panel - Live Preview */}
+<div className="w-80 h-100 p-4 overflow-y-auto no-scrollbar" style={{ width: '40%' }}>
+  <div className="window">
+    <div className="title-bar">
+      <div className="title-bar-text">
+        Live Preview
+      </div>
+    </div>
+    <div className="window-body">
+      <div className="space-y-4">
+        {/* Profile Card Preview with upload hover and image editor */}
+        <div className="field-row flex justify-center">
+          <div style={{ width: "298px", height: "465px" }}> {/* Increased height by 30% (358 * 1.3 = 465) */}
+            <ProfileCardPreview
+              profile={profile}
+              badges={badges}
+              customCSS={customCSS}
+              isPreview={true}
+              onAvatarUpload={() => {}} // The ProfileCardPreview handles file selection internally
+              onBannerUpload={() => {}} // The ProfileCardPreview handles file selection internally
+            />
+          </div>
+        </div>
+        
+        {/* Account Info and Chat Preview - Side by Side */}
+        <div className="field-row">
+          <div className="flex gap-4">
+            {/* Account Info - Left Side */}
+            <div className="flex-1">
+              <div className="sunken border border-gray-400 p-2 bg-gray-50">
+                <div className="text-xs text-gray-600">
+                  <div className="font-bold mb-1">👤 Account Info:</div>
+                  <div className="space-y-1">
+                    <div>ID: {user.id}</div>
+                    <div>Email: {user.emailAddresses?.[0]?.emailAddress}</div>
+                    <div>Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}</div>
                   </div>
-                  <div className="window-body">
-                    <div className="space-y-4">
-                      {/* Profile Card Preview with upload hover and image editor */}
-                      <div className="field-row flex justify-center">
-                        <div style={{ width: "298px", height: "358px" }}>
-                          <ProfileCardPreview
-                            profile={profile}
-                            badges={badges}
-                            customCSS={customCSS}
-                            isPreview={true}
-                            onAvatarUpload={() => {}} // The ProfileCardPreview handles file selection internally
-                            onBannerUpload={() => {}} // The ProfileCardPreview handles file selection internally
-                          />
-                        </div>
-                      </div>
-                      
-
-                      
-                      {/* Chat Preview */}
-                      <div className="field-row">
-                        <label className="font-bold text-sm mb-2 block">Chat Preview:</label>
-                        <div className="sunken border border-gray-400 p-2 bg-white">
-                          <div className="flex items-start gap-2">
-                            <div>
-                              <div 
-                                className="text-sm font-bold cursor-pointer hover:underline"
-                                style={{ 
-                                  color: profile.display_name_color || '#000000',
-                                  animation: profile.display_name_animation === 'rainbow' ? 
-                                    `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
-                                }}
-                              >
-                                <span>
-                                  {profile.display_name || profile.username || 'Unknown User'}
-                                </span>
-                                <span style={{ color: '#000000' }}> : hello!</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* User info display */}
-                      <div className="field-row">
-                        <div className="sunken border border-gray-400 p-2 bg-gray-50">
-                          <div className="text-xs text-gray-600">
-                            <div className="font-bold mb-1">👤 Account Info:</div>
-                            <div>ID: {user.id}</div>
-                            <div>Email: {user.emailAddresses?.[0]?.emailAddress}</div>
-                            <div>Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}</div>
-                          </div>
-                        </div>
-                      </div>
-
+                </div>
+              </div>
+            </div>
+            
+            {/* Chat Preview - Right Side */}
+            <div className="flex-1">
+              <div className="sunken border border-gray-400 p-2 bg-white">
+                <div className="text-xs text-gray-600 mb-1 font-bold">Chat Preview:</div>
+                <div className="flex items-start gap-2">
+                  <div>
+                    <div 
+                      className="text-sm font-bold cursor-pointer hover:underline"
+                      style={{ 
+                        color: profile.display_name_color || '#000000',
+                        animation: profile.display_name_animation === 'rainbow' ? 
+                          `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
+                      }}
+                    >
+                      <span>
+                        {profile.display_name || profile.username || 'Unknown User'}
+                      </span>
+                      <span style={{ color: '#000000' }}> : hello!</span>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
             </div>
           )}
 

@@ -844,7 +844,7 @@ export function ProfilePopup({
             {badges.length > 0 && (
               <div className="mb-3 profile-badges-container">
                 <h3 className="text-sm font-semibold text-black mb-2 profile-badges-title">
-                  Badges ({badges.length})
+                  Badges
                 </h3>
                 <div className="relative">
                   <div 
