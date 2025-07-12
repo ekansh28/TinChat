@@ -142,6 +142,24 @@ export default function SelectionLobby() {
         />
       </div>
 
+      {/* Logo Section - Below Header - No layout space taken, lowest z-index */}
+      <div className="absolute left-1/2 transform -translate-x-1/2 z-0" style={{ top: isMobile ? '60px' : '80px' }}>
+        <img
+          src="https://cdn.sekansh21.workers.dev/logo.png"
+          alt="TinChat Logo"
+          className="max-w-full h-auto"
+          style={{
+            maxHeight: isMobile ? '56px' : '84px', // 30% smaller than original
+            width: 'auto',
+            objectFit: 'contain'
+          }}
+          onError={(e) => {
+            console.warn('Logo failed to load, hiding element');
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      </div>
+
       {/* Webamp Container - Absolute positioned */}
       <div className={styles.webampContainer}>
         {!isMobile && <Webamp key="webamp-instance" />}
