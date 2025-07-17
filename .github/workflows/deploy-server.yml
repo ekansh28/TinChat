@@ -42,11 +42,25 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
         run: |
           echo "🔍 Checking environment variables for server deployment:"
           echo "  - SERVER_HOST length: ${#SERVER_HOST}"
           echo "  - SERVER_PROJECT_PATH length: ${#SERVER_PROJECT_PATH}"
           echo "  - SERVER_USER length: ${#SERVER_USER}"
+          echo "  - NEXT_PUBLIC_SUPABASE_URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
+          echo "  - NEXT_PUBLIC_SUPABASE_ANON_KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+          echo "  - SUPABASE_SERVICE_ROLE_KEY length: ${#SUPABASE_SERVICE_ROLE_KEY}"
+          echo "  - NEXT_PUBLIC_API_BASE_URL length: ${#NEXT_PUBLIC_API_BASE_URL}"
+          echo "  - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY length: ${#NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}"
+          echo "  - CLERK_SECRET_KEY length: ${#CLERK_SECRET_KEY}"
+          echo "  - CLERK_WEBHOOK_SECRET length: ${#CLERK_WEBHOOK_SECRET}"
           
           if [[ -z "$SERVER_HOST" ]]; then
             echo "❌ SERVER_HOST is empty!"
@@ -63,6 +77,21 @@ jobs:
             exit 1
           fi
           
+          if [[ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]]; then
+            echo "❌ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is empty!"
+            exit 1
+          fi
+          
+          if [[ -z "$CLERK_SECRET_KEY" ]]; then
+            echo "❌ CLERK_SECRET_KEY is empty!"
+            exit 1
+          fi
+          
+          if [[ -z "$CLERK_WEBHOOK_SECRET" ]]; then
+            echo "❌ CLERK_WEBHOOK_SECRET is empty!"
+            exit 1
+          fi
+          
           echo "✅ Required environment variables are present"
 
       - name: 🚀 Deploy Server on VPS
@@ -74,6 +103,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_SOCKET_SERVER_URL: ${{ secrets.NEXT_PUBLIC_SOCKET_SERVER_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
         run: |
           echo "🔍 Starting server deployment process..."
           echo "📋 Environment variables check:"
@@ -81,6 +116,9 @@ jobs:
           echo "  - SERVER_USER: $SERVER_USER"
           echo "  - SERVER_PROJECT_PATH: $SERVER_PROJECT_PATH"
           echo "  - NEXT_PUBLIC_API_BASE_URL: $NEXT_PUBLIC_API_BASE_URL"
+          echo "  - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY length: ${#NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}"
+          echo "  - CLERK_SECRET_KEY length: ${#CLERK_SECRET_KEY}"
+          echo "  - CLERK_WEBHOOK_SECRET length: ${#CLERK_WEBHOOK_SECRET}"
           
           # Trim whitespace and newlines from path (safety check)
           CLEAN_PATH=$(echo "$SERVER_PROJECT_PATH" | tr -d '\n' | sed 's/ *$//')
@@ -141,6 +179,12 @@ jobs:
             export NEXT_PUBLIC_SUPABASE_ANON_KEY='$NEXT_PUBLIC_SUPABASE_ANON_KEY'
             export SUPABASE_SERVICE_ROLE_KEY='$SUPABASE_SERVICE_ROLE_KEY'
             export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
+            export NEXT_PUBLIC_SOCKET_SERVER_URL='$NEXT_PUBLIC_SOCKET_SERVER_URL'
+            export NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY='$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'
+            export CLERK_SECRET_KEY='$CLERK_SECRET_KEY'
+            export CLERK_WEBHOOK_SECRET='$CLERK_WEBHOOK_SECRET'
+            export UPSTASH_REDIS_REST_URL='$UPSTASH_REDIS_REST_URL'
+            export UPSTASH_REDIS_REST_TOKEN='$UPSTASH_REDIS_REST_TOKEN'
             
             set -e
             
@@ -171,15 +215,31 @@ jobs:
             
             echo '🔧 Creating server .env.local file...'
             
-            # Create .env.local file for server with environment variables
+            # Create .env.local file for server with ALL environment variables including Clerk
             echo \"NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL\" > .env.local
             echo \"NEXT_PUBLIC_SUPABASE_ANON_KEY=\$NEXT_PUBLIC_SUPABASE_ANON_KEY\" >> .env.local
             echo \"SUPABASE_SERVICE_ROLE_KEY=\$SUPABASE_SERVICE_ROLE_KEY\" >> .env.local
             echo \"NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL\" >> .env.local
             echo \"NEXT_PUBLIC_SOCKET_SERVER_URL=\$NEXT_PUBLIC_SOCKET_SERVER_URL\" >> .env.local
+            echo \"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=\$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY\" >> .env.local
+            echo \"CLERK_SECRET_KEY=\$CLERK_SECRET_KEY\" >> .env.local
+            echo \"CLERK_WEBHOOK_SECRET=\$CLERK_WEBHOOK_SECRET\" >> .env.local
             echo \"UPSTASH_REDIS_REST_URL=\$UPSTASH_REDIS_REST_URL\" >> .env.local
             echo \"UPSTASH_REDIS_REST_TOKEN=\$UPSTASH_REDIS_REST_TOKEN\" >> .env.local
             echo \"NODE_ENV=production\" >> .env.local
+            
+            # Debug: Show what variables we have (safely)
+            echo '🔍 Environment variables available in SSH session:'
+            echo \"  NEXT_PUBLIC_SUPABASE_URL length: \${#NEXT_PUBLIC_SUPABASE_URL}\"
+            echo \"  NEXT_PUBLIC_SUPABASE_ANON_KEY length: \${#NEXT_PUBLIC_SUPABASE_ANON_KEY}\"
+            echo \"  SUPABASE_SERVICE_ROLE_KEY length: \${#SUPABASE_SERVICE_ROLE_KEY}\"
+            echo \"  NEXT_PUBLIC_API_BASE_URL length: \${#NEXT_PUBLIC_API_BASE_URL}\"
+            echo \"  NEXT_PUBLIC_SOCKET_SERVER_URL length: \${#NEXT_PUBLIC_SOCKET_SERVER_URL}\"
+            echo \"  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY length: \${#NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}\"
+            echo \"  CLERK_SECRET_KEY length: \${#CLERK_SECRET_KEY}\"
+            echo \"  CLERK_WEBHOOK_SECRET length: \${#CLERK_WEBHOOK_SECRET}\"
+            echo \"  UPSTASH_REDIS_REST_URL length: \${#UPSTASH_REDIS_REST_URL}\"
+            echo \"  UPSTASH_REDIS_REST_TOKEN length: \${#UPSTASH_REDIS_REST_TOKEN}\"
             
             echo '✅ Server environment file created'
             echo '🔍 Environment file contents (redacted):'
