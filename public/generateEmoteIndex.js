@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+const CDN_BASE = "https://cdn.tinchat.online/emotes/";
 const INDEX_FILE = path.join(__dirname, 'emote_index.json'); // Your original file
 
 console.log("📥 Reading local emote index...");

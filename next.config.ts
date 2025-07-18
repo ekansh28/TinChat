@@ -7,9 +7,9 @@ const nextConfig = {
   images: {
     domains: [
       'img.clerk.com', // Clerk user avatars
-      'cdn.sekansh21.workers.dev', // Your existing CDN
+      'cdn.tinchat.online', // Your existing CDN
       'images.unsplash.com', // If you use Unsplash images
-      // Add your Cloudflare R2 domain when you set up custom domain
+      'pub-8cff6f1c23f942768d1416616d15d6f0.r2.dev' // Add this line
       // 'files.yourdomain.com', 
     ],
   },
@@ -18,7 +18,7 @@ const nextConfig = {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucnkpbrmjelpqopncqhc.supabase.co';
     const supabaseHostname = new URL(supabaseUrl).hostname;
 
-    const cdn = "https://cdn.sekansh21.workers.dev";
+    const cdn = "https://cdn.tinchat.online";
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'https://chat.tinchat.online';
     const socketWsUrl = socketServerUrl.replace('http://', 'ws://').replace('https://', 'wss://');
 

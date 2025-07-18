@@ -4,7 +4,7 @@
 /* Main theme class */
 .subtheme-bliss-theme {
   /* Set the Bliss wallpaper as background for the entire page */
-  background-image: url('https://cdn.sekansh21.workers.dev/winXPwallpapers/bliss_uncropped_8k.png') !important;
+  background-image: url('https://cdn.tinchat.online/winXPwallpapers/bliss_uncropped_8k.png') !important;
   background-size: cover !important;
   background-position: center center !important;
   background-repeat: no-repeat !important;
@@ -15,7 +15,7 @@
 /* Apply background to body and html when theme is active */
 html.subtheme-bliss-theme,
 html.subtheme-bliss-theme body {
-  background-image: url('https://cdn.sekansh21.workers.dev/winXPwallpapers/bliss_uncropped_8k.png') !important;
+  background-image: url('https://cdn.tinchat.online/winXPwallpapers/bliss_uncropped_8k.png') !important;
   background-size: cover !important;
   background-position: center center !important;
   background-repeat: no-repeat !important;

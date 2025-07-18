@@ -1,7 +1,7 @@
 /* 666 Theme - Dark Red Sub-theme for Windows 98 */
 
 html.theme-98.subtheme-666-theme body {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red.jpg'), url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red.jpg'), url('https://cdn.tinchat.online/wallpapers/red2.jpg') !important;
   background-repeat: repeat, repeat !important;
   background-attachment: fixed, fixed !important;
 
@@ -12,7 +12,7 @@ html.theme-98.subtheme-666-theme body {
 
 /* Window - Dark red with bloody accents */
 html.theme-98.subtheme-666-theme .window {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red2.jpg') !important;
   background-size: 200px !important;
   background-repeat: repeat !important;
   background-blend-mode: overlay !important;
@@ -26,7 +26,7 @@ html.theme-98.subtheme-666-theme .window {
 
 /* Window Body - Dark with red undertones */
 html.theme-98.subtheme-666-theme .window-body {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red.jpg') !important;
   background-size: 150px !important;
   background-repeat: repeat !important;
   background-blend-mode: soft-light !important;
@@ -41,7 +41,7 @@ html.theme-98.subtheme-666-theme .window-body {
 
 /* Title Bar - Using red4 wallpaper instead of gradient */
 html.theme-98.subtheme-666-theme .title-bar {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red4.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red4.jpg') !important;
   background-size: 120px !important;
   background-repeat: repeat !important;
   background-color: #8B0000 !important;
@@ -52,7 +52,7 @@ html.theme-98.subtheme-666-theme .title-bar {
 
 /* Active Title Bar - Brighter red4 wallpaper */
 html.theme-98.subtheme-666-theme .window.active > .title-bar {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red4.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red4.jpg') !important;
   background-size: 100px !important;
   background-repeat: repeat !important;
   background-color: #A52A2A !important;
@@ -87,7 +87,7 @@ html.theme-98.subtheme-666-theme .button[aria-label="Stop"],
 html.theme-98.subtheme-666-theme .button[aria-label="Find"], 
 html.theme-98.subtheme-666-theme .button[aria-label="Skip"] {
 
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red3.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red3.jpg') !important;
 
 }
 
@@ -95,14 +95,14 @@ html.theme-98.subtheme-666-theme .button[aria-label="Skip"] {
 html.theme-98.subtheme-666-theme button[aria-label="Stop"]:not(:active),
 html.theme-98.subtheme-666-theme button[aria-label="Find"]:not(:active), 
 html.theme-98.subtheme-666-theme button[aria-label="Skip"]:not(:active) {
-  background: url('https://cdn.sekansh21.workers.dev/wallpapers/red3.jpg')  repeat 0 0 / 90px 90px scroll padding-box padding-box !important;
+  background: url('https://cdn.tinchat.online/wallpapers/red3.jpg')  repeat 0 0 / 90px 90px scroll padding-box padding-box !important;
 }
 
 /* Action Buttons (Send) - Special wallpaper treatment */
 html.theme-98.subtheme-666-theme button[type="submit"],
 html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]),
 html.theme-98.subtheme-666-theme .chat-window button {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red4.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red4.jpg') !important;
   background-size: 80px !important;
   background-repeat: repeat !important;
   background-color: #330000 !important;
@@ -135,7 +135,7 @@ html.theme-98.subtheme-666-theme button[aria-label="Skip"]:active,
 html.theme-98.subtheme-666-theme button[aria-label="Stop"].active,
 html.theme-98.subtheme-666-theme button[aria-label="Find"].active,
 html.theme-98.subtheme-666-theme button[aria-label="Skip"].active {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red3.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red3.jpg') !important;
   background-size: 70px !important;
   background-repeat: repeat !important;
   background-color: #660000 !important;
@@ -154,7 +154,7 @@ html.theme-98.subtheme-666-theme .chat-window button:active,
 html.theme-98.subtheme-666-theme button[type="submit"].active,
 html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]).active,
 html.theme-98.subtheme-666-theme .chat-window button.active {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red2.jpg') !important;
   background-size: 60px !important;
   background-repeat: repeat !important;
   background-color: #1a0000 !important;
@@ -186,7 +186,7 @@ html.theme-98.subtheme-666-theme .themed-input-inner {
 /* Sunken Panels - Dark with red tint and wallpaper */
 html.theme-98.subtheme-666-theme .sunken-panel,
 html.theme-98.subtheme-666-theme .tree-view {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red.jpg') !important;
   background-size: 100px !important;
   background-repeat: repeat !important;
   background-blend-mode: overlay !important;
@@ -321,7 +321,7 @@ html.theme-98.subtheme-666-theme .button  {
 html.theme-98.subtheme-666-theme button[aria-label="Stop"] ,
 html.theme-98.subtheme-666-theme button[aria-label="Find"] ,
 html.theme-98.subtheme-666-theme button[aria-label="Skip"]  {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red3 .jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red3 .jpg') !important;
   background-size: 80px !important;
   background-repeat: repeat !important;
   box-shadow: inset 1px 1px 0px #CD5C5C, 1px 1px 0px #000000, 0 0 3px #8B0000 !important;
@@ -331,7 +331,7 @@ html.theme-98.subtheme-666-theme button[aria-label="Skip"]  {
 html.theme-98.subtheme-666-theme button[type="submit"] ,
 html.theme-98.subtheme-666-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]) ,
 html.theme-98.subtheme-666-theme .chat-window button  {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red2.jpg') !important;
   background-size: 70px !important;
   background-repeat: repeat !important;
   background-color: #4d0000 !important;
@@ -344,7 +344,7 @@ html.theme-98.subtheme-666-theme .chat-window button  {
 
 /* TaskBar Styling for 666 Theme - Using wallpaper images */
 html.theme-98.subtheme-666-theme .taskbar {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red4.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red4.jpg') !important;
   background-size: 150px !important;
   background-repeat: repeat !important;
   background-color: #330000 !important;
@@ -353,7 +353,7 @@ html.theme-98.subtheme-666-theme .taskbar {
 }
 
 html.theme-98.subtheme-666-theme .taskbar .start-button {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red3.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red3.jpg') !important;
   background-size: 100px !important;
   background-repeat: repeat !important;
   background-color: #4d0000 !important;
@@ -363,7 +363,7 @@ html.theme-98.subtheme-666-theme .taskbar .start-button {
 }
 
 html.theme-98.subtheme-666-theme .taskbar .start-button:hover {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red2.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red2.jpg') !important;
   background-size: 80px !important;
   background-repeat: repeat !important;
   background-color: #660000 !important;
@@ -377,7 +377,7 @@ html.theme-98.subtheme-666-theme .taskbar .taskbar-divider {
 }
 
 html.theme-98.subtheme-666-theme .taskbar .tray {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/red.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/red.jpg') !important;
   background-size: 120px !important;
   background-repeat: repeat !important;
   background-color: #330000 !important;

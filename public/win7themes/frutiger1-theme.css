@@ -5,7 +5,7 @@
 html.subtheme-frutiger1-theme,
 body.subtheme-frutiger1-theme,
 .subtheme-frutiger1-theme {
-  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/frutiger1.jpeg') !important;
+  background-image: url('https://cdn.tinchat.online/win7wallpapers/frutiger1.jpeg') !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
@@ -18,7 +18,7 @@ body.subtheme-frutiger1-theme,
 }
 
 .subtheme-frutiger1-theme {
-  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/frutiger1.jpeg') !important;
+  background-image: url('https://cdn.tinchat.online/win7wallpapers/frutiger1.jpeg') !important;
 }
 
 /* TaskBar Styling for Frutiger 1 Theme */
@@ -72,8 +72,8 @@ body.subtheme-frutiger1-theme,
   width: 100%;
   height: 100%;
   background-image: 
-    url('https://cdn.sekansh21.workers.dev/win7wallpapers/frutiger1coralleft.png'),
-    url('https://cdn.sekansh21.workers.dev/win7wallpapers/frutiger1coralright.png');
+    url('https://cdn.tinchat.online/win7wallpapers/frutiger1coralleft.png'),
+    url('https://cdn.tinchat.online/win7wallpapers/frutiger1coralright.png');
   background-size: 13%, 13%; /* Reduced by 30% */
   background-position: bottom left, bottom right;
   background-repeat: no-repeat, no-repeat;
@@ -139,7 +139,7 @@ body.subtheme-frutiger1-theme,
   top: -120px;
   width: 100px;
   height: 100px;
-  background-image: url('https://cdn.sekansh21.workers.dev/icons/goldfishbubble.png');
+  background-image: url('https://cdn.tinchat.online/icons/goldfishbubble.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;

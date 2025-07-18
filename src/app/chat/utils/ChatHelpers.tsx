@@ -36,7 +36,7 @@ export interface EmoteData {
 }
 
 // CDN Configuration
-const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+const EMOJI_CDN_BASE = "https://cdn.tinchat.online/emotes/";
 
 // Cache for loaded emote data
 let emoteCache: string[] | null = null;

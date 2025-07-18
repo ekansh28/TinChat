@@ -621,7 +621,7 @@ export const BadgeManager: React.FC<BadgeManagerProps> = ({
             previewMode === 'grid' ? "inset-0 rounded" : "right-2 w-6 h-6 rounded"
           )}>
             <img
-              src="https://cdn.sekansh21.workers.dev/icons/cross.png"
+              src="https://cdn.tinchat.online/icons/cross.png"
               alt="Remove badge"
               onClick={(e) => {
                 e.stopPropagation();

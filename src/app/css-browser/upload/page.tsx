@@ -226,7 +226,7 @@ export default function CSSUploadPage() {
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-white text-lg">Loading...</div>
+        <div className="text-white text-lg"><img src="https://cdn.tinchat.online/animations/downloading.gif" alt="Loading" /></div>
       </div>
     );
   }

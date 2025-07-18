@@ -51,7 +51,7 @@ interface MessageRowProps {
   isMobile: boolean;
 }
 
-const EMOJI_CDN_BASE = "https://cdn.sekansh21.workers.dev/emotes/";
+const EMOJI_CDN_BASE = "https://cdn.tinchat.online/emotes/";
 
 const MessageRow: React.FC<MessageRowProps> = ({
   message,

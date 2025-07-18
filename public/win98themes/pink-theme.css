@@ -2,7 +2,7 @@
 
 /* Main background - already set with bows.png */
 .theme-98 body {
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/bows.png') !important;
+  background-image: url('https://cdn.tinchat.online/wallpapers/bows.png') !important;
   background-repeat: repeat !important;
   background-attachment: fixed !important;
   background-size: auto !important;
@@ -75,15 +75,15 @@
   /* Create the frame using individual images in layers */
   background-image: 
     /* Corners first (highest priority) - using PNG files */
-    url('https://cdn.sekansh21.workers.dev/pinktheme/topleftcorner.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/toprightcorner.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/bottomleftcorner.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/bottomrightcorner.png'),
+    url('https://cdn.tinchat.online/pinktheme/topleftcorner.png'),
+    url('https://cdn.tinchat.online/pinktheme/toprightcorner.png'),
+    url('https://cdn.tinchat.online/pinktheme/bottomleftcorner.png'),
+    url('https://cdn.tinchat.online/pinktheme/bottomrightcorner.png'),
     /* Then edges that connect directly to corners with no gaps - using PNG files */
-    url('https://cdn.sekansh21.workers.dev/pinktheme/topframe.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/bottomframe.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/leftframe.png'),
-    url('https://cdn.sekansh21.workers.dev/pinktheme/rightframe.png');
+    url('https://cdn.tinchat.online/pinktheme/topframe.png'),
+    url('https://cdn.tinchat.online/pinktheme/bottomframe.png'),
+    url('https://cdn.tinchat.online/pinktheme/leftframe.png'),
+    url('https://cdn.tinchat.online/pinktheme/rightframe.png');
     
   background-position:
     /* Position corners at exact locations */
@@ -125,7 +125,7 @@
 /* Alternative approach using border-image if the above doesn't work well */
 .theme-98 .window.biscuit-frame-alt {
   border: 20px solid transparent;
-  border-image: url('https://cdn.sekansh21.workers.dev/pinktheme/biscuitframe.gif') 20 repeat;
+  border-image: url('https://cdn.tinchat.online/pinktheme/biscuitframe.gif') 20 repeat;
   border-image-outset: 0;
 }
 
@@ -150,7 +150,7 @@
   left: 0;
   right: 0;
   height: 20px;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/topframe.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/topframe.gif');
   background-repeat: repeat-x;
   background-position: 0 0;
   background-size: auto 20px;
@@ -162,7 +162,7 @@
   left: 0;
   right: 0;
   height: 20px;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/bottomframe.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/bottomframe.gif');
   background-repeat: repeat-x;
   background-position: 0 0;
   background-size: auto 20px;
@@ -174,7 +174,7 @@
   top: 0;
   bottom: 0;
   width: 20px;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/leftframe.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/leftframe.gif');
   background-repeat: repeat-y;
   background-position: 0 0;
   background-size: 20px auto;
@@ -186,7 +186,7 @@
   top: 0;
   bottom: 0;
   width: 20px;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/rightframe.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/rightframe.gif');
   background-repeat: repeat-y;
   background-position: 0 0;
   background-size: 20px auto;
@@ -205,7 +205,7 @@
 .theme-98 .biscuit-frame-overlay .frame-top-left {
   top: 0;
   left: 0;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/topleftcorner.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/topleftcorner.gif');
   background-position: 0 0;
 }
 
@@ -213,7 +213,7 @@
 .theme-98 .biscuit-frame-overlay .frame-top-right {
   top: 0;
   right: 0;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/toprightcorner.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/toprightcorner.gif');
   background-position: 0 0;
 }
 
@@ -221,7 +221,7 @@
 .theme-98 .biscuit-frame-overlay .frame-bottom-left {
   bottom: 0;
   left: 0;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/bottomleftcorner.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/bottomleftcorner.gif');
   background-position: 0 0;
 }
 
@@ -229,7 +229,7 @@
 .theme-98 .biscuit-frame-overlay .frame-bottom-right {
   bottom: 0;
   right: 0;
-  background-image: url('https://cdn.sekansh21.workers.dev/pinktheme/bottomrightcorner.gif');
+  background-image: url('https://cdn.tinchat.online/pinktheme/bottomrightcorner.gif');
   background-position: 0 0;
 }
 

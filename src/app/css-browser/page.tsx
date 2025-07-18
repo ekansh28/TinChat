@@ -179,7 +179,7 @@ const getSortIcon = (sort: SortBy) => {
   if (!isLoaded) {
     return (
       <div className="min-h-screen  flex items-center justify-center">
-        <div className="text-white text-lg">Loading...</div>
+        <div className="text-white text-lg">            <img src="https://cdn.tinchat.online/animations/downloading.gif" alt="Loading"  /></div>
       </div>
     );
   }
@@ -345,8 +345,8 @@ const getSortIcon = (sort: SortBy) => {
 
         {/* CSS Files Grid */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-white-600 border-t-transparent  animate-spin"></div>
+          <div className="flex items-center justify-center ">
+                        <img src="https://cdn.tinchat.online/animations/downloading.gif" alt="Loading" />
           </div>
         ) : cssFiles.length === 0 ? (
           <div className="text-center py-16">

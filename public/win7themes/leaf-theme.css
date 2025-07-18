@@ -5,7 +5,7 @@
 html.subtheme-leaf-theme,
 body.subtheme-leaf-theme,
 .subtheme-leaf-theme {
-  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/leaf.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/win7wallpapers/leaf.jpg') !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
@@ -18,7 +18,7 @@ body.subtheme-leaf-theme,
 }
 
 .subtheme-leaf-theme {
-  background-image: url('https://cdn.sekansh21.workers.dev/win7wallpapers/leaf.jpg') !important;
+  background-image: url('https://cdn.tinchat.online/win7wallpapers/leaf.jpg') !important;
 }
 
 
@@ -259,7 +259,7 @@ body.subtheme-leaf-theme,
 /* Force background override for any conflicting styles */
 .subtheme-leaf-theme body,
 .subtheme-leaf-theme html {
-  background: url('https://cdn.sekansh21.workers.dev/win7wallpapers/leaf.jpeg') center/cover fixed no-repeat !important;
+  background: url('https://cdn.tinchat.online/win7wallpapers/leaf.jpeg') center/cover fixed no-repeat !important;
 }
 
 *,

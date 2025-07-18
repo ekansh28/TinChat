@@ -142,23 +142,38 @@ export default function SelectionLobby() {
         />
       </div>
 
-      {/* Logo Section - Below Header - No layout space taken, lowest z-index */}
-      <div className="absolute left-1/2 transform -translate-x-1/2 z-0" style={{ top: isMobile ? '60px' : '80px' }}>
-        <img
-          src="https://cdn.sekansh21.workers.dev/logo.png"
-          alt="TinChat Logo"
-          className="max-w-full h-auto"
-          style={{
-            maxHeight: isMobile ? '56px' : '84px', // 30% smaller than original
-            width: 'auto',
-            objectFit: 'contain'
-          }}
-          onError={(e) => {
-            console.warn('Logo failed to load, hiding element');
-            e.currentTarget.style.display = 'none';
-          }}
-        />
-      </div>
+{/* Logo Section - Below Header - Left aligned with subtle animation */}
+<div className="absolute left-4 z-0" style={{ top: isMobile ? '60px' : '80px' }}>
+  <img
+    src="https://cdn.tinchat.online/logo.png"
+    alt="TinChat Logo"
+    className="max-w-full h-auto"
+    style={{
+      maxHeight: isMobile ? '56px' : '84px',
+      width: 'auto',
+      objectFit: 'contain',
+      animation: 'subtleFloat 15s ease-in-out infinite',
+      transformOrigin: 'center center'
+    }}
+    onError={(e) => {
+      console.warn('Logo failed to load, hiding element');
+      e.currentTarget.style.display = 'none';
+    }}
+  />
+  <style jsx>{`
+    @keyframes subtleFloat {
+      0% {
+        transform: rotate(-1.5deg) scale(1.02);
+      }
+      50% {
+        transform: rotate(1.5deg) scale(0.98);
+      }
+      100% {
+        transform: rotate(-1.5deg) scale(1.02);
+      }
+    }
+  `}</style>
+</div>
 
       {/* Webamp Container - Absolute positioned */}
       <div className={styles.webampContainer}>
@@ -191,8 +206,8 @@ export default function SelectionLobby() {
               <SideLinks isMobile={isMobile} />
             </div>
           </div>
-          
-{/* Sponsored Ad - Right Side */}
+    {/* Sponsored Ad - Right Side */}
+{/*
 {!isMobile && (
   <div className="fixed top-20 right-4 z-10" id="google-ad-window">
     <div className="window" style={{ width: 300 }}>
@@ -225,7 +240,8 @@ export default function SelectionLobby() {
     </div>
   </div>
 )}
-        </div>
+*/}
+ </div>
       </div>
 
       <SettingsPanel

@@ -202,26 +202,26 @@ body {
   display: inline-block;
   width: 15px; /* Adjust size as needed */
   height: 15px;
-  background-image: url("https://cdn.sekansh21.workers.dev/Auth/discord.png");
+  background-image: url("https://cdn.tinchat.online/Auth/discord.png");
   background-size: contain;
   background-repeat: no-repeat;
 }
 
 .discord-button .button-content::before {
-  background-image: url("https://cdn.sekansh21.workers.dev/Auth/discord.png");
+  background-image: url("https://cdn.tinchat.online/Auth/discord.png");
 }
 .google-button::before {
   content: "";
   display: inline-block;
   width: 15px; /* Adjust size as needed */
   height: 15px;
-  background-image: url("https://cdn.sekansh21.workers.dev/Auth/google.png");
+  background-image: url("https://cdn.tinchat.online/Auth/google.png");
   background-size: contain;
   background-repeat: no-repeat;
 }
 
 .google-button .button-content::before {
-  background-image: url("https://cdn.sekansh21.workers.dev/Auth/google.png");
+  background-image: url("https://cdn.tinchat.online/Auth/google.png");
 }
 
 
@@ -294,7 +294,7 @@ button.accent:hover, a.accent:hover {
 /* Styles for 98.css theme background and font */
 html.theme-98 body {
   font-family: "Pixelated MS Sans Serif", Tahoma, sans-serif; /* Ensure Win98 font */
-  background-image: url('https://cdn.sekansh21.workers.dev/wallpapers/stars.gif');
+  background-image: url('https://cdn.tinchat.online/wallpapers/stars.gif');
   background-repeat: repeat;
   background-attachment: fixed;
   background-size: 200px;

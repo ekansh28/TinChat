@@ -29,11 +29,11 @@ const isGifUrl = (url: string): boolean => {
 // Status indicator function with icons
 const getStatusIndicator = (status: string): { icon: string; text: string } => {
   switch (status) {
-    case 'online': return { icon: 'https://cdn.sekansh21.workers.dev/icons/online.png', text: 'Online' };
-    case 'idle': return { icon: 'https://cdn.sekansh21.workers.dev/icons/idle.png', text: 'Idle' };
-    case 'dnd': return { icon: 'https://cdn.sekansh21.workers.dev/icons/dnd.png', text: 'Do Not Disturb' };
-    case 'offline': return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Offline' };
-    default: return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Unknown' };
+    case 'online': return { icon: 'https://cdn.tinchat.online/icons/online.png', text: 'Online' };
+    case 'idle': return { icon: 'https://cdn.tinchat.online/icons/idle.png', text: 'Idle' };
+    case 'dnd': return { icon: 'https://cdn.tinchat.online/icons/dnd.png', text: 'Do Not Disturb' };
+    case 'offline': return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Offline' };
+    default: return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Unknown' };
   }
 };
 
@@ -373,7 +373,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                   style={{ width: '16px', height: '16px' }}
                   title={getStatusIndicator(profile.status || 'offline').text}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://cdn.sekansh21.workers.dev/icons/offline.png';
+                    (e.target as HTMLImageElement).src = 'https://cdn.tinchat.online/icons/offline.png';
                   }}
                 />
               </div>

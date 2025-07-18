@@ -33,16 +33,16 @@ const isGifUrl = (url: string): boolean => {
 const getStatusIndicator = (status: string, isOnline?: boolean): { icon: string; text: string } => {
   if (isOnline !== undefined) {
     return isOnline 
-      ? { icon: 'https://cdn.sekansh21.workers.dev/icons/online.png', text: 'Online' }
-      : { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Offline' };
+      ? { icon: 'https://cdn.tinchat.online/icons/online.png', text: 'Online' }
+      : { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Offline' };
   }
   
   switch (status) {
-    case 'online': return { icon: 'https://cdn.sekansh21.workers.dev/icons/online.png', text: 'Online' };
-    case 'idle': return { icon: 'https://cdn.sekansh21.workers.dev/icons/idle.png', text: 'Idle' };
-    case 'dnd': return { icon: 'https://cdn.sekansh21.workers.dev/icons/dnd.png', text: 'Do Not Disturb' };
-    case 'offline': return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Offline' };
-    default: return { icon: 'https://cdn.sekansh21.workers.dev/icons/offline.png', text: 'Unknown' };
+    case 'online': return { icon: 'https://cdn.tinchat.online/icons/online.png', text: 'Online' };
+    case 'idle': return { icon: 'https://cdn.tinchat.online/icons/idle.png', text: 'Idle' };
+    case 'dnd': return { icon: 'https://cdn.tinchat.online/icons/dnd.png', text: 'Do Not Disturb' };
+    case 'offline': return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Offline' };
+    default: return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Unknown' };
   }
 };
 
@@ -731,7 +731,7 @@ export function ProfilePopup({
                     title={statusInfo.text}
                     onError={(e) => {
                       // Fallback to default offline icon if status icon fails to load
-                      (e.target as HTMLImageElement).src = 'https://cdn.sekansh21.workers.dev/icons/offline.png';
+                      (e.target as HTMLImageElement).src = 'https://cdn.tinchat.online/icons/offline.png';
                     }}
                   />
                 </div>
@@ -798,7 +798,7 @@ export function ProfilePopup({
                     )
                   ) : buttonConfig.variant === 'primary' ? (
                     <img 
-                      src="https://cdn.sekansh21.workers.dev/icons/addfriend.svg" 
+                      src="https://cdn.tinchat.online/icons/addfriend.svg" 
                       alt="Add Friend" 
                       className="w-5 h-5"
                     />

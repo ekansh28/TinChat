@@ -26,7 +26,7 @@ export const LoadingState98: React.FC<{
   <div className="window-body">
     <div className="flex flex-col items-center justify-center p-8 space-y-4">
       <SimpleSpriteAnimator
-        src="https://cdn.sekansh21.workers.dev/animations/downloadsprite.png"
+        src="https://cdn.tinchat.online/animations/downloadsprite.png"
         frameCount={24}
         progress={progress ?? 0}
         columns={1}
