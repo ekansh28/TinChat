@@ -14,6 +14,8 @@
     "server:dev": "tsx watch server/index.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.848.0",
+    "@aws-sdk/s3-request-presigner": "^3.848.0",
     "@charlietango/use-element-size": "^2.2.0",
     "@clerk/backend": "^2.3.1",
     "@clerk/clerk-sdk-node": "^4.13.23",

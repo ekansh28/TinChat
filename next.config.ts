@@ -3,6 +3,17 @@ import {withSentryConfig} from '@sentry/nextjs';
 const nextConfig = {
   reactStrictMode: true,
 
+  // Add images configuration for external domains
+  images: {
+    domains: [
+      'img.clerk.com', // Clerk user avatars
+      'cdn.sekansh21.workers.dev', // Your existing CDN
+      'images.unsplash.com', // If you use Unsplash images
+      // Add your Cloudflare R2 domain when you set up custom domain
+      // 'files.yourdomain.com', 
+    ],
+  },
+
   async headers() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucnkpbrmjelpqopncqhc.supabase.co';
     const supabaseHostname = new URL(supabaseUrl).hostname;
