@@ -2,11 +2,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { ThumbsUp, ThumbsDown, Download, ArrowLeft, Calendar, MessageCircle, Share2 } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Download, ArrowLeft, Calendar, MessageCircle, Share2, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import AuthButtons from '@/components/AuthButtons';
 
 const supabase = createClient(
@@ -22,7 +22,7 @@ interface CSSFile {
   author_display_name: string;
   file_type: 'profile' | 'chat_theme';
   file_url: string;
-  preview_image_url?: string;
+  preview_image_urls?: string[] | null;
   tags: string[];
   likes_count: number;
   dislikes_count: number;
@@ -46,7 +46,6 @@ interface UserVote {
 
 export default function CSSFileDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { user, isLoaded } = useUser();
   const [cssFile, setCSSFile] = useState<CSSFile | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -56,6 +55,11 @@ export default function CSSFileDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [votingLoading, setVotingLoading] = useState(false);
   const [deletingComments, setDeletingComments] = useState<Set<string>>(new Set());
+  
+  // Carousel state
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [autoSlideInterval, setAutoSlideInterval] = useState<NodeJS.Timeout | null>(null);
+  const [imageLoadErrors, setImageLoadErrors] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (params.id) {
@@ -66,6 +70,32 @@ export default function CSSFileDetailPage() {
       }
     }
   }, [params.id, user]);
+
+  // Auto-slide effect
+  useEffect(() => {
+    const previewUrls = getPreviewUrls();
+    if (previewUrls.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentImageIndex((prev) => 
+          prev === previewUrls.length - 1 ? 0 : prev + 1
+        );
+      }, 5000);
+
+      setAutoSlideInterval(interval);
+      return () => clearInterval(interval);
+    }
+  }, [cssFile]);
+
+  // Helper function to get preview URLs
+  const getPreviewUrls = (): string[] => {
+    if (!cssFile) return [];
+    
+    if (cssFile.preview_image_urls && Array.isArray(cssFile.preview_image_urls) && cssFile.preview_image_urls.length > 0) {
+      return cssFile.preview_image_urls.filter(url => url && url.trim() !== '');
+    }
+    
+    return [];
+  };
 
   const fetchCSSFile = async () => {
     try {
@@ -217,7 +247,6 @@ export default function CSSFileDetailPage() {
   const handleDeleteComment = async (commentId: string) => {
     if (!user) return;
 
-    // No confirmation dialog - delete immediately
     setDeletingComments(prev => new Set([...prev, commentId]));
 
     try {
@@ -235,12 +264,10 @@ export default function CSSFileDetailPage() {
         throw new Error('Failed to delete comment');
       }
 
-      // Remove comment from local state
       setComments(prev => prev.filter(comment => comment.id !== commentId));
 
     } catch (error) {
       console.error('Error deleting comment:', error);
-      // Silently handle error - no alert
     } finally {
       setDeletingComments(prev => {
         const newSet = new Set(prev);
@@ -266,16 +293,22 @@ export default function CSSFileDetailPage() {
 
       const link = document.createElement('a');
       link.href = cssFile.file_url;
-      link.download = `${cssFile.title}.css`;
+      link.download = `${cssFile.title.replace(/[^a-zA-Z0-9]/g, '_')}.css`;
+      link.target = '_blank';
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
 
       setCSSFile(prev => prev ? { ...prev, download_count: prev.download_count + 1 } : null);
     } catch (error) {
       console.error('Error downloading file:', error);
       const link = document.createElement('a');
       link.href = cssFile.file_url;
-      link.download = `${cssFile.title}.css`;
+      link.download = `${cssFile.title.replace(/[^a-zA-Z0-9]/g, '_')}.css`;
+      link.target = '_blank';
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -290,6 +323,63 @@ export default function CSSFileDetailPage() {
     }
   };
 
+  // Carousel navigation
+  const goToPrevious = () => {
+    const previewUrls = getPreviewUrls();
+    if (!previewUrls.length) return;
+    
+    if (autoSlideInterval) {
+      clearInterval(autoSlideInterval);
+      setAutoSlideInterval(null);
+    }
+    
+    setCurrentImageIndex((prev) => 
+      prev === 0 ? previewUrls.length - 1 : prev - 1
+    );
+  };
+
+  const goToNext = () => {
+    const previewUrls = getPreviewUrls();
+    if (!previewUrls.length) return;
+    
+    if (autoSlideInterval) {
+      clearInterval(autoSlideInterval);
+      setAutoSlideInterval(null);
+    }
+    
+    setCurrentImageIndex((prev) => 
+      prev === previewUrls.length - 1 ? 0 : prev + 1
+    );
+  };
+
+  const goToSlide = (index: number) => {
+    if (autoSlideInterval) {
+      clearInterval(autoSlideInterval);
+      setAutoSlideInterval(null);
+    }
+    
+    setCurrentImageIndex(index);
+  };
+
+  // Helper function to check if URL is a video
+  const isVideoUrl = (url: string) => {
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov'];
+    return videoExtensions.some(ext => url.toLowerCase().includes(ext));
+  };
+
+  // Handle image load errors
+  const handleImageError = (index: number) => {
+    setImageLoadErrors(prev => new Set([...prev, index]));
+  };
+
+  const handleImageLoad = (index: number) => {
+    setImageLoadErrors(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(index);
+      return newSet;
+    });
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -300,7 +390,6 @@ export default function CSSFileDetailPage() {
 
   const canDeleteComment = (comment: Comment) => {
     if (!user) return false;
-    // User can delete their own comments or if they're the author of the CSS file
     return comment.user_id === user.id || cssFile?.author_id === user.id;
   };
 
@@ -337,7 +426,7 @@ export default function CSSFileDetailPage() {
 
   if (!isLoaded || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-white text-lg">Loading...</div>
       </div>
     );
@@ -345,7 +434,7 @@ export default function CSSFileDetailPage() {
 
   if (!cssFile) {
     return (
-      <div className="min-h-screenflex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center text-white">
           <h1 className="text-2xl font-bold mb-4">CSS File Not Found</h1>
           <Link href="/css-browser" className="text-purple-300 hover:text-purple-200">
@@ -356,8 +445,10 @@ export default function CSSFileDetailPage() {
     );
   }
 
+  const previewUrls = getPreviewUrls();
+
   return (
-    <div className="min-h-screen ">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
       {/* Header */}
       <div className="bg-black bg-opacity-50 border-b border-purple-500">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -398,14 +489,14 @@ export default function CSSFileDetailPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-6">
         {/* File Header */}
-        <div className="bg-black bg-opacity-40 rounded-lg p-6 mb-8 border border-purple-500">
-          <div className="flex items-start justify-between mb-4">
+        <div className="bg-black bg-opacity-40 rounded-lg p-4 mb-6 border border-purple-500">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-3xl font-bold text-white">{cssFile.title}</h1>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                <h1 className="text-2xl font-bold text-white">{cssFile.title}</h1>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   cssFile.file_type === 'profile' 
                     ? 'bg-blue-600 text-white' 
                     : 'bg-green-600 text-white'
@@ -423,11 +514,11 @@ export default function CSSFileDetailPage() {
                   {cssFile.author_display_name || cssFile.author_username}
                 </Link>
                 <span className="flex items-center space-x-1">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3 h-3" />
                   <span>{formatDate(cssFile.created_at)}</span>
                 </span>
                 <span className="flex items-center space-x-1">
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3 h-3" />
                   <span>{cssFile.download_count} downloads</span>
                 </span>
               </div>
@@ -436,14 +527,14 @@ export default function CSSFileDetailPage() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={handleDownload}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded flex items-center space-x-2"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded flex items-center space-x-2 text-sm"
               >
                 <Download className="w-4 h-4" />
                 <span>Download</span>
               </button>
               <button
                 onClick={handleShare}
-                className="border border-purple-500 text-purple-300 hover:bg-purple-800 hover:text-white px-4 py-2 rounded flex items-center space-x-2"
+                className="border border-purple-500 text-purple-300 hover:bg-purple-800 hover:text-white px-3 py-2 rounded flex items-center space-x-2 text-sm"
               >
                 <Share2 className="w-4 h-4" />
                 <span>Share</span>
@@ -453,11 +544,11 @@ export default function CSSFileDetailPage() {
 
           {/* Tags */}
           {cssFile.tags && cssFile.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="flex flex-wrap gap-1">
               {cssFile.tags.map(tag => (
                 <span
                   key={tag}
-                  className="bg-purple-800 text-purple-200 px-3 py-1 rounded-full text-sm"
+                  className="bg-purple-800 text-purple-200 px-2 py-1 rounded-full text-xs"
                 >
                   #{tag}
                 </span>
@@ -466,28 +557,134 @@ export default function CSSFileDetailPage() {
           )}
         </div>
 
-        {/* Preview Images */}
-        {cssFile.preview_image_url && (
-          <div className="bg-black bg-opacity-40 rounded-lg p-6 mb-8 border border-purple-500">
-            <h2 className="text-xl font-bold text-white mb-4">Preview</h2>
-            <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
-              <img
-                src={cssFile.preview_image_url}
-                alt={`${cssFile.title} preview`}
-                className="w-full h-full object-cover"
-              />
+        {/* Preview Carousel */}
+        {previewUrls.length > 0 ? (
+          <div className="bg-black bg-opacity-40 rounded-lg p-4 mb-6 border border-purple-500">
+            <h2 className="text-lg font-bold text-white mb-3">
+              Preview ({previewUrls.length} {previewUrls.length === 1 ? 'file' : 'files'})
+            </h2>
+            <div className="relative">
+              {/* Main preview container */}
+              <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
+                {/* Individual image container - only show current image */}
+                <div className="w-full h-full flex items-center justify-center">
+                  {!imageLoadErrors.has(currentImageIndex) ? (
+                    isVideoUrl(previewUrls[currentImageIndex]) ? (
+                      <video
+                        key={previewUrls[currentImageIndex]}
+                        src={previewUrls[currentImageIndex]}
+                        className="max-w-full max-h-full object-contain"
+                        controls
+                        muted
+                        autoPlay={false}
+                        onError={() => handleImageError(currentImageIndex)}
+                        onLoadedData={() => handleImageLoad(currentImageIndex)}
+                      />
+                    ) : (
+                      <img
+                        key={previewUrls[currentImageIndex]}
+                        src={previewUrls[currentImageIndex]}
+                        alt={`${cssFile.title} preview ${currentImageIndex + 1}`}
+                        className="max-w-full max-h-full object-contain"
+                        onError={() => handleImageError(currentImageIndex)}
+                        onLoad={() => handleImageLoad(currentImageIndex)}
+                      />
+                    )
+                  ) : (
+                    <div className="text-center text-purple-300">
+                      <div className="text-4xl mb-2">❌</div>
+                      <div className="text-sm">Failed to load preview</div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Navigation arrows (only show if multiple images) */}
+                {previewUrls.length > 1 && (
+                  <>
+                    <button
+                      onClick={goToPrevious}
+                      className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white hover:text-purple-300 transition-colors p-2 hover:scale-110 transform-gpu"
+                      style={{ background: 'none', border: 'none' }}
+                    >
+                      <ChevronLeft className="w-8 h-8 drop-shadow-lg" />
+                    </button>
+                    <button
+                      onClick={goToNext}
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white hover:text-purple-300 transition-colors p-2 hover:scale-110 transform-gpu"
+                      style={{ background: 'none', border: 'none' }}
+                    >
+                      <ChevronRight className="w-8 h-8 drop-shadow-lg" />
+                    </button>
+                  </>
+                )}
+                
+                {/* Image counter */}
+                {previewUrls.length > 1 && (
+                  <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
+                    {currentImageIndex + 1} / {previewUrls.length}
+                  </div>
+                )}
+              </div>
+              
+              {/* Thumbnail navigation (only show if multiple images) */}
+              {previewUrls.length > 1 && (
+                <div className="flex space-x-2 mt-3 overflow-x-auto pb-2">
+                  {previewUrls.map((url, index) => (
+                    <div
+                      key={index}
+                      onClick={() => goToSlide(index)}
+                      className={`flex-shrink-0 w-16 h-12 rounded overflow-hidden cursor-pointer transition-all duration-300 flex items-center justify-center bg-gray-800 ${
+                        index === currentImageIndex 
+                          ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-gray-800' 
+                          : 'hover:ring-1 hover:ring-purple-300 hover:ring-offset-1 hover:ring-offset-gray-800'
+                      } ${imageLoadErrors.has(index) ? 'ring-2 ring-red-500' : ''}`}
+                    >
+                      {imageLoadErrors.has(index) ? (
+                        <div className="text-red-400">❌</div>
+                      ) : isVideoUrl(url) ? (
+                        <div className="relative w-full h-full flex items-center justify-center">
+                          <video
+                            src={url}
+                            className="max-w-full max-h-full object-contain"
+                            muted
+                          />
+                          <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
+                            <Play className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={url}
+                          alt={`Thumbnail ${index + 1}`}
+                          className="max-w-full max-h-full object-contain"
+                          onError={() => handleImageError(index)}
+                          onLoad={() => handleImageLoad(index)}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-black bg-opacity-40 rounded-lg p-4 mb-6 border border-purple-500">
+            <h2 className="text-lg font-bold text-white mb-3">Preview</h2>
+            <div className="text-center text-purple-300 py-6">
+              <div className="text-3xl mb-2">🖼️</div>
+              <p className="text-sm">No preview images available for this CSS file</p>
             </div>
           </div>
         )}
 
         {/* Vote Section */}
-        <div className="bg-black bg-opacity-40 rounded-lg p-6 mb-8 border border-purple-500">
-          <h2 className="text-xl font-bold text-white mb-4">Rate this CSS</h2>
+        <div className="bg-black bg-opacity-40 rounded-lg p-4 mb-6 border border-purple-500">
+          <h2 className="text-lg font-bold text-white mb-3">Rate this CSS</h2>
           <div className="flex items-center space-x-4">
             <button
               onClick={() => handleVote('like')}
               disabled={votingLoading || !user}
-              className={`flex items-center space-x-2 px-4 py-2 rounded transition-colors ${
+              className={`flex items-center space-x-2 px-3 py-2 rounded transition-colors text-sm ${
                 userVote?.like_type === 'like'
                   ? 'bg-green-600 hover:bg-green-700 text-white'
                   : 'bg-transparent border border-green-500 text-green-400 hover:bg-green-800'
@@ -500,7 +697,7 @@ export default function CSSFileDetailPage() {
             <button
               onClick={() => handleVote('dislike')}
               disabled={votingLoading || !user}
-              className={`flex items-center space-x-2 px-4 py-2 rounded transition-colors ${
+              className={`flex items-center space-x-2 px-3 py-2 rounded transition-colors text-sm ${
                 userVote?.like_type === 'dislike'
                   ? 'bg-red-600 hover:bg-red-700 text-white'
                   : 'bg-transparent border border-red-500 text-red-400 hover:bg-red-800'
@@ -517,39 +714,39 @@ export default function CSSFileDetailPage() {
         </div>
 
         {/* Comments Section */}
-        <div className="bg-black bg-opacity-40 rounded-lg p-6 border border-purple-500">
-          <div className="flex items-center space-x-2 mb-6">
-            <MessageCircle className="w-5 h-5 text-purple-300" />
-            <h2 className="text-xl font-bold text-white">Comments ({comments.length})</h2>
+        <div className="bg-black bg-opacity-40 rounded-lg p-4 border border-purple-500">
+          <div className="flex items-center space-x-2 mb-4">
+            <MessageCircle className="w-4 h-4 text-purple-300" />
+            <h2 className="text-lg font-bold text-white">Comments ({comments.length})</h2>
           </div>
 
           {/* Add Comment Form */}
           {user ? (
-            <form onSubmit={handleComment} className="mb-6">
+            <form onSubmit={handleComment} className="mb-4">
               <div className="flex items-start space-x-3">
                 <UserAvatar 
                   imageUrl={user.imageUrl}
                   displayName={user.fullName}
                   username={user.username}
-                  size={40}
+                  size={32}
                 />
                 <div className="flex-1">
                   <textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
                     placeholder="Write a comment..."
-                    className="w-full bg-black bg-opacity-30 text-white placeholder-purple-300 border border-purple-500 rounded p-3 resize-none focus:border-purple-400 focus:outline-none"
+                    className="w-full bg-black bg-opacity-30 text-white placeholder-purple-300 border border-purple-500 rounded p-3 resize-none focus:border-purple-400 focus:outline-none text-sm"
                     rows={3}
                     maxLength={500}
                   />
                   <div className="flex justify-between items-center mt-2">
-                    <span className="text-purple-300 text-sm">
+                    <span className="text-purple-300 text-xs">
                       {commentText.length}/500
                     </span>
                     <button
                       type="submit"
                       disabled={submittingComment || !commentText.trim() || commentText.length > 500}
-                      className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white px-4 py-2 rounded"
+                      className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white px-3 py-2 rounded text-sm"
                     >
                       {submittingComment ? 'Posting...' : 'Post Comment'}
                     </button>
@@ -558,46 +755,46 @@ export default function CSSFileDetailPage() {
               </div>
             </form>
           ) : (
-            <div className="mb-6 text-center text-purple-300 p-4 bg-black bg-opacity-30 rounded-lg">
-              <p>Please sign in to leave a comment</p>
+            <div className="mb-4 text-center text-purple-300 p-3 bg-black bg-opacity-30 rounded-lg">
+              <p className="text-sm">Please sign in to leave a comment</p>
             </div>
           )}
 
           {/* Comments List */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             {comments.length === 0 ? (
-              <div className="text-center text-purple-300 py-8">
-                <p>No comments yet. Be the first to comment!</p>
+              <div className="text-center text-purple-300 py-6">
+                <p className="text-sm">No comments yet. Be the first to comment!</p>
               </div>
             ) : (
               comments.map(comment => (
-                <div key={comment.id} className="bg-black bg-opacity-30 rounded-lg p-4">
+                <div key={comment.id} className="bg-black bg-opacity-30 rounded-lg p-3">
                   <div className="flex items-start space-x-3">
                     <UserAvatar 
                       imageUrl={comment.profile_image_url}
                       displayName={comment.display_name}
                       username={comment.username}
-                      size={32}
+                      size={28}
                     />
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-1">
                         <Link
                           href={`/${comment.username}`}
-                          className="text-purple-300 font-medium hover:text-purple-200"
+                          className="text-purple-300 font-medium hover:text-purple-200 text-sm"
                         >
                           {comment.display_name || comment.username}
                         </Link>
-                        <span className="text-purple-400 text-sm">
+                        <span className="text-purple-400 text-xs">
                           {formatDate(comment.created_at)}
                         </span>
                         
                         {/* Delete option next to timestamp - as clickable text, not button */}
                         {canDeleteComment(comment) && (
                           <>
-                            <span className="text-purple-400 text-sm">•</span>
+                            <span className="text-purple-400 text-xs">•</span>
                             <span
                               onClick={() => handleDeleteComment(comment.id)}
-                              className={`text-white text-sm underline cursor-pointer hover:text-red-300 transition-colors ${
+                              className={`text-white text-xs underline cursor-pointer hover:text-red-300 transition-colors ${
                                 deletingComments.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''
                               }`}
                               style={{ 
