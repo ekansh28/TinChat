@@ -1,9 +1,10 @@
-// server/services/FriendsChatService.ts - FIXED VERSION WITH REDIS INTEGRATION
+// server/services/FriendsChatService.ts - COMPLETELY FIXED VERSION
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RedisService } from './RedisService';
 import { ProfileManager } from '../managers/profile/ProfileManager';
-import { FriendsChatModule } from './redis/FriendsChatModule';
 import { logger } from '../utils/logger';
+
+// ============ INTERFACES ============
 
 export interface FriendChatMessage {
   id: string;
@@ -12,6 +13,8 @@ export interface FriendChatMessage {
   message: string;
   timestamp: number;
   read: boolean;
+  messageType?: 'text' | 'image' | 'file' | 'system';
+  metadata?: Record<string, any>;
   senderProfile?: {
     username: string;
     displayName?: string;
@@ -26,6 +29,7 @@ export interface FriendChatRoom {
   lastActivity: number;
   messages: FriendChatMessage[];
   unreadCount: { [userId: string]: number };
+  isActive: boolean;
 }
 
 export interface TypingStatus {
@@ -35,23 +39,42 @@ export interface TypingStatus {
   timestamp: number;
 }
 
+export interface ChatPresence {
+  userId: string;
+  isOnline: boolean;
+  lastSeen: number;
+  currentlyTyping: string[]; // friend IDs user is typing to
+}
+
+// ============ MAIN SERVICE CLASS ============
+
 export class FriendsChatService {
   private io: SocketIOServer;
   private redisService: RedisService | null;
   private profileManager: ProfileManager;
-  private friendsChatModule: FriendsChatModule | null = null;
   
-  // In-memory cache for active chat rooms (Redis is primary storage)
+  // In-memory stores (Redis is primary, these are fallback)
   private activeChatRooms = new Map<string, FriendChatRoom>();
   private typingStatuses = new Map<string, TypingStatus>();
+  private userPresence = new Map<string, ChatPresence>();
+  private connectedUsers = new Map<string, Set<string>>(); // userId -> Set of socket IDs
   
-  // Cache TTL configurations
-  private readonly TYPING_TTL = 5; // 5 seconds
-  private readonly MAX_MESSAGES_PER_CHAT = 1000; // Limit messages per chat
-  private readonly MESSAGE_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+  // Configuration
+  private readonly CONFIG = {
+    TYPING_TTL: 5, // seconds
+    MAX_MESSAGES_PER_CHAT: 1000,
+    MESSAGE_CLEANUP_INTERVAL: 60 * 60 * 1000, // 1 hour
+    PRESENCE_UPDATE_INTERVAL: 30 * 1000, // 30 seconds
+    MAX_MESSAGE_LENGTH: 2000,
+    RATE_LIMIT_MESSAGES_PER_MINUTE: 60
+  };
 
-  // Add cleanup interval tracking
+  // Cleanup intervals
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private presenceInterval: NodeJS.Timeout | null = null;
+
+  // Rate limiting
+  private rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
   constructor(
     io: SocketIOServer, 
@@ -62,50 +85,35 @@ export class FriendsChatService {
     this.profileManager = profileManager;
     this.redisService = redisService;
     
-    // ✅ FIXED: Initialize Redis chat module if Redis is available
-    if (this.redisService) {
-      try {
-        // Access the Redis cache through the RedisService
-        const redisCache = (this.redisService as any).cache;
-        if (redisCache) {
-          this.friendsChatModule = new FriendsChatModule(redisCache);
-          logger.info('✅ FriendsChatService initialized with Redis persistence');
-        } else {
-          logger.warn('⚠️ Redis cache not available, using memory-only mode');
-        }
-      } catch (error) {
-        logger.error('❌ Failed to initialize FriendsChatModule:', error);
-        logger.warn('⚠️ Falling back to memory-only mode');
-      }
-    } else {
-      logger.info('💬 FriendsChatService initialized in memory-only mode');
-    }
-    
     this.setupSocketHandlers();
-    this.startMessageCleanup();
+    this.startBackgroundTasks();
     
-    logger.info('💬 FriendsChatService initialized with enhanced Redis integration');
+    logger.info('💬 FriendsChatService initialized with enhanced features');
   }
 
-  // Setup socket.io event handlers for friends chat
+  // ============ SOCKET SETUP ============
+
   private setupSocketHandlers(): void {
     this.io.on('connection', (socket: Socket) => {
-      // Join user to their personal room for receiving messages
+      logger.debug(`🔌 Socket connected: ${socket.id}`);
+
+      // Store socket user info when they join
       socket.on('friends_chat_join', async (data: { userId: string; authId: string }) => {
         await this.handleUserJoin(socket, data);
       });
 
-      // Send message to friend
+      // Message handling
       socket.on('friends_chat_send', async (data: {
         senderId: string;
         receiverId: string;
         message: string;
         authId: string;
+        messageType?: string;
       }) => {
         await this.handleSendMessage(socket, data);
       });
 
-      // Mark messages as read
+      // Message read status
       socket.on('friends_chat_mark_read', async (data: {
         userId: string;
         friendId: string;
@@ -129,17 +137,18 @@ export class FriendsChatService {
         await this.handleTypingStop(socket, data);
       });
 
-      // Get chat history
+      // Chat history
       socket.on('friends_chat_get_history', async (data: {
         userId: string;
         friendId: string;
         limit?: number;
         offset?: number;
+        beforeTimestamp?: number;
       }) => {
         await this.handleGetChatHistory(socket, data);
       });
 
-      // Get last messages for friends list
+      // Batch operations
       socket.on('friends_chat_get_last_messages', async (data: {
         userId: string;
         friendIds: string[];
@@ -147,14 +156,35 @@ export class FriendsChatService {
         await this.handleGetLastMessages(socket, data);
       });
 
-      // Leave chat room on disconnect
-      socket.on('disconnect', () => {
-        this.handleUserDisconnect(socket);
+      socket.on('friends_chat_get_unread_counts', async (data: {
+        userId: string;
+      }) => {
+        await this.handleGetUnreadCounts(socket, data);
+      });
+
+      // Presence management
+      socket.on('friends_chat_update_presence', async (data: {
+        userId: string;
+        isOnline: boolean;
+        status?: string;
+      }) => {
+        await this.handleUpdatePresence(socket, data);
+      });
+
+      // Disconnect handling
+      socket.on('disconnect', (reason) => {
+        this.handleUserDisconnect(socket, reason);
+      });
+
+      // Error handling
+      socket.on('error', (error) => {
+        logger.error(`🔌 Socket error for ${socket.id}:`, error);
       });
     });
   }
 
-  // Handle user joining their personal chat room
+  // ============ EVENT HANDLERS ============
+
   private async handleUserJoin(socket: Socket, data: { userId: string; authId: string }): Promise<void> {
     try {
       const { userId, authId } = data;
@@ -164,15 +194,31 @@ export class FriendsChatService {
         return;
       }
 
-      // Join user to their personal room for receiving friend messages
+      // Validate user exists
+      const userProfile = await this.profileManager.fetchUserProfile(authId);
+      if (!userProfile) {
+        socket.emit('friends_chat_error', { message: 'User profile not found' });
+        return;
+      }
+
+      // Join user to their personal room
       const userRoom = `friends_user_${userId}`;
-      socket.join(userRoom);
+      await socket.join(userRoom);
       
-      // Store user mapping for this socket
+      // Store user mapping
       (socket as any).friendsChatUserId = userId;
       (socket as any).friendsChatAuthId = authId;
       
-      logger.debug(`👤 User ${userId} joined friends chat`);
+      // Track connected users
+      if (!this.connectedUsers.has(userId)) {
+        this.connectedUsers.set(userId, new Set());
+      }
+      this.connectedUsers.get(userId)!.add(socket.id);
+
+      // Update presence
+      await this.updateUserPresence(userId, true);
+      
+      logger.debug(`👤 User ${userId} joined friends chat (socket: ${socket.id})`);
       
       // Send confirmation
       socket.emit('friends_chat_joined', {
@@ -181,7 +227,7 @@ export class FriendsChatService {
         timestamp: Date.now()
       });
       
-      // Send any unread message counts
+      // Send initial data
       await this.sendUnreadCounts(socket, userId);
       
     } catch (error) {
@@ -190,35 +236,43 @@ export class FriendsChatService {
     }
   }
 
-  // Handle sending a message to a friend
   private async handleSendMessage(socket: Socket, data: {
     senderId: string;
     receiverId: string;
     message: string;
     authId: string;
+    messageType?: string;
   }): Promise<void> {
     try {
-      const { senderId, receiverId, message, authId } = data;
+      const { senderId, receiverId, message, authId, messageType = 'text' } = data;
       
-      // Validate input
+      // Validation
       if (!senderId || !receiverId || !message?.trim() || !authId) {
         socket.emit('friends_chat_error', { message: 'All fields are required' });
         return;
       }
 
-      if (message.trim().length > 2000) {
-        socket.emit('friends_chat_error', { message: 'Message too long (max 2000 characters)' });
+      if (message.trim().length > this.CONFIG.MAX_MESSAGE_LENGTH) {
+        socket.emit('friends_chat_error', { 
+          message: `Message too long (max ${this.CONFIG.MAX_MESSAGE_LENGTH} characters)` 
+        });
         return;
       }
 
-      // Check if users are friends
+      // Rate limiting
+      if (!this.checkRateLimit(senderId, this.CONFIG.RATE_LIMIT_MESSAGES_PER_MINUTE)) {
+        socket.emit('friends_chat_error', { message: 'Rate limit exceeded' });
+        return;
+      }
+
+      // Check friendship status
       const friendshipStatus = await this.profileManager.getFriendshipStatus(senderId, receiverId);
       if (friendshipStatus.status !== 'friends') {
         socket.emit('friends_chat_error', { message: 'You can only message friends' });
         return;
       }
 
-      // Get sender profile for message display
+      // Get sender profile
       const senderProfile = await this.profileManager.fetchUserProfile(authId);
       
       // Create message
@@ -229,6 +283,7 @@ export class FriendsChatService {
         message: message.trim(),
         timestamp: Date.now(),
         read: false,
+        messageType: messageType as any,
         senderProfile: senderProfile ? {
           username: senderProfile.username || 'Unknown',
           displayName: senderProfile.display_name,
@@ -237,10 +292,10 @@ export class FriendsChatService {
         } : undefined
       };
 
-      // ✅ FIXED: Store message using Redis if available, fallback to memory
+      // Store message
       await this.storeMessage(chatMessage);
       
-      // Send message to both users
+      // Send to both users
       const senderRoom = `friends_user_${senderId}`;
       const receiverRoom = `friends_user_${receiverId}`;
       
@@ -256,8 +311,11 @@ export class FriendsChatService {
         chatId: this.getChatId(senderId, receiverId)
       });
       
-      // ✅ FIXED: Update last message cache using Redis if available
+      // Update last message cache
       await this.updateLastMessage(senderId, receiverId, chatMessage);
+      
+      // Stop typing indicator for sender
+      await this.handleTypingStop(socket, { userId: senderId, friendId: receiverId });
       
       logger.debug(`💬 Message sent: ${senderId} -> ${receiverId}`);
       
@@ -267,7 +325,6 @@ export class FriendsChatService {
     }
   }
 
-  // Handle marking messages as read
   private async handleMarkMessagesRead(socket: Socket, data: {
     userId: string;
     friendId: string;
@@ -281,7 +338,7 @@ export class FriendsChatService {
         return;
       }
 
-      // ✅ FIXED: Mark messages as read using Redis if available
+      // Mark messages as read
       await this.markMessagesAsRead(userId, friendId, messageIds);
       
       // Notify sender that messages were read
@@ -292,7 +349,7 @@ export class FriendsChatService {
         chatId: this.getChatId(userId, friendId)
       });
       
-      // Send updated unread count to reader
+      // Send updated unread count
       await this.sendUnreadCounts(socket, userId);
       
       logger.debug(`📖 Messages marked as read: ${userId} read ${messageIds.length} messages from ${friendId}`);
@@ -303,7 +360,6 @@ export class FriendsChatService {
     }
   }
 
-  // Handle typing start
   private async handleTypingStart(socket: Socket, data: {
     userId: string;
     friendId: string;
@@ -325,9 +381,14 @@ export class FriendsChatService {
       
       this.typingStatuses.set(typingKey, typingStatus);
       
-      // ✅ FIXED: Cache in Redis with short TTL if available
-      if (this.friendsChatModule) {
-        await this.friendsChatModule.setTypingStatus(userId, friendId, true);
+      // Cache in Redis if available
+      if (this.redisService) {
+        try {
+          const redisInstance = this.redisService.getRedisInstance();
+          await redisInstance.setex(`typing:${typingKey}`, this.CONFIG.TYPING_TTL, JSON.stringify(typingStatus));
+        } catch (error) {
+          logger.debug('Failed to cache typing status:', error);
+        }
       }
       
       // Notify friend
@@ -338,17 +399,16 @@ export class FriendsChatService {
         timestamp: Date.now()
       });
       
-      // Auto-stop typing after 5 seconds
+      // Auto-stop typing after configured time
       setTimeout(() => {
         this.handleTypingStop(socket, { userId, friendId });
-      }, 5000);
+      }, this.CONFIG.TYPING_TTL * 1000);
       
     } catch (error) {
       logger.error('❌ Error handling typing start:', error);
     }
   }
 
-  // Handle typing stop
   private async handleTypingStop(socket: Socket, data: {
     userId: string;
     friendId: string;
@@ -363,9 +423,14 @@ export class FriendsChatService {
       const typingKey = `${userId}_to_${friendId}`;
       this.typingStatuses.delete(typingKey);
       
-      // ✅ FIXED: Remove from Redis if available
-      if (this.friendsChatModule) {
-        await this.friendsChatModule.setTypingStatus(userId, friendId, false);
+      // Remove from Redis if available
+      if (this.redisService) {
+        try {
+          const redisInstance = this.redisService.getRedisInstance();
+          await redisInstance.del(`typing:${typingKey}`);
+        } catch (error) {
+          logger.debug('Failed to remove typing status from cache:', error);
+        }
       }
       
       // Notify friend
@@ -381,40 +446,44 @@ export class FriendsChatService {
     }
   }
 
-  // Handle getting chat history
   private async handleGetChatHistory(socket: Socket, data: {
     userId: string;
     friendId: string;
     limit?: number;
     offset?: number;
+    beforeTimestamp?: number;
   }): Promise<void> {
     try {
-      const { userId, friendId, limit = 50, offset = 0 } = data;
+      const { userId, friendId, limit = 50, offset = 0, beforeTimestamp } = data;
       
       if (!userId || !friendId) {
         socket.emit('friends_chat_error', { message: 'User ID and Friend ID are required' });
         return;
       }
 
-      // Check if users are friends
+      // Validate limit
+      const validLimit = Math.min(Math.max(limit, 1), 100);
+
+      // Check friendship status
       const friendshipStatus = await this.profileManager.getFriendshipStatus(userId, friendId);
       if (friendshipStatus.status !== 'friends') {
         socket.emit('friends_chat_error', { message: 'You can only view chat history with friends' });
         return;
       }
 
-      // ✅ FIXED: Get messages from Redis if available, fallback to memory
-      const messages = await this.getChatHistory(userId, friendId, limit, offset);
+      // Get messages
+      const result = await this.getChatHistory(userId, friendId, validLimit, offset, beforeTimestamp);
       
       socket.emit('friends_chat_history', {
         chatId: this.getChatId(userId, friendId),
-        messages: messages.messages,
-        hasMore: messages.hasMore,
-        offset: offset + messages.messages.length,
-        totalCount: messages.totalCount
+        messages: result.messages,
+        hasMore: result.hasMore,
+        offset: offset + result.messages.length,
+        totalCount: result.totalCount,
+        beforeTimestamp
       });
       
-      logger.debug(`📚 Chat history sent: ${userId} <-> ${friendId} (${messages.messages.length} messages)`);
+      logger.debug(`📚 Chat history sent: ${userId} <-> ${friendId} (${result.messages.length} messages)`);
       
     } catch (error) {
       logger.error('❌ Error getting chat history:', error);
@@ -422,7 +491,6 @@ export class FriendsChatService {
     }
   }
 
-  // Handle getting last messages for friends list
   private async handleGetLastMessages(socket: Socket, data: {
     userId: string;
     friendIds: string[];
@@ -435,7 +503,11 @@ export class FriendsChatService {
         return;
       }
 
-      // ✅ FIXED: Get last messages using Redis if available
+      if (friendIds.length > 50) {
+        socket.emit('friends_chat_error', { message: 'Too many friend IDs (max 50)' });
+        return;
+      }
+
       const lastMessages = await this.getLastMessages(userId, friendIds);
       
       socket.emit('friends_chat_last_messages', {
@@ -451,11 +523,61 @@ export class FriendsChatService {
     }
   }
 
-  // Handle user disconnect
-  private handleUserDisconnect(socket: Socket): void {
+  private async handleGetUnreadCounts(socket: Socket, data: {
+    userId: string;
+  }): Promise<void> {
+    try {
+      const { userId } = data;
+      
+      if (!userId) {
+        socket.emit('friends_chat_error', { message: 'User ID is required' });
+        return;
+      }
+
+      await this.sendUnreadCounts(socket, userId);
+      
+    } catch (error) {
+      logger.error('❌ Error getting unread counts:', error);
+      socket.emit('friends_chat_error', { message: 'Failed to get unread counts' });
+    }
+  }
+
+  private async handleUpdatePresence(socket: Socket, data: {
+    userId: string;
+    isOnline: boolean;
+    status?: string;
+  }): Promise<void> {
+    try {
+      const { userId, isOnline, status } = data;
+      
+      if (!userId) {
+        return;
+      }
+
+      await this.updateUserPresence(userId, isOnline, status);
+      
+      logger.debug(`👤 Presence updated for ${userId}: ${isOnline ? 'online' : 'offline'}`);
+      
+    } catch (error) {
+      logger.error('❌ Error updating presence:', error);
+    }
+  }
+
+  private handleUserDisconnect(socket: Socket, reason: string): void {
     const userId = (socket as any).friendsChatUserId;
     
     if (userId) {
+      // Remove from connected users
+      const userSockets = this.connectedUsers.get(userId);
+      if (userSockets) {
+        userSockets.delete(socket.id);
+        if (userSockets.size === 0) {
+          this.connectedUsers.delete(userId);
+          // User has no more connections, mark as offline
+          this.updateUserPresence(userId, false);
+        }
+      }
+
       // Clear any typing statuses for this user
       for (const [key, typing] of this.typingStatuses.entries()) {
         if (typing.userId === userId) {
@@ -471,20 +593,20 @@ export class FriendsChatService {
         }
       }
       
-      logger.debug(`👋 User ${userId} disconnected from friends chat`);
+      logger.debug(`👋 User ${userId} disconnected from friends chat (reason: ${reason})`);
     }
   }
 
-  // ✅ FIXED: Store message with Redis integration
+  // ============ MESSAGE STORAGE ============
+
   private async storeMessage(message: FriendChatMessage): Promise<void> {
     try {
       // Store in Redis if available
-      if (this.friendsChatModule) {
-        const success = await this.friendsChatModule.storeChatMessage(message);
+      if (this.redisService) {
+        const success = await this.storeMessageInRedis(message);
         if (success) {
           logger.debug(`📋 Message stored in Redis: ${message.senderId} -> ${message.receiverId}`);
         } else {
-          logger.warn(`⚠️ Failed to store message in Redis, using memory fallback`);
           this.updateMemoryCache(this.getChatId(message.senderId, message.receiverId), message);
         }
       } else {
@@ -493,12 +615,42 @@ export class FriendsChatService {
       }
     } catch (error) {
       logger.error('❌ Error storing message:', error);
-      // Fallback to memory storage
+      // Always fallback to memory
       this.updateMemoryCache(this.getChatId(message.senderId, message.receiverId), message);
     }
   }
 
-  // Update memory cache with new message (fallback)
+  private async storeMessageInRedis(message: FriendChatMessage): Promise<boolean> {
+    if (!this.redisService) return false;
+
+    try {
+      const redisInstance = this.redisService.getRedisInstance();
+      const chatId = this.getChatId(message.senderId, message.receiverId);
+      
+      // Store message in a sorted set by timestamp
+      await redisInstance.zadd(
+        `chat_messages:${chatId}`,
+        message.timestamp,
+        JSON.stringify(message)
+      );
+      
+      // Keep only recent messages (cleanup old ones)
+      await redisInstance.zremrangebyrank(
+        `chat_messages:${chatId}`,
+        0,
+        -(this.CONFIG.MAX_MESSAGES_PER_CHAT + 1)
+      );
+      
+      // Set expiry on the chat (30 days)
+      await redisInstance.expire(`chat_messages:${chatId}`, 30 * 24 * 60 * 60);
+      
+      return true;
+    } catch (error) {
+      logger.error('Failed to store message in Redis:', error);
+      return false;
+    }
+  }
+
   private updateMemoryCache(chatId: string, message: FriendChatMessage): void {
     let room = this.activeChatRooms.get(chatId);
     
@@ -508,7 +660,8 @@ export class FriendsChatService {
         participants: [message.senderId, message.receiverId],
         lastActivity: Date.now(),
         messages: [],
-        unreadCount: {}
+        unreadCount: {},
+        isActive: true
       };
       this.activeChatRooms.set(chatId, room);
     }
@@ -525,75 +678,31 @@ export class FriendsChatService {
     room.unreadCount[message.receiverId] = (room.unreadCount[message.receiverId] || 0) + 1;
   }
 
-  // ✅ FIXED: Mark messages as read with Redis integration
-  private async markMessagesAsRead(userId: string, friendId: string, messageIds: string[]): Promise<void> {
-    try {
-      if (this.friendsChatModule) {
-        const success = await this.friendsChatModule.markMessagesAsRead(userId, friendId, messageIds);
-        if (!success) {
-          logger.warn(`⚠️ Failed to mark messages as read in Redis, using memory fallback`);
-          this.markMessagesAsReadInMemory(userId, friendId, messageIds);
-        }
-      } else {
-        // Fallback to memory
-        this.markMessagesAsReadInMemory(userId, friendId, messageIds);
-      }
-    } catch (error) {
-      logger.error('❌ Error marking messages as read:', error);
-      // Fallback to memory
-      this.markMessagesAsReadInMemory(userId, friendId, messageIds);
-    }
-  }
+  // ============ MESSAGE RETRIEVAL ============
 
-  // Mark messages as read in memory (fallback)
-  private markMessagesAsReadInMemory(userId: string, friendId: string, messageIds: string[]): void {
-    const chatId = this.getChatId(userId, friendId);
-    const room = this.activeChatRooms.get(chatId);
-    if (room) {
-      room.unreadCount[userId] = 0;
-    }
-  }
-
-  // ✅ FIXED: Get chat history with Redis integration
   private async getChatHistory(
     userId: string, 
     friendId: string, 
     limit: number, 
-    offset: number
+    offset: number,
+    beforeTimestamp?: number
   ): Promise<{
     messages: FriendChatMessage[];
     hasMore: boolean;
     totalCount: number;
   }> {
     try {
-      if (this.friendsChatModule) {
-        const result = await this.friendsChatModule.getChatHistory(userId, friendId, limit, offset);
+      // Try Redis first
+      if (this.redisService) {
+        const result = await this.getChatHistoryFromRedis(userId, friendId, limit, offset, beforeTimestamp);
         if (result.messages.length > 0 || offset === 0) {
           return result;
         }
       }
       
       // Fallback to memory cache
-      const chatId = this.getChatId(userId, friendId);
-      const room = this.activeChatRooms.get(chatId);
+      return this.getChatHistoryFromMemory(userId, friendId, limit, offset, beforeTimestamp);
       
-      if (room) {
-        const start = Math.max(0, room.messages.length - offset - limit);
-        const end = room.messages.length - offset;
-        const messages = room.messages.slice(start, end);
-        
-        return {
-          messages,
-          hasMore: start > 0,
-          totalCount: room.messages.length
-        };
-      }
-      
-      return {
-        messages: [],
-        hasMore: false,
-        totalCount: 0
-      };
     } catch (error) {
       logger.error('❌ Error getting chat history:', error);
       return {
@@ -604,57 +713,248 @@ export class FriendsChatService {
     }
   }
 
-  // ✅ FIXED: Get last messages with Redis integration
-  private async getLastMessages(userId: string, friendIds: string[]): Promise<Record<string, FriendChatMessage | null>> {
+  private async getChatHistoryFromRedis(
+    userId: string, 
+    friendId: string, 
+    limit: number, 
+    offset: number,
+    beforeTimestamp?: number
+  ): Promise<{
+    messages: FriendChatMessage[];
+    hasMore: boolean;
+    totalCount: number;
+  }> {
+    if (!this.redisService) {
+      return { messages: [], hasMore: false, totalCount: 0 };
+    }
+
     try {
-      if (this.friendsChatModule) {
-        const result = await this.friendsChatModule.getLastMessages(userId, friendIds);
-        if (Object.keys(result).length > 0) {
-          return result;
-        }
-      }
+      const redisInstance = this.redisService.getRedisInstance();
+      const chatId = this.getChatId(userId, friendId);
       
-      // Fallback to memory cache
-      const results: Record<string, FriendChatMessage | null> = {};
+      // Get total count
+      const totalCount = await redisInstance.zcard(`chat_messages:${chatId}`);
       
-      for (const friendId of friendIds) {
-        const chatId = this.getChatId(userId, friendId);
-        const room = this.activeChatRooms.get(chatId);
-        
-        if (room && room.messages.length > 0) {
-          results[friendId] = room.messages[room.messages.length - 1];
-        } else {
-          results[friendId] = null;
-        }
-      }
+      // Build query parameters
+      let maxScore = beforeTimestamp || '+inf';
+      let minScore = '-inf';
       
-      return results;
+      // Get messages in reverse order (newest first)
+      const messageStrings = await redisInstance.zrevrangebyscore(
+        `chat_messages:${chatId}`,
+        maxScore,
+        minScore,
+        'LIMIT',
+        offset,
+        limit
+      );
+      
+      const messages = messageStrings
+        .map(str => {
+          try {
+            return JSON.parse(str) as FriendChatMessage;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean) as FriendChatMessage[];
+      
+      // Reverse to get chronological order
+      messages.reverse();
+      
+      const hasMore = offset + messages.length < totalCount;
+      
+      return {
+        messages,
+        hasMore,
+        totalCount
+      };
     } catch (error) {
-      logger.error('❌ Error getting last messages:', error);
-      return {};
+      logger.error('Failed to get chat history from Redis:', error);
+      return { messages: [], hasMore: false, totalCount: 0 };
     }
   }
 
-  // ✅ FIXED: Update last message with Redis integration
+  private getChatHistoryFromMemory(
+    userId: string, 
+    friendId: string, 
+    limit: number, 
+    offset: number,
+    beforeTimestamp?: number
+  ): {
+    messages: FriendChatMessage[];
+    hasMore: boolean;
+    totalCount: number;
+  } {
+    const chatId = this.getChatId(userId, friendId);
+    const room = this.activeChatRooms.get(chatId);
+    
+    if (!room) {
+      return {
+        messages: [],
+        hasMore: false,
+        totalCount: 0
+      };
+    }
+
+    let filteredMessages = room.messages;
+    
+    // Filter by timestamp if provided
+    if (beforeTimestamp) {
+      filteredMessages = room.messages.filter(msg => msg.timestamp < beforeTimestamp);
+    }
+    
+    const totalCount = filteredMessages.length;
+    const start = Math.max(0, totalCount - offset - limit);
+    const end = totalCount - offset;
+    
+    const messages = filteredMessages.slice(start, end);
+    const hasMore = start > 0;
+    
+    return {
+      messages,
+      hasMore,
+      totalCount
+    };
+  }
+
+  // ============ HELPER METHODS ============
+
+  private async markMessagesAsRead(userId: string, friendId: string, messageIds: string[]): Promise<void> {
+    try {
+      if (this.redisService) {
+        await this.markMessagesAsReadInRedis(userId, friendId, messageIds);
+      }
+      // Also update memory cache
+      this.markMessagesAsReadInMemory(userId, friendId, messageIds);
+    } catch (error) {
+      logger.error('❌ Error marking messages as read:', error);
+      // Fallback to memory only
+      this.markMessagesAsReadInMemory(userId, friendId, messageIds);
+    }
+  }
+
+  private async markMessagesAsReadInRedis(userId: string, friendId: string, messageIds: string[]): Promise<void> {
+    if (!this.redisService) return;
+
+    try {
+      const redisInstance = this.redisService.getRedisInstance();
+      const chatId = this.getChatId(userId, friendId);
+      
+      // Get all messages and update read status
+      const messageStrings = await redisInstance.zrange(`chat_messages:${chatId}`, 0, -1);
+      
+      const pipeline = redisInstance.multi();
+      
+      for (const msgStr of messageStrings) {
+        try {
+          const message = JSON.parse(msgStr) as FriendChatMessage;
+          if (messageIds.includes(message.id) && message.receiverId === userId) {
+            message.read = true;
+            pipeline.zadd(`chat_messages:${chatId}`, message.timestamp, JSON.stringify(message));
+          }
+        } catch (parseError) {
+          // Skip invalid messages
+        }
+      }
+      
+      await pipeline.exec();
+      
+    } catch (error) {
+      logger.error('Failed to mark messages as read in Redis:', error);
+    }
+  }
+
+  private markMessagesAsReadInMemory(userId: string, friendId: string, messageIds: string[]): void {
+    const chatId = this.getChatId(userId, friendId);
+    const room = this.activeChatRooms.get(chatId);
+    
+    if (room) {
+      room.messages.forEach(msg => {
+        if (messageIds.includes(msg.id) && msg.receiverId === userId) {
+          msg.read = true;
+        }
+      });
+      room.unreadCount[userId] = 0;
+    }
+  }
+
+  private async getLastMessages(userId: string, friendIds: string[]): Promise<Record<string, FriendChatMessage | null>> {
+    const results: Record<string, FriendChatMessage | null> = {};
+    
+    try {
+      if (this.redisService) {
+        // Try Redis first
+        for (const friendId of friendIds) {
+          const chatId = this.getChatId(userId, friendId);
+          const redisInstance = this.redisService.getRedisInstance();
+          
+          try {
+            const lastMessageStr = await redisInstance.zrevrange(`chat_messages:${chatId}`, 0, 0);
+            if (lastMessageStr.length > 0) {
+              results[friendId] = JSON.parse(lastMessageStr[0]);
+            } else {
+              results[friendId] = null;
+            }
+          } catch (error) {
+            results[friendId] = null;
+          }
+        }
+      } else {
+        // Fallback to memory cache
+        for (const friendId of friendIds) {
+          const chatId = this.getChatId(userId, friendId);
+          const room = this.activeChatRooms.get(chatId);
+          
+          if (room && room.messages.length > 0) {
+            results[friendId] = room.messages[room.messages.length - 1];
+          } else {
+            results[friendId] = null;
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error getting last messages:', error);
+      // Return empty results
+      for (const friendId of friendIds) {
+        results[friendId] = null;
+      }
+    }
+    
+    return results;
+  }
+
   private async updateLastMessage(senderId: string, receiverId: string, message: FriendChatMessage): Promise<void> {
     try {
-      if (this.friendsChatModule) {
-        // This is handled automatically by the Redis module when storing the message
-        logger.debug(`📬 Last message cache updated via Redis for ${senderId} <-> ${receiverId}`);
+      if (this.redisService) {
+        const redisInstance = this.redisService.getRedisInstance();
+        const senderKey = `last_message:${senderId}:${receiverId}`;
+        const receiverKey = `last_message:${receiverId}:${senderId}`;
+        
+        await Promise.all([
+          redisInstance.setex(senderKey, 24 * 60 * 60, JSON.stringify(message)), // 24 hours
+          redisInstance.setex(receiverKey, 24 * 60 * 60, JSON.stringify(message))
+        ]);
       }
-      // Memory cache is updated in updateMemoryCache method
     } catch (error) {
       logger.error('❌ Error updating last message:', error);
     }
   }
 
-  // ✅ FIXED: Send unread counts with Redis integration
   private async sendUnreadCounts(socket: Socket, userId: string): Promise<void> {
     try {
       let unreadCounts: Record<string, number> = {};
       
-      if (this.friendsChatModule) {
-        unreadCounts = await this.friendsChatModule.getUnreadCounts(userId);
+      if (this.redisService) {
+        // Get from Redis
+        const redisInstance = this.redisService.getRedisInstance();
+        const keys = await redisInstance.keys(`unread_count:${userId}:*`);
+        
+        for (const key of keys) {
+          const friendId = key.split(':')[2];
+          const count = await redisInstance.get(key);
+          unreadCounts[friendId] = parseInt(count || '0', 10);
+        }
       } else {
         // Fallback to memory cache
         for (const [chatId, room] of this.activeChatRooms.entries()) {
@@ -677,43 +977,108 @@ export class FriendsChatService {
     }
   }
 
-  // Generate consistent chat ID for two users
+  private async updateUserPresence(userId: string, isOnline: boolean, status?: string): Promise<void> {
+    try {
+      const presence: ChatPresence = {
+        userId,
+        isOnline,
+        lastSeen: Date.now(),
+        currentlyTyping: []
+      };
+      
+      this.userPresence.set(userId, presence);
+      
+      // Update in Redis if available
+      if (this.redisService) {
+        const redisInstance = this.redisService.getRedisInstance();
+        await redisInstance.setex(
+          `presence:${userId}`,
+          60 * 60, // 1 hour
+          JSON.stringify(presence)
+        );
+      }
+      
+      // Notify friends of status change
+      const friends = await this.profileManager.fetchUserFriends(userId);
+      for (const friend of friends) {
+        const friendRoom = `friends_user_${friend.id}`;
+        this.io.to(friendRoom).emit('friends_chat_presence_update', {
+          userId,
+          isOnline,
+          status,
+          timestamp: Date.now()
+        });
+      }
+      
+    } catch (error) {
+      logger.error('❌ Error updating user presence:', error);
+    }
+  }
+
   private getChatId(user1: string, user2: string): string {
     return [user1, user2].sort().join('_');
   }
 
-  // Start message cleanup interval
-  private startMessageCleanup(): void {
-    this.cleanupInterval = setInterval(async () => {
-      await this.cleanupOldMessages();
-    }, this.MESSAGE_CLEANUP_INTERVAL);
+  private checkRateLimit(userId: string, maxRequests: number): boolean {
+    const now = Date.now();
+    const record = this.rateLimitStore.get(userId);
+    
+    if (!record || now - record.resetTime > 60000) {
+      this.rateLimitStore.set(userId, { count: 1, resetTime: now });
+      return true;
+    }
+    
+    if (record.count >= maxRequests) {
+      return false;
+    }
+    
+    record.count++;
+    return true;
   }
 
-  // ✅ FIXED: Clean up messages with Redis integration
+  // ============ BACKGROUND TASKS ============
+
+  private startBackgroundTasks(): void {
+    // Message cleanup
+    this.cleanupInterval = setInterval(async () => {
+      await this.cleanupOldMessages();
+    }, this.CONFIG.MESSAGE_CLEANUP_INTERVAL);
+
+    // Presence updates
+    this.presenceInterval = setInterval(async () => {
+      await this.updatePresenceHeartbeat();
+    }, this.CONFIG.PRESENCE_UPDATE_INTERVAL);
+  }
+
   private async cleanupOldMessages(): Promise<void> {
     try {
       let totalCleaned = 0;
       
-      // Clean up Redis messages if available
-      if (this.friendsChatModule) {
-        totalCleaned = await this.friendsChatModule.cleanupOldMessages();
+      // Clean up Redis messages
+      if (this.redisService) {
+        const redisInstance = this.redisService.getRedisInstance();
+        const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+        
+        const chatKeys = await redisInstance.keys('chat_messages:*');
+        for (const key of chatKeys) {
+          const cleaned = await redisInstance.zremrangebyscore(key, 0, cutoffTime);
+          totalCleaned += cleaned;
+        }
       }
       
       // Clean up memory cache
-      const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+      const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);
       
       for (const [chatId, room] of this.activeChatRooms.entries()) {
         const oldMessages = room.messages.filter(msg => msg.timestamp < cutoffTime);
         if (oldMessages.length > 0) {
           room.messages = room.messages.filter(msg => msg.timestamp >= cutoffTime);
           totalCleaned += oldMessages.length;
-          logger.debug(`🧹 Cleaned ${oldMessages.length} old messages from memory cache for ${chatId}`);
         }
         
         // Remove inactive rooms
-        if (Date.now() - room.lastActivity > 60 * 60 * 1000) { // 1 hour inactive
+        if (Date.now() - room.lastActivity > 60 * 60 * 1000) {
           this.activeChatRooms.delete(chatId);
-          logger.debug(`🧹 Removed inactive chat room: ${chatId}`);
         }
       }
       
@@ -726,99 +1091,61 @@ export class FriendsChatService {
     }
   }
 
-  // Get service statistics
+  private async updatePresenceHeartbeat(): Promise<void> {
+    try {
+      // Update presence for all connected users
+      for (const userId of this.connectedUsers.keys()) {
+        await this.updateUserPresence(userId, true);
+      }
+    } catch (error) {
+      logger.error('❌ Error updating presence heartbeat:', error);
+    }
+  }
+
+  // ============ PUBLIC API ============
+
   public getStats(): {
     activeRooms: number;
+    connectedUsers: number;
     activeTyping: number;
     cacheSize: number;
     redisEnabled: boolean;
     memoryRooms: number;
-    redisStats?: any;
   } {
-    const stats = {
+    return {
       activeRooms: this.activeChatRooms.size,
+      connectedUsers: this.connectedUsers.size,
       activeTyping: this.typingStatuses.size,
       cacheSize: Array.from(this.activeChatRooms.values())
         .reduce((total, room) => total + room.messages.length, 0),
-      redisEnabled: !!this.friendsChatModule,
+      redisEnabled: !!this.redisService,
       memoryRooms: this.activeChatRooms.size
     };
-
-    // Add Redis stats if available
-    if (this.friendsChatModule) {
-      // Get Redis-specific stats
-      this.friendsChatModule.getChatStats().then(redisStats => {
-        (stats as any).redisStats = redisStats;
-      }).catch(err => {
-        logger.debug('Failed to get Redis chat stats:', err);
-      });
-    }
-
-    return stats;
   }
 
-  // ✅ FIXED: Enhanced destroy method
-  public async destroy(): Promise<void> {
-    logger.info('💬 Shutting down FriendsChatService...');
-    
-    try {
-      // Clear cleanup interval
-      if (this.cleanupInterval) {
-        clearInterval(this.cleanupInterval);
-        this.cleanupInterval = null;
-      }
-      
-      // Clear all typing statuses
-      this.typingStatuses.clear();
-      
-      // Clear memory cache
-      this.activeChatRooms.clear();
-      
-      // Note: Redis cleanup is handled by RedisService destroy method
-      
-      logger.info('✅ FriendsChatService shutdown complete');
-    } catch (error) {
-      logger.error('❌ Error during FriendsChatService shutdown:', error);
-      throw error;
-    }
-  }
-
-  // ✅ NEW: Get Redis module for advanced operations
-  public getFriendsChatModule(): FriendsChatModule | null {
-    return this.friendsChatModule;
-  }
-
-  // ✅ NEW: Health check method
   public async healthCheck(): Promise<{
     status: 'healthy' | 'degraded' | 'down';
     redisEnabled: boolean;
+    connectedUsers: number;
     activeRooms: number;
-    memoryUsage: number;
     errors: string[];
   }> {
     const errors: string[] = [];
     let status: 'healthy' | 'degraded' | 'down' = 'healthy';
 
     try {
-      // Check Redis health if enabled
+      // Check Redis health
       if (this.redisService) {
-        const redisHealth = await this.redisService.testConnection();
-        if (!redisHealth) {
+        try {
+          const redisInstance = this.redisService.getRedisInstance();
+          await redisInstance.ping();
+        } catch (error) {
           errors.push('Redis connection failed');
           status = 'degraded';
         }
       }
 
-      // Check memory usage
-      const memoryUsage = Array.from(this.activeChatRooms.values())
-        .reduce((total, room) => total + room.messages.length, 0);
-
-      if (memoryUsage > 10000) { // Arbitrary threshold
-        errors.push(`High memory usage: ${memoryUsage} cached messages`);
-        if (status === 'healthy') status = 'degraded';
-      }
-
-      // Check if service is functional
+      // Check Socket.IO health
       if (!this.io) {
         errors.push('Socket.IO server not available');
         status = 'down';
@@ -826,19 +1153,48 @@ export class FriendsChatService {
 
       return {
         status,
-        redisEnabled: !!this.friendsChatModule,
+        redisEnabled: !!this.redisService,
+        connectedUsers: this.connectedUsers.size,
         activeRooms: this.activeChatRooms.size,
-        memoryUsage,
         errors
       };
     } catch (error) {
       return {
         status: 'down',
         redisEnabled: false,
+        connectedUsers: 0,
         activeRooms: 0,
-        memoryUsage: 0,
         errors: [`Health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
       };
+    }
+  }
+
+  public async destroy(): Promise<void> {
+    logger.info('💬 Shutting down FriendsChatService...');
+    
+    try {
+      // Clear intervals
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+      
+      if (this.presenceInterval) {
+        clearInterval(this.presenceInterval);
+        this.presenceInterval = null;
+      }
+      
+      // Clear stores
+      this.typingStatuses.clear();
+      this.activeChatRooms.clear();
+      this.userPresence.clear();
+      this.connectedUsers.clear();
+      this.rateLimitStore.clear();
+      
+      logger.info('✅ FriendsChatService shutdown complete');
+    } catch (error) {
+      logger.error('❌ Error during FriendsChatService shutdown:', error);
+      throw error;
     }
   }
 }
