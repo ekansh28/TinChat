@@ -1,10 +1,13 @@
 // server/managers/profile/ProfileManager.ts - FIXED FOR CLERK_ID SCHEMA
-
+// server/managers/profile/ProfileManager.ts
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../utils/logger';
 import { LRUCache } from '../../utils/LRUCache';
 import { RedisService } from '../../services/RedisService';
 import { UserStatus } from '../../types/User';
+
+// ✅ FIXED: Import FriendData from the correct location
+import { FriendData } from './types/FriendTypes';
 
 // Import all modular components
 import { ProfileDatabaseModule } from './modules/ProfileDatabaseModule';
@@ -12,7 +15,6 @@ import { FriendsModule } from './modules/FriendsModule';
 import { SearchModule } from './modules/SearchModule';
 import { StatusModule } from './modules/StatusModule';
 import { BlockingModule } from './modules/BlockingModule';
-
 // ✅ FIXED: Added clerk_id to interface
 export interface UserProfile {
   id: string;
@@ -44,16 +46,7 @@ export interface StatusUpdate {
   lastSeen?: string;
 }
 
-export interface FriendData {
-  id: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  status: UserStatus;
-  last_seen: string;
-  is_online: boolean;
-  friends_since?: string;
-}
+
 
 export class ProfileManager {
   private supabase: SupabaseClient | null;
@@ -1193,6 +1186,158 @@ async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
    * ✅ FIXED: All methods now use clerkId parameters
    */
 
+  // server/managers/profile/ProfileManager.ts - MISSING METHODS ADDED
+// Add these methods to your existing ProfileManager class
+
+// ==================== MISSING METHODS FOR FRIENDS FUNCTIONALITY ====================
+
+/**
+ * Get suggested friends for a user (using FriendsModule)
+ */
+async getSuggestedFriends(authId: string, limit: number = 10): Promise<any[]> {
+  try {
+    // This would typically use a recommendation algorithm
+    // For now, we'll return recent active users that aren't friends
+    
+    if (!this.supabase || !authId) {
+      return [];
+    }
+
+    logger.debug(`Getting friend suggestions for ${authId}`);
+    
+    // Get user's current friends to exclude them
+    const currentFriends = await this.friendsModule.getFriendsList(authId);
+    const friendIds = currentFriends.map(f => f.id);
+    
+    // Get recent active users that aren't friends
+    const { data: suggestions, error } = await this.supabase
+      .from('user_profiles')
+      .select('clerk_id, username, display_name, avatar_url, last_seen, is_online')
+      .neq('clerk_id', authId) // Exclude self
+      .not('clerk_id', 'in', friendIds.length > 0 ? `(${friendIds.join(',')})` : '()') // Exclude friends
+      .eq('is_online', true) // Only suggest online users
+      .order('last_seen', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      logger.error('Error getting friend suggestions:', error);
+      return [];
+    }
+
+    return (suggestions || []).map(user => ({
+      id: user.clerk_id,
+      username: user.username,
+      displayName: user.display_name || user.username,
+      avatarUrl: user.avatar_url,
+      reason: 'Recently active',
+      isOnline: user.is_online,
+      lastSeen: user.last_seen
+    }));
+
+  } catch (error) {
+    logger.error('Exception getting friend suggestions:', error);
+    return [];
+  }
+}
+
+/**
+ * Get friends module statistics
+ */
+async getFriendsModuleStats(): Promise<{
+  totalFriendships: number;
+  pendingRequests: number;
+  cacheHitRate: number;
+  performance: {
+    avgQueryTime: number;
+    cacheEnabled: boolean;
+  };
+}> {
+  try {
+    return await this.friendsModule.getFriendsModuleStats();
+  } catch (error) {
+    logger.error('Error getting friends module stats:', error);
+    return {
+      totalFriendships: 0,
+      pendingRequests: 0,
+      cacheHitRate: 0,
+      performance: {
+        avgQueryTime: 0,
+        cacheEnabled: false
+      }
+    };
+  }
+}
+
+/**
+ * Clean up expired friend requests
+ */
+async cleanupExpiredRequests(olderThanDays: number = 30): Promise<number> {
+  try {
+    return await this.friendsModule.cleanupExpiredRequests(olderThanDays);
+  } catch (error) {
+    logger.error('Error cleaning up expired requests:', error);
+    return 0;
+  }
+}
+
+/**
+ * Validate friendships integrity
+ */
+async validateFriendshipsIntegrity(): Promise<{
+  issues: string[];
+  fixed: number;
+}> {
+  try {
+    return await this.friendsModule.validateFriendshipsIntegrity();
+  } catch (error) {
+    logger.error('Error validating friendships integrity:', error);
+    return {
+      issues: [`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
+      fixed: 0
+    };
+  }
+}
+
+/**
+ * Get blocked users for a user
+ */
+async getBlockedUsers(authId: string): Promise<any[]> {
+  try {
+    return await this.blockingModule.getBlockedUsers(authId);
+  } catch (error) {
+    logger.error('Error getting blocked users:', error);
+    return [];
+  }
+}
+
+
+// In ProfileManager.ts, update the unblockUser method:
+async unblockUser(blockerAuthId: string, blockedAuthId: string): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  try {
+    const result = await this.blockingModule.unblockUser(blockerAuthId, blockedAuthId);
+    
+    // ✅ Handle both boolean and object returns
+    if (typeof result === 'boolean') {
+      return {
+        success: result,
+        message: result ? 'User unblocked successfully' : 'Failed to unblock user'
+      };
+    }
+    
+    // If it's already an object, return it
+    return result;
+  } catch (error) {
+    logger.error('Error unblocking user:', error);
+    return {
+      success: false,
+      message: 'Failed to unblock user'
+    };
+  }
+}
+
   async fetchPendingFriendRequests(clerkId: string, type: 'received' | 'sent' = 'received'): Promise<any[]> {
     return this.friendsModule.getPendingFriendRequests(clerkId, type);
   }
@@ -1230,6 +1375,8 @@ async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
     return this.friendsModule.getMutualFriends(user1ClerkId, user2ClerkId);
   }
 
+
+
   async getFriendStats(clerkId: string): Promise<{
     friendCount: number;
     pendingSentCount: number;
@@ -1242,4 +1389,7 @@ async updateUserStatus(authId: string, status: UserStatus): Promise<boolean> {
   async getOnlineFriendsCount(clerkId: string): Promise<number> {
     return this.friendsModule.getOnlineFriendsCount(clerkId);
   }
+
+  
 }
+

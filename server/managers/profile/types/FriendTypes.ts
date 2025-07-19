@@ -1,4 +1,4 @@
-// server/managers/profile/types/FriendTypes.ts - COMPLETE TYPE DEFINITIONS
+// server/managers/profile/types/FriendTypes.ts - FIXED DUPLICATE EXPORTS
 import { UserStatus } from '../../../types/User';
 
 // ============ CORE FRIEND TYPES ============
@@ -6,8 +6,8 @@ import { UserStatus } from '../../../types/User';
 export interface FriendData {
   id: string; // clerk_id for external identification
   username: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
+  display_name?: string | undefined; // ✅ FIXED: Removed | null
+  avatar_url?: string | undefined;   // ✅ FIXED: Removed | null
   status: UserStatus;
   last_seen: string;
   is_online: boolean;
@@ -393,6 +393,7 @@ export interface FriendActivityUpdate {
 
 // ============ ERROR TYPES ============
 
+// ✅ FIXED: Only declare the class once, don't export it multiple times
 export class FriendsModuleError extends Error {
   constructor(
     message: string,
@@ -536,22 +537,6 @@ export interface PendingFriendRequest extends FriendRequest {}
  */
 export interface RelationshipStatus extends FriendshipStatus {}
 
-// ============ EXPORTS ============
-
-export default {
-  FriendData,
-  FriendRequest,
-  FriendProfile,
-  FriendshipStatus,
-  FriendsListResponse,
-  FriendRequestsResponse,
-  FriendSearchResponse,
-  FriendStatsResponse,
-  FriendOperationResult,
-  FriendsModuleError,
-  FriendsModuleConfig
-};
-
 // ============ TYPE GUARDS ============
 
 export function isFriendData(obj: any): obj is FriendData {
@@ -622,3 +607,5 @@ export const FRIENDS_RELATIONSHIP_LABELS = {
   blocked: 'Blocked',
   blocked_by: 'Blocked by user'
 } as const;
+
+// ✅ FIXED: Clean exports - no duplicates, no problematic default export

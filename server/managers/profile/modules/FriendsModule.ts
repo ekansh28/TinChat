@@ -1,4 +1,4 @@
-//server/managers/profile/modules/FriendsModule.ts - COMPLETELY FIXED VERSION
+//server/managers/profile/modules/FriendsModule.ts - FIXED VERSION WITH ALL TYPE ERRORS RESOLVED
 import { SupabaseClient } from '@supabase/supabase-js';
 import { RedisService } from '../../../services/RedisService';
 import { FriendData, FriendshipStatus } from '../types/FriendTypes';
@@ -88,7 +88,7 @@ export class FriendsModule {
     try {
       logger.debug(`FriendsModule: Fetching friends from database for ${authId}`);
       
-      // ✅ FIXED: Proper query with correct field references
+      // ✅ FIXED: Proper query with correct field references and data awaiting
       const { data, error } = await this.supabase
         .from('friendships')
         .select(`
@@ -106,7 +106,7 @@ export class FriendsModule {
           )
         `)
         .eq('user_id', authId)
-        .eq('status', 'accepted') as { data: FriendRow[] | null; error: any };
+        .eq('status', 'accepted');
 
       if (error) {
         logger.error(`FriendsModule: Database error fetching friends for ${authId}:`, error);
@@ -118,8 +118,9 @@ export class FriendsModule {
         return [];
       }
 
-      // ✅ FIXED: Proper data transformation with null checks
-      const friends: FriendData[] = data
+      // ✅ FIXED: Proper data transformation with null checks and type assertions
+      const typedData = data as FriendRow[];
+      const friends: FriendData[] = typedData
         .filter(f => f.friend !== null)
         .map(f => {
           const friend = f.friend!;
@@ -810,8 +811,8 @@ export class FriendsModule {
         };
       }
 
-      // ✅ Get all stats in parallel
-      const [friendsResult, sentResult, receivedResult, onlineResult] = await Promise.all([
+      // ✅ FIXED: Get all stats in parallel with proper count queries
+      const [friendsResult, sentResult, receivedResult] = await Promise.all([
         this.supabase
           .from('friendships')
           .select('id', { count: 'exact', head: true })
@@ -826,20 +827,22 @@ export class FriendsModule {
           .from('friend_requests')
           .select('id', { count: 'exact', head: true })
           .eq('receiver_id', userProfile.id)
-          .eq('status', 'pending'),
-        this.supabase
-          .from('friendships')
-          .select('friend_id', { count: 'exact', head: true })
-          .eq('user_id', userProfile.id)
-          .eq('status', 'accepted')
-          .eq('friend.is_online', true)
+          .eq('status', 'pending')
       ]);
+
+      // ✅ FIXED: Get online friends count with a separate query
+      const { count: onlineCount } = await this.supabase
+        .from('friendships')
+        .select('friend:user_profiles!friendships_friend_id_fkey(is_online)', { count: 'exact', head: true })
+        .eq('user_id', userProfile.id)
+        .eq('status', 'accepted')
+        .eq('friend.is_online', true);
 
       const stats = {
         friendCount: friendsResult.count || 0,
         pendingSentCount: sentResult.count || 0,
         pendingReceivedCount: receivedResult.count || 0,
-        onlineFriendsCount: onlineResult.count || 0
+        onlineFriendsCount: onlineCount || 0
       };
 
       logger.debug(`FriendsModule: Friend stats for ${authId}:`, stats);
@@ -890,7 +893,7 @@ export class FriendsModule {
 
       const { count, error } = await this.supabase
         .from('friendships')
-        .select('friend_id', { count: 'exact', head: true })
+        .select('friend:user_profiles!friendships_friend_id_fkey(is_online)', { count: 'exact', head: true })
         .eq('user_id', userProfile.id)
         .eq('status', 'accepted')
         .eq('friend.is_online', true);
@@ -917,6 +920,87 @@ export class FriendsModule {
     } catch (err: any) {
       logger.error(`FriendsModule: Exception getting online friends count:`, err);
       return 0;
+    }
+  }
+
+  // ==================== MUTUAL FRIENDS ====================
+
+  async getMutualFriends(user1AuthId: string, user2AuthId: string): Promise<any[]> {
+    if (!this.supabase || !user1AuthId || !user2AuthId || user1AuthId === user2AuthId) {
+      return [];
+    }
+
+    try {
+      logger.debug(`FriendsModule: Fetching mutual friends between ${user1AuthId} and ${user2AuthId}`);
+      
+      // ✅ Get both users' database IDs
+      const [user1Result, user2Result] = await Promise.all([
+        this.supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('clerk_id', user1AuthId)
+          .single(),
+        this.supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('clerk_id', user2AuthId)
+          .single()
+      ]);
+
+      if (user1Result.error || user2Result.error) {
+        return [];
+      }
+
+      // ✅ FIXED: Find mutual friends using proper subquery approach
+      // First get user1's friends
+      const { data: user1Friends, error: user1Error } = await this.supabase
+        .from('friendships')
+        .select('friend_id')
+        .eq('user_id', user1Result.data.id)
+        .eq('status', 'accepted');
+
+      if (user1Error || !user1Friends || user1Friends.length === 0) {
+        return [];
+      }
+
+      const user1FriendIds = user1Friends.map(f => f.friend_id);
+
+      // Then find which of those are also friends with user2
+      const { data: mutuals, error } = await this.supabase
+        .from('friendships')
+        .select(`
+          friend_id,
+          friend:user_profiles!friendships_friend_id_fkey (
+            clerk_id,
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('user_id', user2Result.data.id)
+        .eq('status', 'accepted')
+        .in('friend_id', user1FriendIds);
+
+      if (error) {
+        logger.error(`FriendsModule: Error fetching mutual friends:`, error);
+        return [];
+      }
+
+      const result = (mutuals || [])
+        .filter(m => m.friend)
+        .map(m => ({
+          id: (m.friend as any).clerk_id,
+          username: (m.friend as any).username,
+          displayName: (m.friend as any).display_name || (m.friend as any).username,
+          avatarUrl: (m.friend as any).avatar_url
+        }));
+
+      logger.debug(`FriendsModule: Found ${result.length} mutual friends`);
+      return result;
+      
+    } catch (err: any) {
+      logger.error(`FriendsModule: Exception fetching mutual friends:`, err);
+      return [];
     }
   }
 
@@ -1092,347 +1176,6 @@ export class FriendsModule {
     }
   }
 
-  // ==================== ADVANCED FEATURES ====================
-
-  async getMutualFriends(user1AuthId: string, user2AuthId: string): Promise<any[]> {
-    if (!this.supabase || !user1AuthId || !user2AuthId || user1AuthId === user2AuthId) {
-      return [];
-    }
-
-    try {
-      logger.debug(`FriendsModule: Fetching mutual friends between ${user1AuthId} and ${user2AuthId}`);
-      
-      // ✅ Get both users' database IDs
-      const [user1Result, user2Result] = await Promise.all([
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', user1AuthId)
-          .single(),
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', user2AuthId)
-          .single()
-      ]);
-
-      if (user1Result.error || user2Result.error) {
-        return [];
-      }
-
-      // ✅ Find mutual friends using subquery
-      const { data: mutuals, error } = await this.supabase
-        .from('friendships')
-        .select(`
-          friend_id,
-          friend:user_profiles!friendships_friend_id_fkey (
-            clerk_id,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('user_id', user1Result.data.id)
-        .eq('status', 'accepted')
-        .in('friend_id', 
-          // Subquery to get user2's friends
-          this.supabase
-            .from('friendships')
-            .select('friend_id')
-            .eq('user_id', user2Result.data.id)
-            .eq('status', 'accepted')
-        );
-
-      if (error) {
-        logger.error(`FriendsModule: Error fetching mutual friends:`, error);
-        return [];
-      }
-
-      const result = (mutuals || [])
-        .filter(m => m.friend)
-        .map(m => ({
-          id: m.friend.clerk_id,
-          username: m.friend.username,
-          displayName: m.friend.display_name || m.friend.username,
-          avatarUrl: m.friend.avatar_url
-        }));
-
-      logger.debug(`FriendsModule: Found ${result.length} mutual friends`);
-      return result;
-      
-    } catch (err: any) {
-      logger.error(`FriendsModule: Exception fetching mutual friends:`, err);
-      return [];
-    }
-  }
-
-  async getSuggestedFriends(authId: string, limit: number = 10): Promise<any[]> {
-    if (!this.supabase || !authId || limit <= 0) {
-      return [];
-    }
-
-    try {
-      logger.debug(`FriendsModule: Getting friend suggestions for ${authId}`);
-      
-      // ✅ Get user's database ID
-      const { data: userProfile, error: userError } = await this.supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('clerk_id', authId)
-        .single();
-
-      if (userError || !userProfile) {
-        return [];
-      }
-
-      // ✅ Get users with mutual friends (friend-of-friend recommendations)
-      const { data: suggestions, error } = await this.supabase
-        .rpc('get_friend_suggestions', {
-          user_id: userProfile.id,
-          suggestion_limit: limit
-        });
-
-      if (error) {
-        logger.debug('FriendsModule: RPC not available, using basic suggestions');
-        
-        // ✅ Fallback: Get recent active users excluding current friends
-        const { data: fallbackSuggestions, error: fallbackError } = await this.supabase
-          .from('user_profiles')
-          .select('clerk_id, username, display_name, avatar_url, last_seen')
-          .neq('id', userProfile.id)
-          .not('id', 'in', 
-            this.supabase
-              .from('friendships')
-              .select('friend_id')
-              .eq('user_id', userProfile.id)
-          )
-          .order('last_seen', { ascending: false })
-          .limit(limit);
-
-        return (fallbackSuggestions || []).map(user => ({
-          id: user.clerk_id,
-          username: user.username,
-          displayName: user.display_name || user.username,
-          avatarUrl: user.avatar_url,
-          reason: 'Recently active'
-        }));
-      }
-
-      return suggestions || [];
-      
-    } catch (err: any) {
-      logger.error(`FriendsModule: Exception getting friend suggestions:`, err);
-      return [];
-    }
-  }
-
-  // ==================== BLOCKING FUNCTIONALITY ====================
-
-  async blockUser(blockerAuthId: string, blockedAuthId: string): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    if (!this.supabase || !blockerAuthId || !blockedAuthId) {
-      return { success: false, message: 'Invalid parameters' };
-    }
-
-    if (blockerAuthId === blockedAuthId) {
-      return { success: false, message: 'Cannot block yourself' };
-    }
-
-    try {
-      logger.debug(`FriendsModule: Blocking user ${blockedAuthId} by ${blockerAuthId}`);
-      
-      // ✅ Get both users' database IDs
-      const [blockerResult, blockedResult] = await Promise.all([
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', blockerAuthId)
-          .single(),
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', blockedAuthId)
-          .single()
-      ]);
-
-      if (blockerResult.error || blockedResult.error) {
-        return { success: false, message: 'One or both users not found' };
-      }
-
-      const blockerId = blockerResult.data.id;
-      const blockedId = blockedResult.data.id;
-
-      // ✅ Start transaction-like operations
-      const operations = [];
-
-      // Remove existing friendship
-      operations.push(
-        this.supabase
-          .from('friendships')
-          .delete()
-          .or(`and(user_id.eq.${blockerId},friend_id.eq.${blockedId}),and(user_id.eq.${blockedId},friend_id.eq.${blockerId})`)
-      );
-
-      // Remove pending friend requests
-      operations.push(
-        this.supabase
-          .from('friend_requests')
-          .delete()
-          .or(`and(sender_id.eq.${blockerId},receiver_id.eq.${blockedId}),and(sender_id.eq.${blockedId},receiver_id.eq.${blockerId})`)
-      );
-
-      // Add block record
-      operations.push(
-        this.supabase
-          .from('blocked_users')
-          .upsert({
-            blocker_id: blockerId,
-            blocked_id: blockedId,
-            created_at: new Date().toISOString()
-          })
-      );
-
-      const results = await Promise.all(operations);
-      
-      // Check if any operation failed
-      const hasError = results.some(result => result.error);
-      if (hasError) {
-        logger.error('FriendsModule: Error in block operations:', results);
-        return { success: false, message: 'Failed to block user' };
-      }
-
-      // ✅ Invalidate caches
-      await this.invalidateUserCaches([blockerAuthId, blockedAuthId]);
-
-      logger.info(`FriendsModule: User ${blockedAuthId} blocked by ${blockerAuthId}`);
-      
-      return {
-        success: true,
-        message: 'User blocked successfully'
-      };
-      
-    } catch (err: any) {
-      logger.error(`FriendsModule: Exception blocking user:`, err);
-      return { success: false, message: 'Failed to block user' };
-    }
-  }
-
-  async unblockUser(blockerAuthId: string, blockedAuthId: string): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    if (!this.supabase || !blockerAuthId || !blockedAuthId) {
-      return { success: false, message: 'Invalid parameters' };
-    }
-
-    try {
-      logger.debug(`FriendsModule: Unblocking user ${blockedAuthId} by ${blockerAuthId}`);
-      
-      // ✅ Get both users' database IDs
-      const [blockerResult, blockedResult] = await Promise.all([
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', blockerAuthId)
-          .single(),
-        this.supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('clerk_id', blockedAuthId)
-          .single()
-      ]);
-
-      if (blockerResult.error || blockedResult.error) {
-        return { success: false, message: 'One or both users not found' };
-      }
-
-      const { error } = await this.supabase
-        .from('blocked_users')
-        .delete()
-        .eq('blocker_id', blockerResult.data.id)
-        .eq('blocked_id', blockedResult.data.id);
-
-      if (error) {
-        logger.error('FriendsModule: Error unblocking user:', error);
-        return { success: false, message: 'Failed to unblock user' };
-      }
-
-      // ✅ Invalidate caches
-      await this.invalidateUserCaches([blockerAuthId, blockedAuthId]);
-
-      logger.info(`FriendsModule: User ${blockedAuthId} unblocked by ${blockerAuthId}`);
-      
-      return {
-        success: true,
-        message: 'User unblocked successfully'
-      };
-      
-    } catch (err: any) {
-      logger.error(`FriendsModule: Exception unblocking user:`, err);
-      return { success: false, message: 'Failed to unblock user' };
-    }
-  }
-
-  async getBlockedUsers(authId: string): Promise<any[]> {
-    if (!this.supabase || !authId || authId.trim() === '') {
-      return [];
-    }
-
-    try {
-      logger.debug(`FriendsModule: Fetching blocked users for ${authId}`);
-      
-      // ✅ Get user's database ID
-      const { data: userProfile, error: userError } = await this.supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('clerk_id', authId)
-        .single();
-
-      if (userError || !userProfile) {
-        return [];
-      }
-
-      const { data: blocked, error } = await this.supabase
-        .from('blocked_users')
-        .select(`
-          blocked_id,
-          created_at,
-          blocked:user_profiles!blocked_users_blocked_id_fkey (
-            clerk_id,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('blocker_id', userProfile.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        logger.error('FriendsModule: Error fetching blocked users:', error);
-        return [];
-      }
-
-      const result = (blocked || [])
-        .filter(b => b.blocked)
-        .map(b => ({
-          id: b.blocked.clerk_id,
-          username: b.blocked.username,
-          displayName: b.blocked.display_name || b.blocked.username,
-          avatarUrl: b.blocked.avatar_url,
-          blockedSince: b.created_at
-        }));
-
-      logger.debug(`FriendsModule: Found ${result.length} blocked users for ${authId}`);
-      return result;
-      
-    } catch (err: any) {
-      logger.error(`FriendsModule: Exception fetching blocked users:`, err);
-      return [];
-    }
-  }
-
   // ==================== CLEANUP AND MAINTENANCE ====================
 
   async cleanupExpiredRequests(olderThanDays: number = 30): Promise<number> {
@@ -1483,41 +1226,64 @@ export class FriendsModule {
       logger.debug('FriendsModule: Validating friendships integrity');
 
       // ✅ Check for missing reciprocal friendships
-      const { data: asymmetric, error: asymmetricError } = await this.supabase
-        .rpc('find_asymmetric_friendships');
+      try {
+        const { data: asymmetric, error: asymmetricError } = await this.supabase
+          .rpc('find_asymmetric_friendships');
 
-      if (asymmetricError) {
-        issues.push(`Failed to check asymmetric friendships: ${asymmetricError.message}`);
-      } else if (asymmetric && asymmetric.length > 0) {
-        issues.push(`Found ${asymmetric.length} asymmetric friendships`);
-        
-        // ✅ Fix asymmetric friendships
-        try {
-          const { count, error: fixError } = await this.supabase
-            .rpc('fix_asymmetric_friendships');
+        if (asymmetricError) {
+          issues.push(`Failed to check asymmetric friendships: ${asymmetricError.message}`);
+        } else if (asymmetric && asymmetric.length > 0) {
+          issues.push(`Found ${asymmetric.length} asymmetric friendships`);
           
-          if (fixError) {
-            issues.push(`Failed to fix asymmetric friendships: ${fixError.message}`);
-          } else {
-            fixed += count || 0;
+          // ✅ Fix asymmetric friendships
+          try {
+            const { count, error: fixError } = await this.supabase
+              .rpc('fix_asymmetric_friendships');
+            
+            if (fixError) {
+              issues.push(`Failed to fix asymmetric friendships: ${fixError.message}`);
+            } else {
+              fixed += count || 0;
+            }
+          } catch (fixErr) {
+            issues.push(`Exception fixing asymmetric friendships: ${fixErr}`);
           }
-        } catch (fixErr) {
-          issues.push(`Exception fixing asymmetric friendships: ${fixErr}`);
         }
+      } catch (rpcError) {
+        issues.push(`RPC functions not available for integrity check`);
       }
 
-      // ✅ Check for duplicate friend requests
-      const { data: duplicates, error: duplicatesError } = await this.supabase
-        .from('friend_requests')
-        .select('sender_id, receiver_id, count(*)')
-        .eq('status', 'pending')
-        .group('sender_id, receiver_id')
-        .having('count(*) > 1');
+      // ✅ FIXED: Check for duplicate friend requests (removed .group() usage)
+      try {
+        const { data: allRequests, error: requestsError } = await this.supabase
+          .from('friend_requests')
+          .select('sender_id, receiver_id, status, created_at')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: true });
 
-      if (duplicatesError) {
-        issues.push(`Failed to check duplicate requests: ${duplicatesError.message}`);
-      } else if (duplicates && duplicates.length > 0) {
-        issues.push(`Found ${duplicates.length} duplicate request pairs`);
+        if (requestsError) {
+          issues.push(`Failed to check duplicate requests: ${requestsError.message}`);
+        } else if (allRequests && allRequests.length > 0) {
+          // Manual duplicate detection
+          const seenPairs = new Map<string, number>();
+          let duplicateCount = 0;
+
+          for (const request of allRequests) {
+            const pairKey = `${request.sender_id}_${request.receiver_id}`;
+            const count = seenPairs.get(pairKey) || 0;
+            seenPairs.set(pairKey, count + 1);
+            
+            if (count > 0) {
+              duplicateCount++;
+            }
+          }
+
+          if (duplicateCount > 0) {
+            issues.push(`Found ${duplicateCount} duplicate request pairs`);
+          }
+        }
+      } catch (dupError) {
+        issues.push(`Failed to check duplicates: ${dupError}`);
       }
 
       logger.debug(`FriendsModule: Integrity check completed - ${issues.length} issues, ${fixed} fixed`);
@@ -1532,5 +1298,4 @@ export class FriendsModule {
       };
     }
   }
-
 }
