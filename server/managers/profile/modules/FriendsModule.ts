@@ -4,11 +4,11 @@ import { RedisService } from '../../../services/RedisService';
 import { FriendData, FriendshipStatus } from '../types/FriendTypes';
 import { logger } from '../../../utils/logger';
 
-// ✅ FIXED: Proper type definitions with consistent field names
+// ✅ FIXED: Update type to match actual Supabase response
 type FriendRow = {
   friend_id: string;
   created_at: string;
-  friend: {
+  friend: Array<{
     id: string;
     clerk_id: string;
     username: string;
@@ -17,7 +17,7 @@ type FriendRow = {
     status?: string | null;
     last_seen?: string | null;
     is_online?: boolean | null;
-  } | null;
+  }> | null; // Array instead of single object
 };
 
 type FriendRequestRow = {
@@ -118,27 +118,27 @@ export class FriendsModule {
         return [];
       }
 
-      // ✅ FIXED: Proper data transformation with null checks and type assertions
-      const typedData = data as FriendRow[];
-      const friends: FriendData[] = typedData
-        .filter(f => f.friend !== null)
-        .map(f => {
-          const friend = f.friend!;
-          const safeStatus = VALID_STATUSES.includes(friend.status || '')
-            ? (friend.status as 'online' | 'idle' | 'dnd' | 'offline')
-            : 'offline';
+  // ✅ FIXED: Updated transformation to handle array
+  const typedData = data as FriendRow[];
+  const friends: FriendData[] = typedData
+    .filter(f => f.friend !== null && f.friend.length > 0)
+    .map(f => {
+      const friend = f.friend![0];
+      const safeStatus = VALID_STATUSES.includes(friend.status || '')
+        ? (friend.status as 'online' | 'idle' | 'dnd' | 'offline')
+        : 'offline';
 
-          return {
-            id: friend.clerk_id || friend.id, // Use clerk_id as the primary identifier
-            username: friend.username || 'Unknown',
-            display_name: friend.display_name || friend.username || 'Unknown',
-            avatar_url: friend.avatar_url || null,
-            status: safeStatus,
-            last_seen: friend.last_seen || new Date().toISOString(),
-            is_online: friend.is_online ?? false,
-            friends_since: f.created_at,
-          };
-        });
+      return {
+        id: friend.clerk_id || friend.id,
+        username: friend.username || 'Unknown',
+        display_name: friend.display_name || friend.username || 'Unknown',
+        avatar_url: friend.avatar_url || undefined, // ✅ FIXED: Use undefined instead of null
+        status: safeStatus,
+        last_seen: friend.last_seen || new Date().toISOString(),
+        is_online: friend.is_online ?? false,
+        friends_since: f.created_at,
+      };
+    });
 
       // ✅ Cache result in Redis
       try {

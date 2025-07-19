@@ -65,10 +65,10 @@ function getErrorCode(statusCode: number): string {
     default: return 'UNKNOWN_ERROR';
   }
 }
-
 function validateAuthId(authId: string): boolean {
-  return authId && typeof authId === 'string' && authId.trim().length > 0;
+  return !!(authId && typeof authId === 'string' && authId.trim().length > 0);
 }
+
 
 function validatePagination(limit?: number, offset?: number): { limit: number; offset: number } {
   const validLimit = Math.min(Math.max(limit || 20, 1), 100);
@@ -991,32 +991,38 @@ async function handleRunCleanup(req: IncomingMessage, res: ServerResponse): Prom
       return true;
     }
 
-    const body = await parseRequestBody(req);
-    const { operation = 'expired_requests', olderThanDays = 30 } = body;
+ const body = await parseRequestBody(req);
+const { operation = 'expired_requests', olderThanDays = 30 } = body;
 
-    logger.debug(`🧹 Running cleanup operation: ${operation}`);
+logger.debug(`🧹 Running cleanup operation: ${operation}`);
 
-    let result = { cleaned: 0, message: 'Cleanup completed' };
+// ✅ FIXED: Define proper type that includes optional issues
+let result: { 
+  cleaned: number; 
+  message: string; 
+  issues?: string[] 
+} = { cleaned: 0, message: 'Cleanup completed' };
 
-    switch (operation) {
-      case 'expired_requests':
-        const cleaned = await profileManager.cleanupExpiredRequests?.(olderThanDays) || 0;
-        result = { cleaned, message: `Cleaned ${cleaned} expired requests` };
-        break;
-      
-      case 'integrity_check':
-        const integrity = await profileManager.validateFriendshipsIntegrity?.() || { issues: [], fixed: 0 };
-        result = { 
-          cleaned: integrity.fixed, 
-          message: `Fixed ${integrity.fixed} issues, found ${integrity.issues.length} total issues`,
-          issues: integrity.issues
-        };
-        break;
-      
-      default:
-        sendError(res, 400, 'Invalid cleanup operation');
-        return true;
-    }
+switch (operation) {
+  case 'expired_requests':
+    const cleaned = await profileManager.cleanupExpiredRequests?.(olderThanDays) || 0;
+    result = { cleaned, message: `Cleaned ${cleaned} expired requests` };
+    break;
+  
+  case 'integrity_check':
+    const integrity = await profileManager.validateFriendshipsIntegrity?.() || { issues: [], fixed: 0 };
+    result = { 
+      cleaned: integrity.fixed, 
+      message: `Fixed ${integrity.fixed} issues, found ${integrity.issues.length} total issues`,
+      issues: integrity.issues
+    };
+    break;
+  
+  default:
+    sendError(res, 400, 'Invalid cleanup operation');
+    return true;
+}
+
     
     sendJSON(res, 200, {
       success: true,
