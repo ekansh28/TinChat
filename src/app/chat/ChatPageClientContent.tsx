@@ -12,7 +12,7 @@ import { TaskBar } from './components/TaskBar';
 import { useChat } from './hooks/useChat';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ConnectionErrorScreen } from './components/ConnectionErrorScreen';
-import { ConnectionStatus } from './components/ConnectionStatus';
+
 import { initializeAudioSystem } from './utils/ChatHelpers';
 
 // ✅ FIXED: Styles moved to separate component/file to avoid re-creating
@@ -166,12 +166,7 @@ const ChatPageClientContent: React.FC = () => {
                 <div className="title-bar-text">
                   {chat.isMobile ? 'TinChat' : 'Text Chat'}
                 </div>
-                
-                <ConnectionStatus 
-                  isConnected={chat.socket.isConnected}
-                  isConnecting={chat.socket.isConnecting}
-                  isDevelopment={process.env.NODE_ENV === 'development'}
-                />
+
               </div>
             </div>
 

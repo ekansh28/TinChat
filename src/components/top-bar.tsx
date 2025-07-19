@@ -1,8 +1,8 @@
-// src/components/top-bar.tsx - Updated with dynamic theme icons
+// src/components/top-bar.tsx - Updated with dynamic theme icons and theme browser fixes
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import ThemeStampUploader, { loadCustomStamps, type StampData } from './ThemeStampUploader';
 
@@ -16,6 +16,8 @@ interface ThemeStamp {
   cssFile: string | null;
   dataAiHint: string;
   isCustom?: boolean;
+  isThemeBrowser?: boolean;
+  isDefault?: boolean;
 }
 
 const availableStamps: ThemeStamp[] = [
@@ -24,7 +26,8 @@ const availableStamps: ThemeStamp[] = [
   { name: 'Star Pattern', imageUrl: '/theme_stamps/starpattern.png', cssFile: 'starpattern-theme.css', dataAiHint: 'star pattern theme stamp' },
   { name: 'Dark Theme', imageUrl: '/theme_stamps/darktheme.png', cssFile: 'dark-theme.css', dataAiHint: 'dark theme stamp' },
   { name: '666', imageUrl: '/theme_stamps/666.png', cssFile: '666-theme.css', dataAiHint: '666 theme stamp' },
-  { name: 'Default 98', imageUrl: 'https://placehold.co/100x75/c0c0c0/000000.png?text=Default', cssFile: null, dataAiHint: 'default theme stamp' },
+  { name: 'Default 98', imageUrl: 'https://placehold.co/100x75/c0c0c0/000000.png?text=Default', cssFile: null, dataAiHint: 'default theme stamp', isDefault: true },
+  { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
 ];
 
 const available7Stamps: ThemeStamp[] = [
@@ -32,16 +35,19 @@ const available7Stamps: ThemeStamp[] = [
   { name: 'Frutiger Aero 2', imageUrl: '/theme_stamps/frutiger2.png', cssFile: 'frutiger2-theme.css', dataAiHint: 'frutiger2 theme stamp' },
   { name: 'PS3', imageUrl: '/theme_stamps/ps3.png', cssFile: 'ps3-theme.css', dataAiHint: 'ps3 theme stamp' },
   { name: 'leaf', imageUrl: '/theme_stamps/ps3.png', cssFile: 'leaf-theme.css', dataAiHint: 'leaf theme stamp' },
-  { name: 'Default', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp' },
+  { name: 'Default', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp', isDefault: true },
+  { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
 ];
 
 const availableXPStamps: ThemeStamp[] = [
   { name: 'Bliss Theme', imageUrl: '/theme_stamps/bliss.png', cssFile: 'bliss-theme.css', dataAiHint: 'bliss xp theme stamp' },
-  { name: 'Default XP', imageUrl: 'https://placehold.co/100x75/0066CC/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default winxp theme stamp' },
+  { name: 'Default XP', imageUrl: 'https://placehold.co/100x75/0066CC/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default winxp theme stamp', isDefault: true },
+  { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
 ];
 
 export function TopBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [customizerPosition, setCustomizerPosition] = useState({ top: 0, left: 0 });
@@ -68,7 +74,7 @@ export function TopBar() {
   // Get current mode
   const currentMode = isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98');
 
-  // ✅ NEW: Get appropriate theme icon based on current mode
+  // Get appropriate theme icon based on current mode
   const getThemeIcon = useCallback(() => {
     if (isWinXPMode) {
       return '/icons/themeXP.png';
@@ -555,9 +561,16 @@ export function TopBar() {
     }
   }, [currentMode, loadAllCustomStamps]);
 
-  // Handle sub-theme selection
+  // Handle sub-theme selection with Theme Browser redirect
   const handleSubThemeSelect = useCallback(async (cssFile: string | null) => {
     if (pathname === '/') return;
+    
+    // Handle Theme Browser click - redirect to /css-browser
+    if (cssFile === 'THEME_BROWSER_PLACEHOLDER') {
+      setIsCustomizerOpen(false);
+      router.push('/css-browser');
+      return;
+    }
     
     // Handle Add Theme click - open modal directly
     if (cssFile === 'ADD_THEME_PLACEHOLDER') {
@@ -567,7 +580,7 @@ export function TopBar() {
     
     await applySubTheme(cssFile);
     setIsCustomizerOpen(false);
-  }, [pathname, applySubTheme]);
+  }, [pathname, applySubTheme, router]);
 
   const toggleCustomizer = useCallback(() => {
     if (!themeIconRef.current || pathname === '/') return;
@@ -659,7 +672,7 @@ export function TopBar() {
         {pathname !== '/' && (
           <img
             ref={themeIconRef}
-            src={getThemeIcon()} // ✅ UPDATED: Use dynamic theme icon
+            src={getThemeIcon()}
             alt="Customize Theme"
             className={cn(
               "w-5 h-5 cursor-pointer transition-opacity",
@@ -670,7 +683,6 @@ export function TopBar() {
           />
         )}
 
-        {/* Rest of the component remains the same... */}
         {isCustomizerOpen && pathname !== '/' && (
           <div
             ref={customizerWindowRef}
@@ -709,9 +721,6 @@ export function TopBar() {
               })
             }}
           >
-            {/* Rest of the customizer window content remains the same... */}
-            {/* Title Bar, Window Body, etc. - keeping all existing functionality */}
-            
             {/* Compact Title Bar */}
             <div 
               className="title-bar"
@@ -809,11 +818,11 @@ export function TopBar() {
                   Select a theme stamp for {isWinXPMode ? 'Windows XP' : isWin7Mode ? 'Windows 7' : 'Windows 98'}:
                 </p>
                 <p className="text-xs mb-3 text-gray-600" style={isWinXPMode ? { color: '#333' } : isWin7Mode ? { color: '#666' } : {}}>
-                  Use minimize (←) for Win98, maximize (→) for Win7, close (×) for WinXP themes
+                  Use minimize (_) for Win98, maximize ([]) for Win7, close (×) for WinXP themes
                 </p>
                 {needsScrolling && (
                   <p className="text-xs mb-2 font-semibold" style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}>
-                    📜 Scroll to see all {currentStamps.length} themes
+                     Scroll to see all themes
                   </p>
                 )}
                 
@@ -864,11 +873,21 @@ export function TopBar() {
                       <img 
                         src={stamp.imageUrl}
                         alt={stamp.name}
-                        className="w-16 h-auto mr-2 border border-gray-400 flex-shrink-0"
+                        className={cn(
+                          "mr-2 flex-shrink-0",
+                          // Only add border to default stamps
+                          stamp.isDefault && "border border-gray-400"
+                        )}
                         style={{ 
                           imageRendering: 'pixelated',
                           width: '66px',
-                          height: '37px'
+                          height: '37px',
+                          // Fix Theme Browser stretching by using object-fit
+                          ...(stamp.isThemeBrowser && {
+                            objectFit: 'contain' as const,
+                   
+                            padding: '2px'
+                          })
                         }}
                         data-ai-hint={stamp.dataAiHint}
                         onError={(e) => {
@@ -900,6 +919,11 @@ export function TopBar() {
                         {stamp.cssFile === 'ADD_THEME_PLACEHOLDER' && (
                           <div className="text-xs text-blue-600 mt-1">
                             Click to add custom theme
+                          </div>
+                        )}
+                        {stamp.isThemeBrowser && (
+                          <div className="text-xs text-green-600 mt-1">
+                            Browse themes online
                           </div>
                         )}
                       </div>

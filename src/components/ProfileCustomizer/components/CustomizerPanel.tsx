@@ -246,8 +246,34 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
   }, [setCustomCSS]);
 
   const tabs = [
-    { id: 'basic', label: 'Profile & Design', icon: '👤' },
-    { id: 'css', label: 'Advanced CSS', icon: '💻' }
+    { 
+  id: 'basic', 
+  label: (
+    <div className="flex items-center gap-2">
+      <img 
+        src="https://cdn.tinchat.online/icons/agent.png" 
+        className="w-4 h-4"  // Adjust size as needed
+        alt="CSS Icon"
+      />
+      Profile 
+    </div>
+  ),
+  icon: null  // Remove the separate icon since we're including it in the label
+},
+{ 
+  id: 'css', 
+  label: (
+    <div className="flex items-center gap-2">
+      <img 
+        src="https://cdn.tinchat.online/icons/paint.png" 
+        className="w-4 h-4"  // Adjust size as needed
+        alt="CSS Icon"
+      />
+      Advanced CSS
+    </div>
+  ),
+  icon: null  // Remove the separate icon since we're including it in the label
+}
   ] as const;
 
   return (
@@ -272,7 +298,7 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   style={{ 
                     padding: '4px 8px',
                     fontSize: '12px',
-                    fontWeight: activeTab === tab.id ? 'bold' : 'normal'
+                    fontWeight: activeTab === tab.id ? 'normal' : 'normal'
                   }}
                 >
                   <span>{tab.icon}</span> {tab.label}

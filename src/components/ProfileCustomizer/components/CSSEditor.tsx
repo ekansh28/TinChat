@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button-themed';
 import { cn } from '@/lib/utils';
-
+import Link from 'next/link';
 interface CSSEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -250,35 +250,42 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
   return (
     <div className="space-y-3">
       {/* Editor Controls */}
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={insertTemplate}
-          disabled={disabled || !editor}
-        >
-          📝 Template
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearCSS}
-          disabled={disabled || !value.trim() || !editor}
-        >
-          🗑️ Clear
-        </Button>
-        {/* Theme Reset Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => editor && applyTheme(editor)}
-          disabled={disabled || !editor}
-          title="Reset to Dark Theme"
-        >
-          🎨 Fix Theme
-        </Button>
-      </div>
-
+<div className="flex items-center">
+  {/* Left-aligned button */}
+  <Link href="/css-browser" passHref>
+    <Button>CSS Browser</Button>
+  </Link>
+  
+  {/* Right-aligned button group */}
+  <div className="flex items-center gap-2 ml-auto">
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={insertTemplate}
+      disabled={disabled || !editor}
+    >
+      Template
+    </Button>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={clearCSS}
+      disabled={disabled || !value.trim() || !editor}
+    >
+      Clear
+    </Button>
+    {/* Theme Reset Button */}
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => editor && applyTheme(editor)}
+      disabled={disabled || !editor}
+      title="Reset to Dark Theme"
+    >
+      Fix Theme
+    </Button>
+  </div>
+</div>
       {/* ACE Editor Container */}
       <div className={cn(
         "relative border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden",
@@ -313,12 +320,18 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
       {aceLoaded && editor && (
         <div className="text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center gap-4">
-            <span>📏 {value.split('\n').length} lines</span>
-            <span>📊 {value.length} characters</span>
-            <span>⚡ ACE Editor (Monokai Theme)</span>
+            <span> {value.split('\n').length} lines / {value.length} characters</span>
+        
             {value.length > 5000 && (
-              <span className="text-yellow-600 dark:text-yellow-400">
-                ⚠️ Large CSS file
+              <span className=" flex text-yellow-600 dark:text-yellow-400">
+                  <img 
+    src="https://cdn.tinchat.online/icons/warning.png" 
+    alt="warning" 
+    style={{ 
+      width: '20px',
+      height: 'auto'
+    }}
+  /> Large CSS file
               </span>
             )}
           </div>
@@ -326,11 +339,19 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
       )}
 
       {/* CSS Safety Guidelines */}
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg text-sm">
-        <div className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-          ⚠️ CSS Safety Guidelines:
-        </div>
-        <ul className="space-y-1 text-xs text-yellow-700 dark:text-yellow-300">
+      <div className="bg-yellow-50  p-3 rounded-lg text-sm">
+<div className="flex items-center gap-2 font-medium mb-2">
+  <img 
+    src="https://cdn.tinchat.online/icons/warning.png" 
+    alt="warning" 
+    style={{ 
+      width: '20px',
+      height: 'auto'
+    }}
+  />
+  CSS Safety Guidelines:
+</div>
+        <ul className="space-y-1 text-xs text-black-700 dark:text-black-300 ">
           <li>• Only style the <code>.profile-card-custom</code> class and its children</li>
           <li>• Avoid dangerous positioning that might break layout</li>
           <li>• Be careful with <code>z-index</code> values that might cover UI elements</li>
@@ -339,23 +360,7 @@ export const CSSEditor: React.FC<CSSEditorProps> = ({
         </ul>
       </div>
 
-      {/* ACE Editor Features */}
-      {aceLoaded && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-sm">
-          <div className="font-medium text-blue-800 dark:text-blue-200 mb-2">
-            ✨ Editor Features:
-          </div>
-          <ul className="space-y-1 text-xs text-blue-700 dark:text-blue-300">
-            <li>• Syntax highlighting for CSS (Dark Monokai Theme)</li>
-            <li>• Auto-completion (Ctrl+Space)</li>
-            <li>• Code folding and bracket matching</li>
-            <li>• Find/Replace (Ctrl+F / Ctrl+H)</li>
-            <li>• Multi-cursor editing (Ctrl+Alt+Up/Down)</li>
-            <li>• Undo/Redo (Ctrl+Z / Ctrl+Y)</li>
-            <li>• Click "🎨 Fix Theme" if editor theme changes</li>
-          </ul>
-        </div>
-      )}
+
 
       <style jsx>{`
         /* Force ACE Editor theme styles */

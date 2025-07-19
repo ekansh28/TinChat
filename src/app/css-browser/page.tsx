@@ -241,12 +241,10 @@ const getSortIcon = (sort: SortBy) => {
             </button>
             {user && (
               <Link href="/css-browser/upload">
-                <button
-                  className="px-4 py-2  flex items-center space-x-2 transition-colors text-purple-300 hover:bg-purple-800 hover:text-white"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Upload</span>
-                </button>
+<button className="px-4 py-2 flex items-center space-x-2 transition-colors hover:bg-purple-800 hover:text-white [&>*]:hover:text-white">
+  <Upload className="w-4 h-4 text-black" />
+  <span>Upload</span>
+</button>
               </Link>
             )}
           </div>
