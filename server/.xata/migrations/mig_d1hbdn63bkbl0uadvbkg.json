@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "mig_d1hbdn63bkbl0uadvbkg",
+    "operations": [
+      {
+        "drop_table": {
+          "name": "blocked_users"
+        }
+      }
+    ]
+  },
+  "migrationType": "pgroll",
+  "name": "mig_d1hbdn63bkbl0uadvbkg",
+  "parent": "mig_d1hbdid442djk2h93m0g",
+  "schema": "public",
+  "startedAt": "2025-06-30T16:10:05.134306Z"
+}

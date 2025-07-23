@@ -1,4 +1,4 @@
-// src/app/chat/components/FriendsWindow.tsx - UPDATED WITH THEME SUPPORT AND VERTICAL LAYOUT
+// src/app/chat/components/FriendsWindow.tsx
 
 'use client';
 
@@ -7,41 +7,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, UserPlus, Users, MessageCircle, Search, Filter, Settings, Trash2, UserX, UserCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
-interface Friend {
-  id: string;
-  authId: string;
-  username: string;
-  displayName?: string;
-  avatarUrl?: string;
-  status: 'online' | 'away' | 'busy' | 'offline';
-  lastSeen?: Date;
-  isFavorite?: boolean;
-  badges?: string[];
-  mutualFriends?: number;
-}
-
-interface FriendRequest {
-  id: string;
-  from: Friend;
-  to: Friend;
-  timestamp: Date;
-  type: 'incoming' | 'outgoing';
-  message?: string;
-}
-
-interface FriendsWindowProps {
-  isOpen: boolean;
-  onClose: () => void;
-  className?: string;
-}
-
-interface FriendsState {
-  friends: Friend[];
-  pendingRequests: FriendRequest[];
-  blockedUsers: Friend[];
-  isLoading: boolean;
-  error: string | null;
-}
+// ✅ FIXED: Import all interfaces from friends.ts
+import {
+  Friend,
+  FriendRequest,
+  FriendsWindowProps,
+  FriendsState,
+  ChatMessage,
+  FriendsApiResponse,
+  FriendRequestApiData, // ✅ Add this
+  FriendRequestsApiResponse, // ✅ Add this
+  UserStatus // ✅ Add this if not already imported
+} from '../../../types/friends';
+import { ExtendedChatMessage, isMessageFromSelf } from '../../../types/friendsExtended';
 
 export const FriendsWindow: React.FC<FriendsWindowProps> = ({
   isOpen,
@@ -50,19 +28,20 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 }) => {
   // ✅ CRITICAL: Auto-use authentication (no manual auth required)
   const auth = useAuth();
-  
+
+  // ✅ NEW: Polling state management
+  const [isPollingEnabled, setIsPollingEnabled] = useState(false);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // ✅ THEME DETECTION: Check which theme is active
   const [currentTheme, setCurrentTheme] = useState<'win98' | 'win7' | 'winxp'>('win98');
-  
+
   const checkCurrentTheme = useCallback(() => {
     if (typeof window === 'undefined') return 'win98';
-    
     const win7Link = document.getElementById('win7-css-link') as HTMLLinkElement;
     const winxpLink = document.getElementById('winxp-css-link') as HTMLLinkElement;
-    
     const hasWin7CSS = win7Link && win7Link.href.includes('7.css');
     const hasWinXPCSS = winxpLink && winxpLink.href.includes('xp.css');
-    
     if (hasWin7CSS) return 'win7';
     if (hasWinXPCSS) return 'winxp';
     return 'win98';
@@ -72,15 +51,12 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     const updateTheme = () => {
       setCurrentTheme(checkCurrentTheme());
     };
-    
     updateTheme();
-    
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.head, { childList: true, subtree: true });
-    
     return () => observer.disconnect();
   }, [checkCurrentTheme]);
-  
+
   // State management
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'blocked' | 'add'>('friends');
   const [searchQuery, setSearchQuery] = useState('');
@@ -303,39 +279,104 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
   // ✅ CRITICAL: Auto-load friends data when authenticated (no manual auth step)
   useEffect(() => {
     if (!isOpen || !auth.authId || isInitializedRef.current) return;
-
     console.log('[FriendsWindow] 🔐 Auto-loading friends data for authenticated user:', auth.authId);
-    
     isInitializedRef.current = true;
     loadFriendsData();
   }, [isOpen, auth.authId]);
 
-  // Load friends data from API
-  const loadFriendsData = useCallback(async () => {
+  // ✅ ENHANCED: loadFriendsData with polling support
+  const loadFriendsData = useCallback(async (isPollUpdate = false) => {
     if (!auth.authId) {
       console.log('[FriendsWindow] ❌ No auth ID available');
       return;
     }
 
-    setFriendsState(prev => ({ ...prev, isLoading: true, error: null }));
-
+    // Don't show loading spinner for poll updates
+    if (!isPollUpdate) {
+      setFriendsState(prev => ({ ...prev, isLoading: true, error: null }));
+    }
+    
     try {
-      console.log('[FriendsWindow] 📡 Loading friends data...');
+      if (isPollUpdate) {
+        console.log('[FriendsWindow] 🔄 Polling for updates...');
+      } else {
+        console.log('[FriendsWindow] 📡 Loading friends data...');
+      }
       
       // Load friends, requests, and blocked users in parallel
       const [friendsRes, requestsRes, blockedRes] = await Promise.all([
         fetch(`/api/friends/list?userId=${auth.authId}`),
-        fetch(`/api/friends/requests?userId=${auth.authId}`),
+        fetch(`/api/friends/request?userId=${auth.authId}`),
         fetch(`/api/friends/blocked?userId=${auth.authId}`)
       ]);
 
       const friendsData = friendsRes.ok ? await friendsRes.json() : { friends: [] };
-      const requestsData = requestsRes.ok ? await requestsRes.json() : { requests: [] };
+      const requestsData = requestsRes.ok ? await requestsRes.json() : { requests: { received: [], sent: [] } };
       const blockedData = blockedRes.ok ? await blockedRes.json() : { blocked: [] };
+
+      // ✅ FIXED: Transform nested requests structure to flat array
+      const allRequests: FriendRequest[] = [];
+      if (requestsData.requests) {
+        // Add received requests with type indicator
+        if (requestsData.requests.received) {
+          allRequests.push(...requestsData.requests.received.map((req: FriendRequestApiData) => ({
+            id: req.id,
+            message: req.message,
+            timestamp: new Date(req.created_at),
+            type: 'incoming' as const,
+            from: {
+              id: req.sender?.clerk_id || '',
+              username: req.sender?.username || '',
+              displayName: req.sender?.display_name,
+              avatarUrl: req.sender?.avatar_url,
+              status: 'offline' as UserStatus,
+              lastSeen: new Date(),
+              authId: req.sender?.clerk_id || ''
+            },
+            to: {
+              id: auth.authId,
+              username: auth.username || '',
+              displayName: (auth as any).displayName,
+              avatarUrl: (auth as any).avatarUrl,
+              status: 'online' as UserStatus,
+              lastSeen: new Date(),
+              authId: auth.authId
+            }
+          })));
+        }
+        
+        // Add sent requests with type indicator  
+        if (requestsData.requests.sent) {
+          allRequests.push(...requestsData.requests.sent.map((req: FriendRequestApiData) => ({
+            id: req.id,
+            message: req.message,
+            timestamp: new Date(req.created_at),
+            type: 'outgoing' as const,
+            from: {
+              id: auth.authId,
+              username: auth.username || '',
+              displayName: (auth as any).displayName,
+              avatarUrl: (auth as any).avatarUrl,
+              status: 'online' as UserStatus,
+              lastSeen: new Date(),
+              authId: auth.authId
+            },
+            to: {
+              id: req.receiver?.clerk_id || '',
+              username: req.receiver?.username || '',
+              displayName: req.receiver?.display_name,
+              avatarUrl: req.receiver?.avatar_url,
+              status: 'offline' as UserStatus,
+              lastSeen: new Date(),
+              authId: req.receiver?.clerk_id || ''
+            }
+          })));
+        }
+      }
 
       setFriendsState({
         friends: friendsData.friends || [],
-        pendingRequests: requestsData.requests || [],
+        pendingRequests: allRequests, // ✅ Now it's an array
         blockedUsers: blockedData.blocked || [],
         isLoading: false,
         error: null
@@ -343,19 +384,89 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
       console.log('[FriendsWindow] ✅ Friends data loaded:', {
         friends: friendsData.friends?.length || 0,
-        requests: requestsData.requests?.length || 0,
-        blocked: blockedData.blocked?.length || 0
+        requests: allRequests.length,
+        blocked: blockedData.blocked?.length || 0,
+        isPoll: isPollUpdate
       });
 
     } catch (error) {
       console.error('[FriendsWindow] ❌ Failed to load friends data:', error);
-      setFriendsState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: 'Failed to load friends data'
-      }));
+      if (!isPollUpdate) {
+        setFriendsState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Failed to load friends data'
+        }));
+      }
     }
   }, [auth.authId]);
+
+  // ✅ OPTION 1: Polling System - Auto-refresh every 10 seconds when requests tab is active
+  useEffect(() => {
+    if (!isOpen || !auth.authId || !isPollingEnabled) {
+      // Clear existing poll interval
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    console.log('[FriendsWindow] 🔄 Starting polling for friend requests...');
+    
+    // Set up polling interval
+    pollIntervalRef.current = setInterval(() => {
+      loadFriendsData(true); // Pass true to indicate this is a poll update
+    }, 10000); // Poll every 10 seconds
+
+    // Cleanup function
+    return () => {
+      if (pollIntervalRef.current) {
+        console.log('[FriendsWindow] ⏹️ Stopping polling');
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [isOpen, auth.authId, isPollingEnabled, loadFriendsData]);
+
+  // ✅ Enable/disable polling based on active tab
+  useEffect(() => {
+    const shouldPoll = activeTab === 'requests';
+    setIsPollingEnabled(shouldPoll);
+    
+    if (shouldPoll) {
+      console.log('[FriendsWindow] 📡 Enabling polling for requests tab');
+    } else {
+      console.log('[FriendsWindow] ⏸️ Disabling polling');
+    }
+  }, [activeTab]);
+
+  // ✅ OPTION 3: Page Visibility API - Refresh when page becomes visible
+  useEffect(() => {
+    if (!isOpen || !auth.authId) return;
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[FriendsWindow] 👁️ Page became visible, refreshing data...');
+        loadFriendsData(false); // Full refresh when page becomes visible
+      } else {
+        console.log('[FriendsWindow] 🙈 Page hidden');
+      }
+    };
+
+    const handleFocus = () => {
+      console.log('[FriendsWindow] 🔍 Window focused, checking for updates...');
+      loadFriendsData(true); // Poll update when window gets focus
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isOpen, auth.authId, loadFriendsData]);
 
   // Search for users to add as friends
   const searchUsers = useCallback(async (query: string) => {
@@ -365,14 +476,15 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     }
 
     setIsSearchingUsers(true);
-
     try {
       const response = await fetch('/api/friends/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: query.trim(),
-          currentUserId: auth.authId 
+        body: JSON.stringify({
+          // ✅ FIXED: Match the API route property names
+          searchTerm: query.trim(), // Changed from 'query'
+          currentUserAuthId: auth.authId, // Changed from 'currentUserId'
+          limit: 20 // Optional but consistent
         })
       });
 
@@ -410,14 +522,15 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
   // Friend management actions
   const sendFriendRequest = useCallback(async (targetUserId: string) => {
     if (!auth.authId) return;
-
     try {
-      const response = await fetch('/api/friends/request/send', {
+      const response = await fetch('/api/friends/request/send', { // ✅ Note: also check URL
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fromUserId: auth.authId,
-          toUserId: targetUserId 
+        body: JSON.stringify({
+          // ✅ FIXED: Match API route property names
+          senderAuthId: auth.authId, // Changed from 'fromUserId'
+          receiverAuthId: targetUserId, // Changed from 'toUserId'
+          message: null // Optional message
         })
       });
 
@@ -425,6 +538,9 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
         console.log('[FriendsWindow] ✅ Friend request sent');
         setAddFriendResults(prev => prev.filter(user => user.id !== targetUserId));
         loadFriendsData(); // Refresh data
+      } else {
+        const errorData = await response.json();
+        console.error('[FriendsWindow] ❌ Friend request failed:', errorData.message);
       }
     } catch (error) {
       console.error('[FriendsWindow] ❌ Failed to send friend request:', error);
@@ -433,39 +549,47 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
   const acceptFriendRequest = useCallback(async (requestId: string) => {
     if (!auth.authId) return;
-
     try {
       const response = await fetch('/api/friends/request/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId, userId: auth.authId })
+        body: JSON.stringify({
+          requestId,
+          accepterAuthId: auth.authId // ✅ FIXED: Changed from 'userId'
+        })
       });
 
       if (response.ok) {
         console.log('[FriendsWindow] ✅ Friend request accepted');
         loadFriendsData(); // Refresh data
+      } else {
+        const errorData = await response.json();
+        console.error('[FriendsWindow] ❌ Accept failed:', errorData.message);
       }
     } catch (error) {
       console.error('[FriendsWindow] ❌ Failed to accept friend request:', error);
     }
   }, [auth.authId, loadFriendsData]);
 
+  // In FriendsWindow.tsx
   const removeFriend = useCallback(async (friendId: string) => {
     if (!auth.authId) return;
-
     try {
       const response = await fetch('/api/friends/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: auth.authId,
-          friendId
+          userAuthId: auth.authId,
+          friendAuthId: friendId
         })
       });
 
       if (response.ok) {
         console.log('[FriendsWindow] ✅ Friend removed');
         loadFriendsData(); // Refresh data
+      } else {
+        const errorData = await response.json();
+        console.error('[FriendsWindow] ❌ Remove failed:', errorData.message);
       }
     } catch (error) {
       console.error('[FriendsWindow] ❌ Failed to remove friend:', error);
@@ -480,7 +604,7 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
     if (filterStatus !== 'all') {
       filtered = filtered.filter(friend => {
         if (filterStatus === 'online') {
-          return friend.status === 'online' || friend.status === 'away' || friend.status === 'busy';
+          return friend.status === 'online' || friend.status === 'idle' || friend.status === 'dnd';
         }
         return friend.status === 'offline';
       });
@@ -524,43 +648,34 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        className={`friends-window ${currentTheme === 'win7' ? 'glass active' : ''} ${currentTheme === 'winxp' ? 'xp-window' : ''} ${className}`}
+        exit={{ opacity: 0, y: 50 }}
         style={getWindowStyles()}
+        className={className}
       >
         {/* ✅ TITLE BAR with theme styling */}
         <div style={getTitleBarStyles()}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Users size={16} />
+            <Users size={14} />
             <span>Friends</span>
-            {friendsState.friends.length > 0 && (
-              <span style={{
-                background: currentTheme === 'win98' ? '#fff' : 'rgba(255,255,255,0.8)',
-                color: '#000',
-                padding: '2px 6px',
-                borderRadius: currentTheme === 'win98' ? '0' : '10px',
-                fontSize: '9px',
-                border: currentTheme === 'win98' ? '1px inset #c0c0c0' : 'none'
-              }}>
-                {friendsState.friends.length}
-              </span>
-            )}
+  
+            
           </div>
-          
           <button
             onClick={onClose}
             style={{
-              ...getButtonStyles('danger'),
-              width: '18px',
-              height: '18px',
-              padding: '0',
+              background: 'none',
+              border: 'none',
+              color: currentTheme === 'winxp' ? '#fff' : '#000',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              width: '20px',
+              height: '20px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px',
-              fontWeight: 'bold'
+              justifyContent: 'center'
             }}
           >
             ×
@@ -569,13 +684,10 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
 
         {/* ✅ WINDOW BODY with theme styling */}
         <div style={getBodyStyles()}>
-          
           {/* ✅ TABS with theme styling */}
           <div style={{
             display: 'flex',
-            borderBottom: currentTheme === 'win98' ? '1px solid #808080' : '1px solid #ccc',
-            background: currentTheme === 'win7' ? 'rgba(255, 255, 255, 0.5)' : 
-                       currentTheme === 'winxp' ? '#e0e0e0' : '#c0c0c0'
+           
           }}>
             {[
               { id: 'friends', label: 'Friends', count: friendsState.friends.length },
@@ -588,16 +700,16 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
                 onClick={() => setActiveTab(tab.id as any)}
                 style={getTabStyles(activeTab === tab.id)}
               >
-                {tab.icon && <UserPlus size={12} style={{ marginRight: '4px' }} />}
-                {tab.label}
+                {tab.icon && <UserPlus size={12} />}
+                <span>{tab.label}</span>
                 {tab.count !== undefined && tab.count > 0 && (
                   <span style={{
-                    marginLeft: '4px',
-                    background: activeTab === tab.id ? '#0078d4' : '#ccc',
-                    color: activeTab === tab.id ? '#fff' : '#000',
+              
+                    color: '#000000',
+                    borderRadius: '50%',
                     padding: '1px 4px',
-                    borderRadius: '8px',
-                    fontSize: '9px'
+                    fontSize: '8px',
+                    marginLeft: '4px'
                   }}>
                     {tab.count}
                   </span>
@@ -607,409 +719,393 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
           </div>
 
           {/* ✅ CONTENT AREA */}
-          <div style={{ 
-            flex: 1, 
-            overflow: 'hidden', 
-            display: 'flex', 
-            flexDirection: 'column',
-            padding: '8px'
-          }}>
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+{/* ✅ FRIENDS TAB */}
+{activeTab === 'friends' && (
+  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    {/* Search and Filter */}
+    <div style={{ padding: '8px', display: 'flex', gap: '4px' }}>
+      <input
+        type="text"
+        placeholder="Search friends..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        style={{
+          flex: 1,
+          padding: '4px',
+          fontSize: '11px',
+          border: currentTheme === 'win98' ? '1px inset ' : '1px solid ',
+          borderRadius: currentTheme === 'win98' ? '0' : '3px',
+          background: '#fff'
+        }}
+      />
+      <select
+        value={filterStatus}
+        onChange={(e) => setFilterStatus(e.target.value as any)}
+        style={{
+          padding: '4px',
+          fontSize: '11px',
+          border: currentTheme === 'win98' ? '1px inset' : '1px solid ',
+          borderRadius: currentTheme === 'win98' ? '0' : '3px',
+          background: '#fff'
+        }}
+      >
+        <option value="all">All</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+    </div>
+
+    {/* Friends List */}
+    
+  <div style={{ flex: 1, overflow: 'auto',  margin: '2.4%', border: '2px inset ', background : '#ffffff76'  }}>
+    <div style={{ flex: 1, overflow: 'auto', padding: '4px 6px' }}>
+      
+      {friendsState.isLoading ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+          Loading friends...
+        </div>
+      ) : filteredFriends.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+          {searchQuery ? 'No friends found' : 'No friends yet'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {filteredFriends.map((friend) => (
+            <div
+              key={friend.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px',
+                background: 'rgba(53, 53, 53, 0.37)',
+                borderRadius: '2px',
+                gap: '8px'
+              }}
+            >
+              {/* ✅ ADDED: Avatar with status indicator */}
+              <div style={{ position: 'relative' }}>
+                <img
+                  src={friend.avatar_url || friend.avatarUrl || '/default-avatar.png'}
+                  alt=""
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    flexShrink: 0
+                  }}
+                  onError={(e) => {
+                    // Fallback to initials avatar
+                    const target = e.target as HTMLImageElement;
+                    target.src = 'data:image/svg+xml;base64,' + btoa(`
+                      <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="24" height="24" fill="#4CAF50"/>
+                        <text x="12" y="15" font-family="Arial" font-size="12" fill="white" text-anchor="middle">
+                          ${(friend.display_name || friend.displayName || friend.username).charAt(0).toUpperCase()}
+                        </text>
+                      </svg>
+                    `);
+                  }}
+                />
+                
+                {/* ✅ Status indicator with your preferred icons */}
+                <img 
+                  src={
+                    friend.status === 'online' ? 'https://cdn.tinchat.online/icons/online.png' :
+                    friend.status === 'idle' ? 'https://cdn.tinchat.online/icons/idle.png' :
+                    friend.status === 'dnd' ? 'https://cdn.tinchat.online/icons/dnd.png' : 
+                    'https://cdn.tinchat.online/icons/offline.png'
+                  }
+                  alt={`${friend.status} status`}
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    position: 'absolute',
+                    bottom: '-1px',
+                    right: '-1px',
+                    borderRadius: '50%',
+                    border: '1px solid #fff'
+                  }}
+                />
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 'bold', fontSize: '11px' }}>
+                  {friend.display_name || friend.displayName || friend.username}
+                </div>
+                <div style={{ fontSize: '9px', color: '#666' }}>
+                  {friend.status}
+                </div>
+              </div>
+              <button
+                onClick={() => removeFriend(friend.id)}
+                title="Remove Friend"
+                style={{
+                  ...getButtonStyles('danger'),
+                  width: '20px',
+                  height: '20px',
+                  padding: '0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+  </div>
+)}
+
+
+{/* ✅ ADD FRIENDS TAB */}
+{activeTab === 'add' && (
+
+  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    
+    <div style={{ padding: '8px' }}>
+      <input
+        type="text"
+        placeholder="Search for users..."
+        value={addFriendQuery}
+        onChange={(e) => setAddFriendQuery(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '6px',
+          fontSize: '11px',
+          border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
+          borderRadius: currentTheme === 'win98' ? '0' : '3px',
+          background: '#fff'
+        }}
+      />
+    </div>
+          
+  <div style={{ flex: 1, overflow: 'auto',  margin: '2.4%', border: '2px inset ', background : '#ffffff76'  }}>
+
+    <div style={{ flex: 1, overflow: 'auto', padding: '4px' }}>
+      {isSearchingUsers ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+          Searching...
+        </div>
+      ) : addFriendResults.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+          {addFriendQuery ? 'No users found' : 'Enter a username to search'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {addFriendResults.map((user) => (
+            <div
+              key={user.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px',
+                background: 'rgba(255, 255, 255, 0.5)',
+                borderRadius: '2px',
+                gap: '8px'
+              }}
+            >
+              {/* ✅ ADDED: Avatar display */}
+              <img
+                src={user.avatarUrl || user.avatar_url || '/default-avatar.png'}
+                alt=""
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  objectFit: 'cover'
+                }}
+                onError={(e) => {
+                  // Fallback to initials if avatar fails to load
+                  const target = e.target as HTMLImageElement;
+                  target.src = 'data:image/svg+xml;base64,' + btoa(`
+                    <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" fill="#2196F3"/>
+                      <text x="12" y="15" font-family="Arial" font-size="12" fill="white" text-anchor="middle">
+                        ${(user.displayName || user.username).charAt(0).toUpperCase()}
+                      </text>
+                    </svg>
+                  `);
+                }}
+              />
+              
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 'bold', fontSize: '11px' }}>
+                  {user.displayName || user.username}
+                </div>
+                <div style={{ fontSize: '9px', color: '#666' }}>
+                  @{user.username}
+                </div>
+              </div>
+              <button
+                onClick={() => sendFriendRequest(user.id)}
+                style={{
+                  ...getButtonStyles('primary'),
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <UserPlus size={12} />
+                Add
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+  </div>
+)}
+
+ {/* ✅ FRIEND REQUESTS TAB */}
+{activeTab === 'requests' && (
+        
+  <div style={{ flex: 1, overflow: 'auto',  margin: '2.4%', border: '2px inset ', background : '#ffffff76'  }}>
+  <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
+    {friendsState.pendingRequests.length === 0 ? (
+      <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+        No pending requests
+      </div>
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {friendsState.pendingRequests.map((request) => (
+          <div
+            key={request.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '8px',
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              gap: '8px'
+            }}
+          >
+            {/* ✅ ADDED: Avatar display */}
+            <img
+              src={request.from.avatarUrl || request.from.avatar_url || '/default-avatar.png'}
+              alt=""
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                flexShrink: 0,
+                objectFit: 'cover'
+              }}
+              onError={(e) => {
+                // Fallback to initials if avatar fails to load
+                const target = e.target as HTMLImageElement;
+                target.src = 'data:image/svg+xml;base64,' + btoa(`
+                  <svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="32" height="32" fill="#4CAF50"/>
+                    <text x="16" y="20" font-family="Arial" font-size="14" fill="white" text-anchor="middle">
+                      ${(request.from.displayName || request.from.username).charAt(0).toUpperCase()}
+                    </text>
+                  </svg>
+                `);
+              }}
+            />
             
-            {/* ✅ FRIENDS TAB */}
-            {activeTab === 'friends' && (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                {/* Search and Filter */}
-                <div style={{ marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-                    <input
-                      type="text"
-                      placeholder="Search friends..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: '4px',
-                        fontSize: '11px',
-                        border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                        borderRadius: currentTheme === 'win98' ? '0' : '3px',
-                        background: '#fff'
-                      }}
-                    />
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value as any)}
-                      style={{
-                        padding: '4px',
-                        fontSize: '11px',
-                        border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                        borderRadius: currentTheme === 'win98' ? '0' : '3px',
-                        background: '#fff'
-                      }}
-                    >
-                      <option value="all">All</option>
-                      <option value="online">Online</option>
-                      <option value="offline">Offline</option>
-                    </select>
-                  </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 'bold' }}>
+                {request.from.displayName || request.from.username}
+              </div>
+              <div style={{ fontSize: '10px', color: '#666' }}>
+                {request.type === 'incoming' ? 'Sent you a friend request' : 'You sent a friend request'}
+              </div>
+              {request.message && (
+                <div style={{ fontSize: '9px', fontStyle: 'italic', color: '#888' }}>
+                  "{request.message}"
                 </div>
+              )}
+            </div>
 
-                {/* Friends List */}
-                <div style={{ 
-                  flex: 1, 
-                  overflowY: 'auto',
-                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                  background: '#fff',
-                  padding: '4px'
-                }}>
-                  {friendsState.isLoading ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px' }}>
-                      Loading friends...
-                    </div>
-                  ) : filteredFriends.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
-                      {searchQuery ? 'No friends found' : 'No friends yet'}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {filteredFriends.map((friend) => (
-                        <div
-                          key={friend.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '4px',
-                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
-                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                            <div style={{ position: 'relative' }}>
-                              <img
-                                src={friend.avatarUrl || '/default-avatar.png'}
-                                alt={friend.displayName || friend.username}
-                                style={{ width: '24px', height: '24px', borderRadius: '50%' }}
-                              />
-                              <div style={{
-                                position: 'absolute',
-                                bottom: '-2px',
-                                right: '-2px',
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                background: friend.status === 'online' ? '#00ff00' :
-                                           friend.status === 'away' ? '#ffff00' :
-                                           friend.status === 'busy' ? '#ff0000' : '#808080',
-                                border: '1px solid #fff'
-                              }} />
-                            </div>
-                            
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ 
-                                fontSize: '11px', 
-                                fontWeight: 'bold',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>
-                                {friend.displayName || friend.username}
-                              </div>
-                              <div style={{ fontSize: '9px', color: '#666', textTransform: 'capitalize' }}>
-                                {friend.status}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: '2px' }}>
-                            <button
-                              title="Send Message"
-                              style={{
-                                ...getButtonStyles('primary'),
-                                width: '20px',
-                                height: '20px',
-                                padding: '0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                            >
-                              <MessageCircle size={10} />
-                            </button>
-                            
-                            <button
-                              onClick={() => removeFriend(friend.id)}
-                              title="Remove Friend"
-                              style={{
-                                ...getButtonStyles('danger'),
-                                width: '20px',
-                                height: '20px',
-                                padding: '0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                            >
-                              <Trash2 size={10} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            {request.type === 'incoming' && (
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={() => acceptFriendRequest(request.id)}
+                  style={{
+                    ...getButtonStyles('primary'),
+                    padding: '3px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px'
+                  }}
+                >
+                  <UserCheck size={12} />
+                  Accept
+                </button>
+                <button
+                  style={{
+                    ...getButtonStyles('danger'),
+                    padding: '3px 8px'
+                  }}
+                >
+                  Decline
+                </button>
               </div>
             )}
 
-            {/* ✅ ADD FRIENDS TAB */}
-            {activeTab === 'add' && (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ marginBottom: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="Search users..."
-                    value={addFriendQuery}
-                    onChange={(e) => setAddFriendQuery(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '6px',
-                      fontSize: '11px',
-                      border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                      borderRadius: currentTheme === 'win98' ? '0' : '3px',
-                      background: '#fff'
-                    }}
-                  />
-                </div>
-
-                <div style={{ 
-                  flex: 1, 
-                  overflowY: 'auto',
-                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                  background: '#fff',
-                  padding: '4px'
-                }}>
-                  {isSearchingUsers ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px' }}>
-                      Searching...
-                    </div>
-                  ) : addFriendResults.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
-                      {addFriendQuery ? 'No users found' : 'Enter a username to search'}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {addFriendResults.map((user) => (
-                        <div
-                          key={user.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '4px',
-                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
-                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                            <img
-                              src={user.avatarUrl || '/default-avatar.png'}
-                              alt={user.displayName || user.username}
-                              style={{ width: '24px', height: '24px', borderRadius: '50%' }}
-                            />
-                            
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ 
-                                fontSize: '11px', 
-                                fontWeight: 'bold',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>
-                                {user.displayName || user.username}
-                              </div>
-                              <div style={{ fontSize: '9px', color: '#666' }}>
-                                @{user.username}
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => sendFriendRequest(user.id)}
-                            style={{
-                              ...getButtonStyles('primary'),
-                              padding: '4px 8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <UserPlus size={10} />
-                            <span>Add</span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            {request.type === 'outgoing' && (
+              <div style={{ fontSize: '10px', color: '#888' }}>
+                Pending...
               </div>
             )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+  </div>
+)}
 
-            {/* ✅ FRIEND REQUESTS TAB */}
-            {activeTab === 'requests' && (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ 
-                  flex: 1, 
-                  overflowY: 'auto',
-                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                  background: '#fff',
-                  padding: '4px'
-                }}>
-                  {friendsState.pendingRequests.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
-                      No pending requests
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {friendsState.pendingRequests.map((request) => (
-                        <div
-                          key={request.id}
-                          style={{
-                            padding: '6px',
-                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
-                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                            <img
-                              src={request.from.avatarUrl || '/default-avatar.png'}
-                              alt={request.from.displayName || request.from.username}
-                              style={{ width: '24px', height: '24px', borderRadius: '50%' }}
-                            />
-                            
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '11px', fontWeight: 'bold' }}>
-                                {request.from.displayName || request.from.username}
-                              </div>
-                              <div style={{ fontSize: '9px', color: '#666' }}>
-                                {request.type === 'incoming' ? 'Sent you a friend request' : 'You sent a friend request'}
-                              </div>
-                              {request.message && (
-                                <div style={{ fontSize: '9px', color: '#333', fontStyle: 'italic', marginTop: '2px' }}>
-                                  "{request.message}"
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {request.type === 'incoming' && (
-                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                              <button
-                                onClick={() => acceptFriendRequest(request.id)}
-                                style={{
-                                  ...getButtonStyles('primary'),
-                                  padding: '3px 8px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px'
-                                }}
-                              >
-                                <UserCheck size={10} />
-                                <span>Accept</span>
-                              </button>
-                              <button
-                                style={{
-                                  ...getButtonStyles('secondary'),
-                                  padding: '3px 8px'
-                                }}
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          )}
-                          
-                          {request.type === 'outgoing' && (
-                            <div style={{ textAlign: 'right', fontSize: '9px', color: '#666' }}>
-                              Pending...
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* ✅ BLOCKED USERS TAB */}
             {activeTab === 'blocked' && (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ 
-                  flex: 1, 
-                  overflowY: 'auto',
-                  border: currentTheme === 'win98' ? '1px inset #c0c0c0' : '1px solid #ccc',
-                  background: '#fff',
-                  padding: '4px'
-                }}>
-                  {friendsState.blockedUsers.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: '#666' }}>
-                      No blocked users
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {friendsState.blockedUsers.map((user) => (
-                        <div
-                          key={user.id}
+                    
+  <div style={{ flex: 1, overflow: 'auto',  margin: '2.4%', border: '2px inset ', background : '#ffffff76'  }}>
+              <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
+                {friendsState.blockedUsers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                    No blocked users
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {friendsState.blockedUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '6px',
+                          background: 'rgba(255, 255, 255, 0.5)',
+                          borderRadius: '2px',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ flex: 1, fontSize: '11px' }}>
+                          {user.displayName || user.username}
+                        </div>
+                        <button
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '4px',
-                            border: currentTheme === 'win98' ? '1px solid #c0c0c0' : '1px solid #e0e0e0',
-                            background: currentTheme === 'win98' ? '#f0f0f0' : '#f9f9f9'
+                            ...getButtonStyles('secondary'),
+                            padding: '2px 6px'
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                            <img
-                              src={user.avatarUrl || '/default-avatar.png'}
-                              alt={user.displayName || user.username}
-                              style={{ 
-                                width: '24px', 
-                                height: '24px', 
-                                borderRadius: '50%',
-                                filter: 'grayscale(100%)',
-                                opacity: 0.7
-                              }}
-                            />
-                            
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ 
-                                fontSize: '11px', 
-                                fontWeight: 'bold',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                color: '#666'
-                              }}>
-                                {user.displayName || user.username}
-                              </div>
-                              <div style={{ fontSize: '9px', color: '#999' }}>
-                                Blocked user
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            style={{
-                              ...getButtonStyles('primary'),
-                              padding: '4px 8px'
-                            }}
-                          >
-                            Unblock
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                          Unblock
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               </div>
             )}
 
@@ -1020,25 +1116,22 @@ export const FriendsWindow: React.FC<FriendsWindowProps> = ({
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                background: currentTheme === 'win98' ? '#ffcccc' : '#fee',
-                border: currentTheme === 'win98' ? '1px solid #ff0000' : '1px solid #fcc',
-                padding: '8px',
-                borderRadius: currentTheme === 'win98' ? '0' : '4px',
-                fontSize: '11px',
-                color: '#c00',
-                maxWidth: '250px',
-                textAlign: 'center',
+                background: '#fff',
+                border: '2px solid #ff0000',
+                padding: '12px',
+                borderRadius: '4px',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
                 zIndex: 1000
               }}>
-                {friendsState.error}
-                <div style={{ marginTop: '4px' }}>
-                  <button
-                    onClick={() => setFriendsState(prev => ({ ...prev, error: null }))}
-                    style={getButtonStyles('secondary')}
-                  >
-                    OK
-                  </button>
+                <div style={{ marginBottom: '8px', color: '#d32f2f' }}>
+                  {friendsState.error}
                 </div>
+                <button
+                  onClick={() => setFriendsState(prev => ({ ...prev, error: null }))}
+                  style={getButtonStyles('secondary')}
+                >
+                  OK
+                </button>
               </div>
             )}
           </div>

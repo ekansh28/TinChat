@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_2d43e55cce721d",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS user_profiles (id text PRIMARY KEY DEFAULT gen_random_uuid(), username text UNIQUE NOT NULL, display_name text, avatar_url text, banner_url text, pronouns text, status text DEFAULT 'offline', display_name_color text DEFAULT '#667eea', display_name_animation text DEFAULT 'none', rainbow_speed int DEFAULT 3, badges jsonb DEFAULT '[]', bio text, last_seen timestamptz DEFAULT now(), is_online boolean DEFAULT false, profile_complete boolean DEFAULT false, profile_card_css text, easy_customization_data jsonb DEFAULT '{}', blocked_users text[] DEFAULT '{}', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_2d43e55cce721d",
+  "parent": "mig_d1hbaum0tgo19qmlvr00",
+  "schema": "public",
+  "startedAt": "2025-06-30T16:06:54.774399Z"
+}

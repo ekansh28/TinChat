@@ -358,7 +358,7 @@ export const useFriends = ({
 
   const loadPendingRequests = useCallback(async () => {
     try {
-      const response = await fetch(`/api/friends/requests?authId=${authId}`);
+      const response = await fetch(`/api/friends/request?authId=${authId}`);
       const data = await response.json();
 
       if (data.success) {

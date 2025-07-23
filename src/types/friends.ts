@@ -2,6 +2,7 @@
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
 // ===== CORE FRIEND INTERFACE =====
+
 export interface Friend {
   id: string;
   username: string;
@@ -18,6 +19,85 @@ export interface Friend {
     isFromSelf: boolean;
     messageId: string;
   };
+  mutualFriends?: number;
+  authId: string;
+  
+  // ✅ MISSING PROPERTIES FROM FRIENDSWINDOW
+  displayName?: string;        // Alternative to display_name
+  avatarUrl?: string;          // Alternative to avatar_url  
+  lastSeen?: Date;             // Alternative to last_seen (as Date)
+  isFavorite?: boolean;        // Favorite status
+  badges?: string[];           // User badges
+}
+
+// ✅ MISSING FRIEND REQUEST INTERFACE
+export interface FriendRequest {
+  id: string;
+  from: Friend;
+  to: Friend;
+  timestamp: Date;
+  type: 'incoming' | 'outgoing';
+  message?: string;
+}
+
+
+export interface FriendRequestApiData {
+  id: string;
+  message?: string;
+  created_at: string;
+  sender?: {
+    id: string;
+    clerk_id: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+    is_online?: boolean;
+  };
+  receiver?: {
+    id: string;
+    clerk_id: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+    is_online?: boolean;
+  };
+}
+
+export interface FriendRequestsApiResponse {
+  success: boolean;
+  requests: {
+    received: FriendRequestApiData[];
+    sent: FriendRequestApiData[];
+  };
+}
+
+// ✅ MISSING FRIENDS WINDOW PROPS INTERFACE  
+export interface FriendsWindowProps {
+  isOpen: boolean;
+  onClose: () => void;
+  className?: string;
+}
+
+// ✅ MISSING FRIENDS STATE INTERFACE
+export interface FriendsState {
+  friends: Friend[];
+  pendingRequests: FriendRequest[];
+  blockedUsers: Friend[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+// ===== BLOCKED USER INTERFACE =====
+export interface BlockedUser {
+  id: string;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+}
+
+export interface BlockedUsersApiResponse {
+  success: boolean;
+  blocked: BlockedUser[];
 }
 
 // ===== CHAT MESSAGE INTERFACE =====
@@ -68,6 +148,7 @@ export const transformToModernFriend = (legacy: LegacyFriend): Friend => ({
   status: legacy.isOnline ? 'online' : 'offline',
   last_seen: new Date().toISOString(),
   is_online: legacy.isOnline,
+  authId: legacy.id, // ✅ FIXED: Add missing authId property
   unreadCount: 0,
   lastMessage: legacy.lastMessage ? {
     text: legacy.lastMessage.text,
@@ -76,6 +157,7 @@ export const transformToModernFriend = (legacy: LegacyFriend): Friend => ({
     messageId: `legacy-${Date.now()}`
   } : undefined
 });
+
 
 export const transformToLegacyFriend = (modern: Friend): LegacyFriend => ({
   id: modern.id,

@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "mig_d1ha9e60tgo19qmlvqjg",
+    "operations": [
+      {
+        "drop_table": {
+          "name": "tinchat"
+        }
+      }
+    ]
+  },
+  "migrationType": "pgroll",
+  "name": "mig_d1ha9e60tgo19qmlvqjg",
+  "parent": "mig_d1ha8vm3bkbl0uadvb9g",
+  "schema": "public",
+  "startedAt": "2025-06-30T14:52:40.702047Z"
+}

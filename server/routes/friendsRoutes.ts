@@ -119,8 +119,8 @@ export async function handleFriendsRoutes(req: IncomingMessage, res: ServerRespo
       }
     }
 
-    // POST /api/friends/send-request - Send friend request
-    if (pathname === '/api/friends/send-request') {
+    // POST /api/friends/request/send - Send friend request
+    if (pathname === '/api/friends/request/send') {
       if (method === 'POST') {
         return await handleSendFriendRequest(req, res);
       }

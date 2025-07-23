@@ -143,13 +143,49 @@ export const useProfileCustomizer = (): UseProfileCustomizerReturn => {
     setError(null);
     setLoadingProgress(0);
 
+
     try {
       console.log(`ProfileCustomizer: Loading profile for Clerk user ${clerkUserId}`);
-      
-      await updateProgressWithDelay(15, 200);
-      await updateProgressWithDelay(30, 300);
-      await updateProgressWithDelay(50, 200);
-      
+    // ✅ NEW: Try polling for profile existence first
+    await updateProgressWithDelay(15, 200);
+          
+    let profileExists = false;
+    let attempts = 0;
+    const maxAttempts = 10; // Try for ~10 seconds
+        while (!profileExists && attempts < maxAttempts && mountedRef.current) {
+      try {
+        const checkResponse = await fetch('/api/check-profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId: clerkUserId })
+        });
+        
+        if (checkResponse.ok) {
+          const checkResult = await checkResponse.json();
+          if (checkResult.exists) {
+            profileExists = true;
+            console.log('ProfileCustomizer: Profile found after polling');
+            break;
+          }
+        }
+        
+        attempts++;
+        console.log(`ProfileCustomizer: Profile not found, attempt ${attempts}/${maxAttempts}`);
+        
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          await updateProgressWithDelay(15 + (attempts * 5), 100);
+        }
+      } catch (pollError) {
+        console.warn('Profile polling error:', pollError);
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    await updateProgressWithDelay(50, 200);
       // Call API route with enhanced error handling
       let response: Response;
       try {

@@ -6,6 +6,8 @@ interface AuthState {
   authId: string | null;
   username: string | null;
   displayNameColor: string;
+  displayName?: string;    // ✅ Add this
+  avatarUrl?: string;      // ✅ Add this
   displayNameAnimation: string;
   isLoading: boolean;
 }

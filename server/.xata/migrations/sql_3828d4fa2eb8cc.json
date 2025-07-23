@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_3828d4fa2eb8cc",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS chat_messages (id serial PRIMARY KEY, sender_id text NOT NULL, receiver_id text NOT NULL, message text NOT NULL, message_type text DEFAULT 'text', read_status boolean DEFAULT false, created_at timestamptz DEFAULT now(), CONSTRAINT chk_different_message_users CHECK (sender_id <> receiver_id))"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_3828d4fa2eb8cc",
+  "parent": "sql_c2c5ff6c20ace5",
+  "schema": "public",
+  "startedAt": "2025-06-30T16:06:57.947505Z"
+}

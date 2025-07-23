@@ -137,7 +137,7 @@ export const useChat = (): UseChatReturn => {
         id: data.partnerId,
         username: data.partnerUsername || 'Stranger',
         displayName: data.partnerDisplayName,
-        avatarUrl: data.partnerAvatarUrl,
+        avatar_url: data.partnerAvatarUrl,
         bannerUrl: data.partnerBannerUrl,
         pronouns: data.partnerPronouns,
         status: data.partnerStatus || 'online',
@@ -367,7 +367,7 @@ export const useChat = (): UseChatReturn => {
     return {
       username: chatState.partnerInfo.username,
       displayName: chatState.partnerInfo.displayName,
-      avatar: chatState.partnerInfo.avatarUrl || '/default-avatar.png',
+      avatar: chatState.partnerInfo.avatar_url || '/default-avatar.png',
       displayNameColor: chatState.partnerInfo.displayNameColor,
       displayNameAnimation: chatState.partnerInfo.displayNameAnimation,
       rainbowSpeed: chatState.partnerInfo.rainbowSpeed,

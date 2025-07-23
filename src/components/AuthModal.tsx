@@ -1,12 +1,19 @@
-// src/components/AuthModal.tsx - ROBUST VERSION
+<<<<<<< HEAD
+// src/components/AuthModal.tsx - FIXED VERSION WITH CAPTCHA SUPPORT
 'use client';
-
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useSignIn, useSignUp, useClerk } from '@clerk/nextjs';
+import { useSignIn, useSignUp, useAuth, useUser } from '@clerk/nextjs';
+=======
+// src/components/AuthModal.tsx - NEW FILE
+'use client';
+import { useState } from 'react';
+import { useSignIn, useSignUp } from '@clerk/nextjs';
+>>>>>>> parent of 80cc64c (added icons for signin/up)
 import { Button } from '@/components/ui/button-themed';
 import { Input } from '@/components/ui/input-themed';
 import { Label } from '@/components/ui/label-themed';
+import Image from 'next/image';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,35 +21,32 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const [currentStep, setCurrentStep] = useState<'auth' | 'verification' | 'onboarding'>('auth');
   const [isSignUp, setIsSignUp] = useState(false);
+  
+  // Auth state
   const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState(''); // Username for Clerk auth
+  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  
-  // Email verification state
-  const [pendingVerification, setPendingVerification] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [verificationLoading, setVerificationLoading] = useState(false);
 
-  // Profile sync state - simplified
-  const [completingSignup, setCompletingSignup] = useState(false);
+  // Onboarding state
+  const [displayName, setDisplayName] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
 
-  const { signIn, isLoaded: signInLoaded } = useSignIn();
+  const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
-  const { setActive } = useClerk();
+  const { getToken } = useAuth();
+  const { user } = useUser();
 
-  // Mount detection for portal
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
+  if (!isOpen) return null;
 
-  // Escape key handler
+<<<<<<< HEAD
+  // 🔥 CRITICAL: Close modal on Escape key
   useEffect(() => {
     if (!isOpen) return;
     
@@ -56,7 +60,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  // Body scroll prevention
+  // 🔥 CRITICAL: Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -69,200 +73,377 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen]);
 
-  // Real-time username availability check with better error handling
-  useEffect(() => {
-    if (!isSignUp || !username || username.length < 3) {
-      setUsernameAvailable(null);
-      return;
-    }
-
-    const checkUsername = async () => {
-      setCheckingUsername(true);
-      setError(null);
-      
-      try {
-        console.log('🔍 Checking username:', username);
-        
-        // Add timeout to prevent hanging
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        const response = await fetch('/api/check-username', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ username: username.trim() }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        console.log('📋 Username check result:', result);
-
-        if (result.available) {
-          setUsernameAvailable(true);
-          if (result.reason && result.reason.includes('Unable to verify')) {
-            setError(`⚠️ ${result.reason}`);
-          } else {
-            setError(null);
-          }
-        } else {
-          setUsernameAvailable(false);
-          setError(result.reason || 'Username is not available');
-        }
-
-      } catch (err: any) {
-        console.error('Username check failed:', err);
-        
-        if (err.name === 'AbortError') {
-          setUsernameAvailable(null);
-          setError('Username check timed out. You can still proceed with signup.');
-        } else {
-          // Fallback to basic client-side validation
-          const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-          if (!usernameRegex.test(username)) {
-            setUsernameAvailable(false);
-            setError('Username can only contain letters, numbers, underscores, and hyphens');
-          } else {
-            setUsernameAvailable(null);
-            setError('Unable to check username availability. You can still proceed with signup.');
-          }
-        }
-      } finally {
-        setCheckingUsername(false);
-      }
-    };
-
-    // Debounce the API call
-    const timeoutId = setTimeout(checkUsername, 800);
-    return () => clearTimeout(timeoutId);
-  }, [username, isSignUp]);
-
-  // Simplified success handler - let Clerk webhook handle profile creation
-  const handleAuthSuccess = async (sessionId: string, userId?: string) => {
+  // ✅ FIXED: Check if user profile exists in database with authentication
+  const checkUserProfileExists = async (userId: string): Promise<boolean> => {
     try {
-      console.log('✅ Authentication successful');
+      const token = await getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add auth token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`/api/profiles/${userId}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.success && data.data;
+      }
       
-      if (setActive) {
-        await setActive({ session: sessionId });
-        console.log('✅ Session set successfully');
-      }
-
-      // For sign up, show brief completion message
-      if (isSignUp) {
-        setCompletingSignup(true);
-        
-        // Give webhook time to process in background
-        setTimeout(() => {
-          onClose();
-          window.location.reload();
-        }, 2000);
-      } else {
-        // For sign in, immediate redirect
-        onClose();
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
-      }
-
+      return false;
     } catch (error) {
-      console.error('❌ Auth success handler error:', error);
-      
-      // Fallback - still close modal and refresh
-      onClose();
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      console.error('Error checking user profile:', error);
+      return false;
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // ✅ FIXED: Create user profile in database with authentication
+  const createUserProfile = async (userId: string, username: string, displayName: string, avatarData?: string): Promise<boolean> => {
+    try {
+      const token = await getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add auth token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const profileData: any = {
+        username,
+        display_name: displayName,
+        profile_complete: true,
+        status: 'online',
+        is_online: true,
+        last_seen: new Date().toISOString(),
+        display_name_color: '#667eea',
+        display_name_animation: 'none',
+        rainbow_speed: 3,
+        badges: [],
+        bio: '',
+        pronouns: '',
+        blocked_users: [],
+        profile_card_css: '',
+        easy_customization_data: {}
+      };
+
+      if (avatarData) {
+        profileData.avatar_url = avatarData;
+      }
+
+      const response = await fetch(`/api/profiles/${userId}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(profileData),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.success;
+      }
+      
+      const errorData = await response.json();
+      console.error('Profile creation failed:', errorData);
+      
+      // Handle specific errors
+      if (errorData.error === 'Username taken' || errorData.error?.includes('Username')) {
+        setError('Username is already taken. Please choose another one.');
+      } else if (errorData.error?.includes('unique') || errorData.error?.includes('duplicate')) {
+        setError('Username is already taken. Please choose another one.');
+      } else {
+        setError(errorData.message || 'Failed to create profile');
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+      setError('Failed to create profile. Please try again.');
+      return false;
+    }
+  };
+
+  // ✅ NEW: Handle email verification
+  const handleVerification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || (isSignUp && !username)) return;
+    if (!verificationCode.trim()) {
+      setError('Please enter the verification code');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (!signUpLoaded || !signUp) {
+        setError('Sign up not ready. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      // Attempt email verification
+      const result = await signUp.attemptEmailAddressVerification({
+        code: verificationCode,
+      });
+
+      if (result.status === 'complete') {
+        // Verification successful, set session
+        if (result.createdSessionId && setActive) {
+          await setActive({ session: result.createdSessionId });
+        }
+        
+        const userId = result.createdUserId;
+        setCreatedUserId(userId);
+        
+        if (userId) {
+          // Wait a moment for the session to be fully established
+          setTimeout(async () => {
+            const profileExists = await checkUserProfileExists(userId);
+            
+            if (!profileExists) {
+              // Profile doesn't exist in database, show onboarding
+              setDisplayName(authUsername); // Pre-fill with username
+              setCurrentStep('onboarding');
+            } else {
+              // Profile exists in database, just close modal and reload
+              onClose();
+              window.location.reload();
+            }
+            setLoading(false);
+          }, 1000);
+        } else {
+          setLoading(false);
+        }
+      } else {
+        setError('Invalid verification code. Please try again.');
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      
+      if (err.errors && err.errors.length > 0) {
+        const errorMessage = err.errors[0].message;
+        setError(errorMessage);
+      } else {
+        setError('Verification failed. Please try again.');
+      }
+      setLoading(false);
+    }
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+=======
+    const handleSubmit = async (e: React.FormEvent) => {
+>>>>>>> parent of 80cc64c (added icons for signin/up)
+    e.preventDefault();
+    if (!email || !password) return;
+    
+    // Check username for sign up
+    if (isSignUp && (!authUsername || authUsername.length < 3)) {
+      setError('Username must be at least 3 characters');
+      return;
+    }
     
     setError(null);
     setLoading(true);
 
     try {
-      if (isSignUp) {
+        if (isSignUp) {
+        // Handle Sign Up
         if (!signUpLoaded || !signUp) return;
 
-        console.log('🔑 Starting sign up process with username:', username);
-
-        // Create the sign up
+        // ✅ FIXED: Create signup with all required fields including username
         const result = await signUp.create({
+<<<<<<< HEAD
           emailAddress: email,
-          username: username.trim(),
           password,
+          username: authUsername, // This fixes the missing_requirements error
         });
 
-        console.log('📋 Sign up result:', result.status);
+        console.log('SignUp result:', result.status, result);
+        console.log('Required fields:', result.requiredFields);
+        console.log('Missing fields:', result.missingFields);
+        console.log('Unverified fields:', result.unverifiedFields);
 
-        if (result.status === 'missing_requirements') {
-          console.log('📧 Email verification required - preparing verification');
+        if (result.status === 'complete') {
+          // Sign up successful, set session
+          if (result.createdSessionId && setActive) {
+            await setActive({ session: result.createdSessionId });
+          }
           
+          const userId = result.createdUserId;
+          setCreatedUserId(userId);
+          
+          if (userId) {
+            // Wait a moment for the session to be fully established
+            setTimeout(async () => {
+              const profileExists = await checkUserProfileExists(userId);
+              
+              if (!profileExists) {
+                // Profile doesn't exist in database, show onboarding
+                setDisplayName(authUsername); // Pre-fill with username
+                setCurrentStep('onboarding');
+              } else {
+                // Profile exists in database, just close modal and reload
+                onClose();
+                window.location.reload();
+              }
+              setLoading(false);
+            }, 1000);
+          } else {
+            setLoading(false);
+          }
+        } else if (result.status === 'missing_requirements') {
+          console.log('Missing requirements:', result.missingFields);
+          console.log('Required fields:', result.requiredFields);
+          console.log('Unverified fields:', result.unverifiedFields);
+          
+          // Check if it's actually just email verification needed
+          if (result.unverifiedFields?.includes('email_address')) {
+            // Email verification is needed, proceed to verification step
+            try {
+              await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+              setCurrentStep('verification');
+              setLoading(false);
+            } catch (emailError) {
+              console.error('Email verification preparation failed:', emailError);
+              setError('Failed to send verification email. Please try again.');
+              setLoading(false);
+            }
+          } else if (result.missingFields && result.missingFields.length > 0) {
+            // There are actually missing fields
+            setError(`Missing required fields: ${result.missingFields.join(', ')}`);
+            setLoading(false);
+          } else {
+            // No missing fields but still missing_requirements - likely email verification
+            setError('Account created but needs verification. Please check your email.');
+            try {
+              await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+              setCurrentStep('verification');
+            } catch (emailError) {
+              console.error('Email verification preparation failed:', emailError);
+            }
+            setLoading(false);
+          }
+        } else {
+          // Email verification needed - switch to verification step
           try {
             await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-            console.log('✅ Email verification prepared successfully');
-            
-            setPendingVerification(true);
+            setCurrentStep('verification');
             setLoading(false);
-            setError('Please check your email for a verification code');
-          } catch (prepareError) {
-            console.error('❌ Failed to prepare email verification:', prepareError);
+          } catch (emailError) {
             setError('Failed to send verification email. Please try again.');
             setLoading(false);
           }
-        } else if (result.status === 'complete' && result.createdSessionId) {
-          console.log('✅ Sign up completed immediately');
-          await handleAuthSuccess(result.createdSessionId, result.createdUserId || undefined);
-        } else {
-          console.log('📧 Email verification required');
-          setError('Please check your email for a verification link');
-          setLoading(false);
         }
       } else {
-        // Sign In
-        if (!signInLoaded || !signIn) return;
-
-        console.log('🔑 Starting sign in process');
-
-        const result = await signIn.create({
-          identifier: email,
-          password,
+        // Sign in logic
+=======
+            emailAddress: email,
+            password,
         });
 
-        console.log('📋 Sign in result:', result.status);
+        // ✅ BETTER: Handle different completion statuses
+        if (result.status === 'complete') {
+            // User is signed up and signed in
+            onClose();
+            window.location.reload(); // Simple refresh to update auth state
+        } else if (result.status === 'missing_requirements') {
+            setError('Please complete all required fields');
+        } else {
+            // Usually means email verification is needed
+            setError('Please check your email for a verification link');
+        }
+        } else {
+        // Handle Sign In
+>>>>>>> parent of 80cc64c (added icons for signin/up)
+        if (!signInLoaded || !signIn) return;
 
-        if (result.status === 'complete' && result.createdSessionId) {
-          await handleAuthSuccess(result.createdSessionId);
+        const result = await signIn.create({
+            identifier: email,
+            password,
+        });
+
+        // ✅ BETTER: Handle different completion statuses
+        if (result.status === 'complete') {
+<<<<<<< HEAD
+          await setActive?.({ session: result.createdSessionId });
+          
+          // Wait a moment for the session to be established
+          setTimeout(async () => {
+            // Try to get user ID from multiple sources
+            let userId = user?.id;
+            
+            // If user is not available yet, try to get it from the token
+            if (!userId) {
+              try {
+                const token = await getToken();
+                if (token) {
+                  // Decode the token to get user ID (basic JWT decode)
+                  const payload = JSON.parse(atob(token.split('.')[1]));
+                  userId = payload.sub;
+                }
+              } catch (e) {
+                console.warn('Could not extract user ID from token:', e);
+              }
+            }
+            
+            if (userId) {
+              const profileExists = await checkUserProfileExists(userId);
+              
+              if (!profileExists) {
+                // User signed in but no profile exists in database, show onboarding
+                setCreatedUserId(userId);
+                setDisplayName(email.split('@')[0]); // Use email prefix as default
+                setAuthUsername(email.split('@')[0]); // Set a default username
+                setCurrentStep('onboarding');
+                setLoading(false);
+                return;
+              }
+            }
+            
+            onClose();
+            window.location.reload();
+          }, 2000); // Increased timeout to 2 seconds
         } else if (result.status === 'needs_second_factor') {
           setError('Two-factor authentication required');
           setLoading(false);
         } else {
           setError('Sign in failed. Please check your credentials.');
           setLoading(false);
+=======
+            // User is signed in
+            onClose();
+            window.location.reload(); // Simple refresh to update auth state
+        } else if (result.status === 'needs_second_factor') {
+            setError('Two-factor authentication required');
+        } else {
+            setError('Sign in failed. Please check your credentials.');
         }
-      }
+>>>>>>> parent of 80cc64c (added icons for signin/up)
+        }
     } catch (err: any) {
+<<<<<<< HEAD
       console.error('Auth error:', err);
       
       if (err.errors && err.errors.length > 0) {
-        const errorMsg = err.errors[0].message;
-        setError(errorMsg);
+        const errorMessage = err.errors[0].message;
         
-        // Handle specific errors
-        if (errorMsg.includes('identifier_exists')) {
-          setError('An account with this email already exists. Try signing in instead.');
-        } else if (errorMsg.includes('form_identifier_exists')) {
-          setError('Username is already taken. Please choose another.');
+        // Handle specific Clerk error messages
+        if (errorMessage.includes('identifier already exists')) {
+          setError('An account with this email already exists. Please sign in instead.');
+        } else if (errorMessage.includes('password')) {
+          setError('Password must be at least 8 characters long.');
+        } else if (errorMessage.includes('username')) {
+          setError('Username is already taken or invalid.');
+        } else {
+          setError(errorMessage);
         }
       } else {
         setError(isSignUp ? 'Failed to create account' : 'Failed to sign in');
@@ -271,136 +452,196 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   };
 
-  // Handle email verification code submission
-  const handleVerificationSubmit = async (e: React.FormEvent) => {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+
+    const file = e.target.files[0];
+    
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image too large. Please select an image smaller than 2MB.');
+      return;
+    }
+    
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file.');
+      return;
+    }
+    
+    setAvatarFile(file);
+    setError(null); // Clear any previous error
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOnboardingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verificationCode || !signUp) return;
     
-    setVerificationLoading(true);
+    if (!displayName.trim()) {
+      setError('Display name is required');
+      return;
+    }
+
+    if (!createdUserId) {
+      setError('User ID not found. Please try signing up again.');
+      return;
+    }
+
+    // Generate username if not set (for sign-in users)
+    let finalUsername = authUsername;
+    if (!finalUsername) {
+      finalUsername = displayName
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 20)
+        .padEnd(3, '0');
+    }
+
+    setLoading(true);
     setError(null);
 
     try {
-      console.log('🔐 Attempting email verification with code:', verificationCode);
-
-      const result = await signUp.attemptEmailAddressVerification({
-        code: verificationCode,
-      });
-
-      console.log('📋 Verification result:', result.status);
-
-      if (result.status === 'complete' && result.createdSessionId) {
-        console.log('✅ Email verified and account created');
-        await handleAuthSuccess(result.createdSessionId, result.createdUserId || undefined);
-      } else {
-        setError('Verification failed. Please try again.');
-        setVerificationLoading(false);
+      // Convert avatar to base64 if provided
+      let avatarData = null;
+      if (avatarFile) {
+        const reader = new FileReader();
+        avatarData = await new Promise((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read avatar file'));
+          reader.readAsDataURL(avatarFile);
+        });
       }
-    } catch (err: any) {
-      console.error('Verification error:', err);
+
+      // ✅ FIXED: Save profile data to database
+      const success = await createUserProfile(
+        createdUserId,
+        finalUsername,
+        displayName.trim(),
+        avatarData as string
+      );
+
+      if (success) {
+        console.log('✅ Profile created successfully in database!');
+        onClose();
+        window.location.reload();
+      } else {
+        // Error is already set in createUserProfile function
+        setLoading(false);
+      }
       
-      if (err.errors && err.errors.length > 0) {
-        const errorMsg = err.errors[0].message;
-        setError(errorMsg);
-        
-        // Handle specific verification errors
-        if (errorMsg.includes('verification code before attempting')) {
-          setError('Please request a new verification code first.');
-        } else if (errorMsg.includes('invalid') || errorMsg.includes('incorrect')) {
-          setError('Invalid verification code. Please check and try again.');
-        } else if (errorMsg.includes('expired')) {
-          setError('Verification code expired. Please request a new one.');
-        }
-      } else {
-        setError('Invalid verification code. Please try again.');
-      }
-      setVerificationLoading(false);
-    }
-  };
-
-  // Resend verification email
-  const handleResendVerification = async () => {
-    if (!signUp) return;
-    
-    setError(null);
-    setVerificationLoading(true);
-    
-    try {
-      console.log('📧 Resending verification email...');
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-      setError('Verification email sent! Check your inbox.');
-      console.log('✅ Verification email resent successfully');
     } catch (err: any) {
-      console.error('❌ Failed to resend verification email:', err);
-      setError('Failed to resend verification email. Please try again.');
+      console.error('Onboarding error:', err);
+      setError('Failed to save profile. Please try again.');
+      setLoading(false);
+=======
+        console.error('Auth error:', err);
+        
+        // ✅ BETTER: Handle specific Clerk error types
+        if (err.errors && err.errors.length > 0) {
+        setError(err.errors[0].message);
+        } else {
+        setError(isSignUp ? 'Failed to create account' : 'Failed to sign in');
+        }
     } finally {
-      setVerificationLoading(false);
+        setLoading(false);
+>>>>>>> parent of 80cc64c (added icons for signin/up)
     }
-  };
+    };
 
   const handleOAuth = async (provider: 'oauth_google' | 'oauth_discord') => {
     setError(null);
     setLoading(true);
 
     try {
-      console.log(`🔗 Starting ${provider} authentication`);
-      
       if (isSignUp && signUpLoaded && signUp) {
         await signUp.authenticateWithRedirect({
           strategy: provider,
-          redirectUrl: window.location.origin,
-          redirectUrlComplete: window.location.origin,
+          redirectUrl: window.location.origin + '/auth/callback',
+          redirectUrlComplete: window.location.origin + '/auth/complete',
         });
       } else if (signInLoaded && signIn) {
         await signIn.authenticateWithRedirect({
           strategy: provider,
-          redirectUrl: window.location.origin,
-          redirectUrlComplete: window.location.origin,
+          redirectUrl: window.location.origin + '/auth/callback',
+          redirectUrlComplete: window.location.origin + '/auth/complete',
         });
       }
     } catch (err: any) {
       console.error('OAuth error:', err);
-      setError('OAuth authentication failed');
+      setError('OAuth authentication failed. Please try again.');
       setLoading(false);
     }
   };
 
-  // Reset form when switching between sign in/up
-  const switchMode = (newIsSignUp: boolean) => {
-    setIsSignUp(newIsSignUp);
-    setError(null);
-    setUsername('');
-    setUsernameAvailable(null);
-    setPendingVerification(false);
-    setVerificationCode('');
-    setCompletingSignup(false);
-  };
-
-  // Generate username suggestion from email
-  const suggestUsername = () => {
-    if (email) {
-      const suggestion = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
-      setUsername(suggestion);
+<<<<<<< HEAD
+  // Reset state when switching between sign in/up
+  useEffect(() => {
+    if (mounted) {
+      setError(null);
+      setEmail('');
+      setPassword('');
+      setAuthUsername('');
+      setVerificationCode('');
+      setCurrentStep('auth');
+      setLoading(false);
     }
-  };
+  }, [isSignUp, mounted]);
 
-  // Don't render until mounted
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setError(null);
+      setEmail('');
+      setPassword('');
+      setAuthUsername('');
+      setVerificationCode('');
+      setDisplayName('');
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setCreatedUserId(null);
+      setCurrentStep('auth');
+      setLoading(false);
+      setIsSignUp(false);
+    }
+  }, [isOpen]);
+
+  // 🔥 CRITICAL: Don't render until mounted (prevents SSR issues)
   if (!mounted || !isOpen) return null;
 
   const modalContent = (
     <div 
-      className="auth-modal-backdrop-fixed"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        zIndex: 9999
+      }}
       onClick={onClose}
     >
+      {/* Modal Window */}
       <div 
-        className="auth-modal-window"
+        className="window w-full max-w-md relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Title Bar */}
         <div className="title-bar">
           <div className="title-bar-text">
-            {completingSignup ? 'Welcome!' :
-             pendingVerification ? 'Email Verification' : 
-             (isSignUp ? 'Create Account' : 'Sign In')}
+            {currentStep === 'auth' 
+              ? (isSignUp ? 'Create Account' : 'Sign In')
+              : currentStep === 'verification'
+              ? 'Verify Email'
+              : 'Complete Your Profile'
+            }
           </div>
           <div className="title-bar-controls">
             <button aria-label="Close" onClick={onClose}></button>
@@ -408,89 +649,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         </div>
 
         {/* Window Body */}
-        <div className="window-body auth-modal-body">
-          {/* Show completion message */}
-          {completingSignup ? (
-            <div className="text-center py-8">
-              <div className="text-4xl mb-4">🎉</div>
-              <h3 className="text-lg font-semibold mb-2">Account Created Successfully!</h3>
-              <p className="text-sm text-gray-600">
-                Welcome to TinChat! We're setting up your profile in the background.
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                You'll be redirected in a moment...
-              </p>
-            </div>
-          ) : 
-          /* Show verification form if pending */
-          pendingVerification ? (
-            <>
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold">Email Verification</h3>
-                <p className="text-sm text-gray-600 mt-2">
-                  We sent a verification code to <strong>{email}</strong>. 
-                  Please enter the code below to complete your account setup.
-                </p>
-                <p className="text-xs text-blue-600 mt-1">
-                  💡 Check your spam folder if you don't see the email within a few minutes.
-                </p>
-              </div>
-
-              <form onSubmit={handleVerificationSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="verificationCode">Verification Code</Label>
-                  <Input 
-                    id="verificationCode" 
-                    type="text" 
-                    value={verificationCode} 
-                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
-                    required 
-                    disabled={verificationLoading}
-                    placeholder="Enter 6-digit code"
-                    maxLength={6}
-                    className="text-center text-lg tracking-widest"
-                  />
-                </div>
-
-                {error && (
-                  <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
-                    {error}
-                  </div>
-                )}
-
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={verificationLoading || verificationCode.length !== 6}
-                >
-                  {verificationLoading ? 'Verifying...' : 'Verify Email'}
-                </Button>
-
-                <div className="flex justify-between items-center text-sm">
-                  <button
-                    type="button"
-                    onClick={handleResendVerification}
-                    className="text-blue-600 hover:text-blue-700 underline"
-                    disabled={verificationLoading}
-                  >
-                    Resend Code
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingVerification(false);
-                      setVerificationCode('');
-                      setError(null);
-                    }}
-                    className="text-gray-600 hover:text-gray-700 underline"
-                    disabled={verificationLoading}
-                  >
-                    Back to Sign Up
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
+        <div className="window-body p-6">
+          {/* ✅ NEW: Add CAPTCHA container for Clerk */}
+          <div id="clerk-captcha" style={{ display: 'none' }}></div>
+          
+          {currentStep === 'auth' ? (
             <>
               {/* Tab Switcher */}
               <div className="flex mb-4 border-b">
@@ -501,7 +664,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       ? 'border-blue-500 text-blue-600' 
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
-                  onClick={() => switchMode(false)}
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setError(null);
+                  }}
                 >
                   Sign In
                 </button>
@@ -512,14 +678,17 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       ? 'border-blue-500 text-blue-600' 
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
-                  onClick={() => switchMode(true)}
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setError(null);
+                  }}
                 >
                   Sign Up
                 </button>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Auth Form */}
+              <form onSubmit={handleAuth} className="space-y-4">
                 <div>
                   <Label htmlFor="email">Email</Label>
                   <Input 
@@ -534,74 +703,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   />
                 </div>
 
+                {/* Username field - only for sign up */}
                 {isSignUp && (
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <Label htmlFor="username">Username</Label>
-                      {email && !username && (
-                        <button
-                          type="button"
-                          onClick={suggestUsername}
-                          className="text-xs text-blue-600 hover:text-blue-700"
-                        >
-                          Use email prefix
-                        </button>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <Input 
-                        id="username" 
-                        type="text" 
-                        value={username} 
-                        onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, ''))} 
-                        required 
-                        disabled={loading}
-                        autoComplete="username"
-                        placeholder="Choose a username"
-                        minLength={3}
-                        maxLength={30}
-                        className={`pr-8 ${
-                          username.length >= 3 
-                            ? usernameAvailable === true 
-                              ? 'border-green-500' 
-                              : usernameAvailable === false 
-                              ? 'border-red-500' 
-                              : 'border-yellow-500'
-                            : ''
-                        }`}
-                      />
-                      {username.length >= 3 && (
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                          {checkingUsername ? (
-                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                          ) : usernameAvailable === true ? (
-                            <span className="text-green-500 text-sm font-bold">✓</span>
-                          ) : usernameAvailable === false ? (
-                            <span className="text-red-500 text-sm font-bold">✗</span>
-                          ) : (
-                            <span className="text-yellow-500 text-sm">?</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {username && username.length >= 3 && (
-                      <div className="text-xs mt-1">
-                        {checkingUsername ? (
-                          <span className="text-blue-600">Checking availability...</span>
-                        ) : usernameAvailable === true ? (
-                          <span className="text-green-600">✓ Username is available</span>
-                        ) : usernameAvailable === false ? (
-                          <span className="text-red-600">✗ Username is not available</span>
-                        ) : (
-                          <span className="text-yellow-600">? Unable to verify availability</span>
-                        )}
-                      </div>
-                    )}
-                    {username && username.length < 3 && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Username must be at least 3 characters
-                      </p>
-                    )}
+                    <Label htmlFor="username">Username</Label>
+                    <Input 
+                      id="username" 
+                      type="text" 
+                      value={authUsername} 
+                      onChange={(e) => setAuthUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20))} 
+                      required 
+                      minLength={3}
+                      maxLength={20}
+                      disabled={loading}
+                      placeholder="Enter username"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">3-20 characters. Letters, numbers, and underscores only.</p>
                   </div>
                 )}
                 
@@ -623,11 +740,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 </div>
 
                 {error && (
-                  <div className={`text-xs p-2 border rounded ${
-                    error.includes('⚠️') 
-                      ? 'text-yellow-700 bg-yellow-100 border-yellow-400' 
-                      : 'text-red-600 bg-red-100 border-red-400'
-                  }`}>
+                  <div className="text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
                     {error}
                   </div>
                 )}
@@ -635,7 +748,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <Button 
                   type="submit" 
                   className="w-full" 
-                  disabled={loading || (isSignUp && usernameAvailable === false)}
+                  disabled={loading}
                 >
                   {loading 
                     ? (isSignUp ? 'Creating Account...' : 'Signing In...') 
@@ -658,8 +771,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   variant="outline" 
                   onClick={() => handleOAuth('oauth_google')} 
                   disabled={loading}
-                  className="oauth-button google-button"
+                  className="w-full flex items-center justify-center gap-2"
                 >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
                   Continue with Google
                 </Button>
                 <Button
@@ -667,20 +786,332 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   variant="outline"
                   onClick={() => handleOAuth('oauth_discord')}
                   disabled={loading}
-                  className="oauth-button discord-button"
+                  className="w-full flex items-center justify-center gap-2"
                 >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419-.0002 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9554 2.4189-2.1568 2.4189Z"/>
+                  </svg>
                   Continue with Discord
                 </Button>
               </div>
+            </>
+          ) : currentStep === 'verification' ? (
+            <>
+              {/* Email Verification Form */}
+              <div className="text-center mb-4">
+                <p className="text-sm text-gray-600">
+                  We sent a verification code to <strong>{email}</strong>
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Check your email and enter the 6-digit code below
+                </p>
+              </div>
 
-              {/* Captcha container for Clerk */}
-              <div id="clerk-captcha" className="mt-4"></div>
+              <form onSubmit={handleVerification} className="space-y-4">
+                <div>
+                  <Label htmlFor="verification-code">Verification Code</Label>
+                  <Input
+                    id="verification-code"
+                    type="text"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    required
+                    maxLength={6}
+                    disabled={loading}
+                    placeholder="Enter 6-digit code"
+                    className="text-center text-2xl tracking-widest"
+                  />
+                </div>
+
+                {error && (
+                  <div className="text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setCurrentStep('auth');
+                      setVerificationCode('');
+                      setError(null);
+                    }}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={loading || verificationCode.length !== 6}
+                    className="flex-1"
+                  >
+                    {loading ? 'Verifying...' : 'Verify Email'}
+                  </Button>
+                </div>
+              </form>
+
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  onClick={async () => {
+                    try {
+                      await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' });
+                      setError(null);
+                    } catch (err) {
+                      setError('Failed to resend verification email');
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  Resend verification email
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Onboarding Form */}
+              <form onSubmit={handleOnboardingSubmit} className="space-y-4">
+                {/* Avatar Upload */}
+                <div>
+                  <Label>Profile Picture (Optional)</Label>
+                  <div className="mt-2 flex items-center space-x-4">
+                    <div className="h-16 w-16 rounded-full overflow-hidden bg-gray-100 border">
+                      {avatarPreview ? (
+                        <Image 
+                          src={avatarPreview} 
+                          alt="Avatar preview" 
+                          width={64} 
+                          height={64} 
+                          className="object-cover h-full w-full" 
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-gray-400">
+                          <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="outline"
+                      onClick={() => document.getElementById('avatar-input')?.click()}
+                      disabled={loading}
+                    >
+                      Choose Image
+                    </Button>
+                    <input
+                      id="avatar-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, or GIF. Max 2MB.</p>
+                </div>
+
+                {/* Display Name */}
+                <div>
+                  <Label htmlFor="displayName">Display Name</Label>
+                  <Input
+                    id="displayName"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value.slice(0, 30))}
+                    required
+                    maxLength={30}
+                    disabled={loading}
+                    placeholder="Enter display name"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This will be shown in chats.</p>
+                </div>
+
+                {/* Show username being used */}
+                <div>
+                  <Label>Username {authUsername ? '(from signup)' : '(auto-generated)'}</Label>
+                  <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
+                    @{authUsername || (displayName
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_]/g, '')
+                      .slice(0, 20)
+                      .padEnd(3, '0')) || 'username'}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">This will be saved to the database.</p>
+                </div>
+
+                {error && (
+                  <div className="text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCurrentStep('auth')}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={loading || !displayName.trim()}
+                    className="flex-1"
+                  >
+                    {loading ? 'Saving to Database...' : 'Complete Setup'}
+                  </Button>
+                </div>
+              </form>
             </>
           )}
+=======
+  return (
+    <>
+
+      {/* Backdrop */}
+<div 
+  className="auth-modal-backdrop" 
+  onClick={onClose}
+>
+        {/* Modal Window */}
+        <div 
+          className="window w-full max-w-md relative"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Title Bar */}
+          <div className="title-bar">
+            <div className="title-bar-text">
+              {isSignUp ? 'Create Account' : 'Sign In'}
+            </div>
+            <div className="title-bar-controls">
+              <button aria-label="Close" onClick={onClose}></button>
+            </div>
+          </div>
+
+          {/* Window Body */}
+          <div className="window-body p-6">
+            {/* Tab Switcher */}
+            <div className="flex mb-4 border-b">
+              <button
+                type="button"
+                className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  !isSignUp 
+                    ? 'border-blue-500 text-blue-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => {
+                  setIsSignUp(false);
+                  setError(null);
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  isSignUp 
+                    ? 'border-blue-500 text-blue-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => {
+                  setIsSignUp(true);
+                  setError(null);
+                }}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  required 
+                  disabled={loading}
+                  autoComplete="email"
+                  placeholder="Enter your email"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password">
+                  Password {isSignUp && '(min. 8 characters)'}
+                </Label>
+                <Input 
+                  id="password" 
+                  type="password" 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  required 
+                  minLength={isSignUp ? 8 : undefined}
+                  disabled={loading}
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  placeholder="Enter your password"
+                />
+              </div>
+
+              {error && (
+                <div className="text-red-600 text-xs p-2 bg-red-100 border border-red-400 rounded">
+                  {error}
+                </div>
+              )}
+
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading}
+              >
+                {loading 
+                  ? (isSignUp ? 'Creating Account...' : 'Signing In...') 
+                  : (isSignUp ? 'Create Account' : 'Sign In')
+                }
+              </Button>
+            </form>
+            
+            {/* Divider */}
+            <div className="flex items-center my-4">
+              <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+              <span className="mx-2 text-xs text-gray-500 dark:text-gray-400">OR</span>
+              <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+            </div>
+            
+            {/* OAuth Buttons */}
+            <div className="flex flex-col gap-2">
+              <Button 
+                type="button"
+                variant="outline" 
+                onClick={() => handleOAuth('oauth_google')} 
+                disabled={loading}
+                className="w-full"
+              >
+                Continue with Google
+              </Button>
+              <Button 
+                type="button"
+                variant="outline" 
+                onClick={() => handleOAuth('oauth_discord')} 
+                disabled={loading}
+                className="w-full"
+              >
+                Continue with Discord
+              </Button>
+            </div>
+          </div>
+>>>>>>> parent of 80cc64c (added icons for signin/up)
         </div>
       </div>
-    </div>
+    </>
   );
-
-  return createPortal(modalContent, document.body);
 }

@@ -18,7 +18,7 @@ export interface PartnerInfo {
   id: string;
   username: string;
   displayName?: string;
-  avatarUrl?: string;
+  avatar_url?: string;
   bannerUrl?: string;
   pronouns?: string;
   status?: 'online' | 'idle' | 'dnd' | 'offline';

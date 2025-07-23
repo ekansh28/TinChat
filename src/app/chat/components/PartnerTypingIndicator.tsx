@@ -9,6 +9,7 @@ interface PartnerTypingIndicatorProps {
   partnerInfo?: {
     username: string;
     displayName?: string;
+    avatar_url?: string;
     displayNameColor?: string;
     displayNameAnimation?: string;
     rainbowSpeed?: number;

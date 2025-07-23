@@ -1126,7 +1126,7 @@ export function useFriendSearch(currentUserAuthId: string) {
 
   const sendFriendRequest = useCallback(async (receiverAuthId: string, message?: string) => {
     try {
-      const response = await fetch('/api/friends/send-request', {
+      const response = await fetch('/api/friends/request/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

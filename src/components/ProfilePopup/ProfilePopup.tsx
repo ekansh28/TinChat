@@ -400,7 +400,7 @@ export function ProfilePopup({
 
     setActionLoading('add_friend');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/friends/send-request`, {
+      const response = await fetch(`${API_BASE_URL}/api/friends/request/send`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

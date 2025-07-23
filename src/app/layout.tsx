@@ -2,11 +2,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ClerkProvider } from '@clerk/nextjs'; // ADD THIS IMPORT
-import Script from 'next/script';
+import ClientLayout from "@/components/ClientLayout"; // ✅ New client wrapper
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "TinChat",
@@ -19,21 +19,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider> {/* ADD THIS WRAPPER */}
+    <ClerkProvider>
       <html lang="en">
         <head>
-          {/* Google AdSense Meta Tag */}
-          <meta 
-            name="google-adsense-account" 
-            content="ca-pub-5670235631357216" 
-          />
-
-          {/* Load 98.css and 7.css from CDN */}
-          <link 
-            rel="stylesheet" 
-            href="https://unpkg.com/98.css"
-            crossOrigin="anonymous"
-          />
+          <meta name="google-adsense-account" content="ca-pub-5670235631357216" />
+          <link rel="stylesheet" href="https://unpkg.com/98.css" crossOrigin="anonymous" />
         </head>
         <body className={inter.className}>
           <ThemeProvider
@@ -42,24 +32,10 @@ export default function RootLayout({
             enableSystem={false}
             storageKey="tinchat-theme"
           >
-            {children}
+            <ClientLayout>{children}</ClientLayout> {/* ✅ Wrap here */}
           </ThemeProvider>
-          
-          {/* Load animated cursor script */}
-          <Script 
-            src="/animatedcursor.js" 
-            strategy="beforeInteractive"
-            id="animated-cursor-script"
-          />
-          
-          {/* Optional: Load oneko script */}
-          <Script 
-            src="/oneko.js" 
-            strategy="lazyOnload"
-            id="oneko-script"
-          />
         </body>
       </html>
-    </ClerkProvider> 
+    </ClerkProvider>
   );
 }
