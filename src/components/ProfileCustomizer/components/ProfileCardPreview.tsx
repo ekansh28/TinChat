@@ -1,7 +1,7 @@
-// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - FIXED WITH GIF SUPPORT AND MATCHING DIMENSIONS
+// src/components/ProfileCustomizer/components/ProfileCardPreview.tsx - FIXED LAYOUT VERSION
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ImageEditor } from './ImageEditor';
 import type { UserProfile, Badge } from '../types';
@@ -26,6 +26,56 @@ const isGifUrl = (url: string): boolean => {
   return cleanUrl.endsWith('.gif') || url.includes('data:image/gif');
 };
 
+// Status indicator function with icons
+const getStatusIndicator = (status: string): { icon: string; text: string } => {
+  switch (status) {
+    case 'online': return { icon: 'https://cdn.tinchat.online/icons/online.png', text: 'Online' };
+    case 'idle': return { icon: 'https://cdn.tinchat.online/icons/idle.png', text: 'Idle' };
+    case 'dnd': return { icon: 'https://cdn.tinchat.online/icons/dnd.png', text: 'Do Not Disturb' };
+    case 'offline': return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Offline' };
+    default: return { icon: 'https://cdn.tinchat.online/icons/offline.png', text: 'Unknown' };
+  }
+};
+
+// Display name styling function
+const getDisplayNameStyle = (animation?: string, color?: string, speed?: number): React.CSSProperties => {
+  const baseStyle: React.CSSProperties = {
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    marginBottom: '0.25rem',
+    color: color || '#000000',
+  };
+
+  switch (animation) {
+    case 'rainbow':
+      return {
+        ...baseStyle,
+        animation: `rainbow ${speed || 3}s linear infinite`,
+      };
+    case 'gradient':
+      return {
+        ...baseStyle,
+        background: 'linear-gradient(45deg, #667eea, #764ba2)',
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        animation: 'gradient 4s ease-in-out infinite',
+      };
+    case 'pulse':
+      return {
+        ...baseStyle,
+        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      };
+    case 'glow':
+      return {
+        ...baseStyle,
+        animation: 'glow 2s ease-in-out infinite alternate',
+      };
+    default:
+      return baseStyle;
+  }
+};
+
 const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({ 
   profile, 
   badges, 
@@ -45,6 +95,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const badgesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Event handlers
   const handleAvatarClick = () => {
     if (onAvatarUpload) {
       avatarInputRef.current?.click();
@@ -57,26 +108,9 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     }
   };
 
-  // ✅ ENHANCED: Handle GIF uploads directly without going through image editor
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // ✅ If it's a GIF, upload directly without cropping
-      if (file.type === 'image/gif') {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result as string;
-          const updateEvent = new CustomEvent('profileUpdate', {
-            detail: { type: 'avatar', data: dataUrl }
-          });
-          window.dispatchEvent(updateEvent);
-        };
-        reader.readAsDataURL(file);
-        e.target.value = '';
-        return;
-      }
-      
-      // For non-GIF images, use the image editor
       setSelectedAvatarFile(file);
       setIsAvatarEditorOpen(true);
       e.target.value = '';
@@ -86,46 +120,38 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
   const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // ✅ If it's a GIF, upload directly without cropping
-      if (file.type === 'image/gif') {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result as string;
-          const updateEvent = new CustomEvent('profileUpdate', {
-            detail: { type: 'banner', data: dataUrl }
-          });
-          window.dispatchEvent(updateEvent);
-        };
-        reader.readAsDataURL(file);
-        e.target.value = '';
-        return;
-      }
-      
-      // For non-GIF images, use the image editor
       setSelectedBannerFile(file);
       setIsBannerEditorOpen(true);
       e.target.value = '';
     }
   };
 
-  const handleAvatarApply = (croppedImageData: string) => {
-    if (onAvatarUpload) {
-      const updateEvent = new CustomEvent('profileUpdate', {
-        detail: { type: 'avatar', data: croppedImageData }
-      });
-      window.dispatchEvent(updateEvent);
-    }
-    setSelectedAvatarFile(null);
+  const handleBannerApply = (croppedImageData: string) => {
+    setSelectedBannerFile(null);
+    setIsBannerEditorOpen(false);
+    
+    setTimeout(() => {
+      if (onBannerUpload) {
+        const updateEvent = new CustomEvent('profileUpdate', {
+          detail: { type: 'banner', data: croppedImageData }
+        });
+        window.dispatchEvent(updateEvent);
+      }
+    }, 0);
   };
 
-  const handleBannerApply = (croppedImageData: string) => {
-    if (onBannerUpload) {
-      const updateEvent = new CustomEvent('profileUpdate', {
-        detail: { type: 'banner', data: croppedImageData }
-      });
-      window.dispatchEvent(updateEvent);
-    }
-    setSelectedBannerFile(null);
+  const handleAvatarApply = (croppedImageData: string) => {
+    setSelectedAvatarFile(null);
+    setIsAvatarEditorOpen(false);
+    
+    setTimeout(() => {
+      if (onAvatarUpload) {
+        const updateEvent = new CustomEvent('profileUpdate', {
+          detail: { type: 'avatar', data: croppedImageData }
+        });
+        window.dispatchEvent(updateEvent);
+      }
+    }, 0);
   };
 
   const handleAvatarEditorClose = () => {
@@ -138,10 +164,26 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     setSelectedBannerFile(null);
   };
 
-  // ✅ FIXED: Badges scroll handling with event isolation
+  // Image error handlers
+  const handleAvatarError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.src = getDefaultAvatar();
+  };
+
+  const handleBannerError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.style.display = 'none';
+  };
+
+  const handleBadgeError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.style.display = 'none';
+  };
+
+  // Badges scroll handling
   const handleBadgesWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Prevent event bubbling to parent elements
+    e.stopPropagation();
     if (badgesContainerRef.current) {
       badgesContainerRef.current.scrollLeft += e.deltaY;
     }
@@ -155,23 +197,20 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     const x = e.clientX - rect.left;
     const containerWidth = rect.width;
     
-    // Auto-scroll based on mouse position
-    const scrollZoneWidth = 50; // Pixels from edge to trigger scroll
+    const scrollZoneWidth = 50;
     const scrollSpeed = 2;
     
     if (x < scrollZoneWidth && container.scrollLeft > 0) {
-      // Left edge - scroll left
       container.scrollLeft -= scrollSpeed;
     } else if (x > containerWidth - scrollZoneWidth && 
                container.scrollLeft < container.scrollWidth - container.clientWidth) {
-      // Right edge - scroll right
       container.scrollLeft += scrollSpeed;
     }
   };
 
   return (
     <>
-      {/* Hidden file inputs with enhanced accept for GIFs */}
+      {/* Hidden file inputs */}
       <input
         ref={avatarInputRef}
         type="file"
@@ -187,7 +226,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         style={{ display: 'none' }}
       />
 
-      {/* Avatar Image Editor with circle crop (only for non-GIFs) */}
+      {/* Image Editors */}
       {selectedAvatarFile && (
         <ImageEditor
           isOpen={isAvatarEditorOpen}
@@ -199,7 +238,6 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         />
       )}
 
-      {/* Banner Image Editor with banner crop (only for non-GIFs) */}
       {selectedBannerFile && (
         <ImageEditor
           isOpen={isBannerEditorOpen}
@@ -211,26 +249,31 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
         />
       )}
 
-      {/* Inject custom CSS if provided */}
+      {/* Inject custom CSS */}
       {customCSS && (
         <style dangerouslySetInnerHTML={{ __html: customCSS }} />
       )}
       
-      {/* ✅ FIXED: Match ProfilePopup dimensions (300px width) */}
       <div
         className={cn(
-          "profile-card-custom relative bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700",
+          "profile-card-custom relative bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden",
           isPreview && "ring-2 ring-blue-400 ring-opacity-50"
         )}
         style={{ 
-          width: 300, // Match ProfilePopup width
-          minHeight: 400, // Match ProfilePopup min height
-          overflow: 'hidden' 
+          width: 300, 
+          minHeight: 200
         }}
       >
-        {/* Banner area with upload hover - match ProfilePopup banner height */}
+        {/* Banner area - Top of card */}
         <div 
-          className="relative mb-4 -mx-4 -mt-4 h-20 cursor-pointer group"
+          className="profile-popup-banner profile-banner relative overflow-hidden"
+          style={{ 
+            width: '100%', 
+            height: 140,
+            borderTopLeftRadius: '8px',
+            borderTopRightRadius: '8px',
+            cursor: onBannerUpload ? 'pointer' : 'default'
+          }}
           onClick={handleBannerClick}
           onMouseEnter={() => setBannerHover(true)}
           onMouseLeave={() => setBannerHover(false)}
@@ -239,130 +282,191 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             <img
               src={profile.banner_url}
               alt="Profile Banner"
-              className="w-full h-full object-cover rounded-t-lg"
+              className="profile-popup-banner-image"
               style={{
-                // ✅ Preserve GIF animation
+                width: '100%',
+                height: '140px',
+                objectFit: 'cover',
                 imageRendering: isGifUrl(profile.banner_url) ? 'auto' : 'auto'
               }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
+              onError={handleBannerError}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-t-lg" />
+            <div 
+              className="profile-popup-banner-placeholder"
+              style={{ 
+                width: '100%', 
+                height: '140px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              }}
+            />
           )}
           
           {/* Banner upload overlay */}
           {onBannerUpload && (
             <div
-              className={cn(
-                "absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center rounded-t-lg transition-opacity duration-200",
-                bannerHover ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: bannerHover ? 1 : 0,
+                transition: 'opacity 0.2s',
+                pointerEvents: bannerHover ? 'auto' : 'none'
+              }}
             >
-              <div className="text-white text-center">
-                <div className="text-xs">
+              <div style={{ textAlign: 'center', color: 'white' }}>
+                <div style={{ fontSize: '14px' }}>
                   {profile.banner_url ? 'Change Banner' : 'Add Banner'}
                 </div>
-                <div className="text-xs opacity-75 mt-1">
-                  GIFs supported
+                <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '4px' }}>
+                  300×140 recommended
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Main content */}
-        <div className="px-4 pb-4">
-          {/* Avatar and basic info */}
-          <div className="flex items-start gap-3 mb-3">
-            {/* Avatar with upload hover - match ProfilePopup avatar size */}
-            <div 
-              className="relative cursor-pointer group"
-              onClick={handleAvatarClick}
-              onMouseEnter={() => setAvatarHover(true)}
-              onMouseLeave={() => setAvatarHover(false)}
-            >
+        {/* Main content - Below banner with overlap */}
+        <div style={{ padding: '16px', paddingTop: '0', marginTop: '-32px', position: 'relative', zIndex: 10 }}>
+          {/* Avatar */}
+          <div style={{ marginBottom: '12px' }} className="profile-avatar-container">
+            <div style={{ position: 'relative', width: '80px', height: '80px' }}>
               <img
                 src={profile.avatar_url || getDefaultAvatar()}
                 alt="Profile Avatar"
-                className="w-16 h-16 rounded-full object-cover border-4 border-white dark:border-gray-600"
+                className="profile-avatar"
                 style={{
-                  // ✅ Preserve GIF animation
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  border: '3px solid #1f2937',
+                  objectFit: 'cover',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  cursor: onAvatarUpload ? 'pointer' : 'default',
                   imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
                 }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = getDefaultAvatar();
-                }}
+                onError={handleAvatarError}
+                onClick={handleAvatarClick}
+                onMouseEnter={() => setAvatarHover(true)}
+                onMouseLeave={() => setAvatarHover(false)}
               />
+              
+              {/* Status indicator */}
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '-4px', 
+                right: '-4px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }} className="profile-status-container">
+                <img
+                  src={getStatusIndicator(profile.status || 'offline').icon}
+                  alt={getStatusIndicator(profile.status || 'offline').text}
+                  className="profile-status-icon"
+                  style={{ width: '16px', height: '16px' }}
+                  title={getStatusIndicator(profile.status || 'offline').text}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://cdn.tinchat.online/icons/offline.png';
+                  }}
+                />
+              </div>
               
               {/* Avatar upload overlay */}
               {onAvatarUpload && (
                 <div
-                  className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded-full transition-opacity duration-200",
-                    avatarHover ? "opacity-100" : "opacity-0 pointer-events-none"
-                  )}
-                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: avatarHover ? 1 : 0,
+                    transition: 'opacity 0.2s',
+                    pointerEvents: 'none'
+                  }}
                 >
-                  <div className="text-white text-xs">
-                    <span className="text-white text-xl inline-block rotate-[135deg]">✏︎</span>
+                  <div style={{ color: 'white', fontSize: '12px' }}>
+                    <span style={{ fontSize: '20px', display: 'inline-block', transform: 'rotate(135deg)' }}>✏︎</span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              {/* Display name */}
-              <h2
-                className="text-lg font-bold truncate"
-                style={{
-                  color: profile.display_name_color || undefined,
-                  animation: profile.display_name_animation === 'rainbow' ? 
-                    `rainbow ${profile.rainbow_speed || 3}s infinite` : 'none'
-                }}
-              >
-                {profile.display_name || profile.username || 'User'}
-              </h2>
-              
-              {/* Username */}
-              {profile.display_name && profile.username && profile.display_name !== profile.username && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  @{profile.username}
-                </p>
-              )}
-
-              {/* Pronouns */}
-              {profile.pronouns && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {profile.pronouns}
-                </p>
-              )}
-
-              {/* Status */}
-              {profile.status && (
-                <div className="flex items-center gap-1 text-xs">
-                  <span className={getStatusIndicator(profile.status)}>●</span>
-                  <span className="capitalize text-gray-600 dark:text-gray-300">
-                    {profile.status}
-                  </span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* ✅ FIXED: Bio with proper text wrapping and overflow handling */}
-          {profile.bio && (
-            <div className="mb-3">
+          {/* Display name and pronouns */}
+          <div style={{ marginBottom: '8px' }} className="profile-name-container">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h2
+                className="profile-display-name"
+                style={getDisplayNameStyle(profile.display_name_animation, profile.display_name_color, profile.rainbow_speed)}
+              >
+                {profile.display_name || profile.username || profile.id || 'Unknown User'}
+              </h2>
+              {profile.pronouns && (
+                <span style={{ fontSize: '14px', color: '#000000' }} className="profile-pronouns">
+                  - {profile.pronouns}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Username */}
+          {profile.display_name && 
+           profile.username && 
+           profile.display_name !== profile.username && (
+            <div style={{ marginBottom: '12px' }} className="profile-username-container">
+              <p style={{ fontSize: '14px', color: '#000000' }} className="profile-username">
+                @{profile.username}
+              </p>
+            </div>
+          )}
+          
+          {(!profile.display_name && profile.username) && (
+            <div style={{ marginBottom: '12px' }} className="profile-username-container">
+              <p style={{ fontSize: '14px', color: '#000000' }} className="profile-username">
+                @{profile.username}
+              </p>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div style={{ 
+            width: '100%', 
+            height: '1px', 
+            backgroundColor: '#1f2937', 
+            marginBottom: '12px' 
+          }} className="profile-divider" />
+
+          {/* Bio Section */}
+          {profile.bio && profile.bio.trim() && (
+            <div style={{ marginBottom: '12px' }} className="profile-bio-container">
               <div 
-                className="text-sm text-gray-700 dark:text-gray-300 p-2 bg-gray-50 dark:bg-gray-700 rounded border-l-4 border-blue-500 break-words"
+                className="profile-bio"
                 style={{ 
+                  fontSize: '14px',
+                  color: '#ffffff',
+                  lineHeight: '1.4',
+                  padding: '12px',
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  borderLeft: '4px solid #3b82f6',
                   wordWrap: 'break-word',
                   overflowWrap: 'break-word',
                   hyphens: 'auto',
-                  maxHeight: '80px',
+                  maxHeight: '100px',
                   overflowY: 'auto',
-                  lineHeight: '1.4',
                   scrollbarWidth: 'none',
                   msOverflowStyle: 'none'
                 }}
@@ -372,58 +476,116 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             </div>
           )}
 
-          {/* ✅ FIXED: Badges with proper scrolling */}
+          {/* Badges Section */}
           {badges.length > 0 && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-400">
-                Badges ({badges.length}):
-              </p>
-              <div className="relative">
+            <div style={{ marginBottom: '12px', display: 'block' }} className="profile-badges-container">
+              <h3 style={{ 
+                fontSize: '14px', 
+                fontWeight: '600', 
+                color: '#000000', 
+                marginBottom: '8px',
+                display: 'block',
+                width: '100%'
+              }} className="profile-badges-title">
+                Badges
+              </h3>
+              <div style={{ position: 'relative', display: 'block', width: '100%' }}>
                 <div 
                   ref={badgesContainerRef}
-                  className="flex gap-2 overflow-x-auto pb-1"
+                  className="profile-badges-list"
                   style={{ 
+                    display: 'flex',
+                    gap: '8px',
+                    overflowX: 'auto',
+                    paddingBottom: '4px',
                     scrollbarWidth: 'none',
-                    msOverflowStyle: 'none'
+                    msOverflowStyle: 'none',
+                    width: '100%'
                   }}
                   onWheel={handleBadgesWheel}
                   onMouseMove={handleBadgesMouseMove}
                 >
                   {badges.map((badge) => (
-                    <div key={badge.id} className="flex-shrink-0">
+                    <div
+                      key={badge.id}
+                      className="profile-badge-item"
+                      style={{ 
+                        position: 'relative',
+                        flexShrink: 0,
+                        cursor: 'pointer'
+                      }}
+                      title={badge.name || 'Badge'}
+                    >
                       <img
                         src={badge.url}
                         alt={badge.name || 'Badge'}
-                        title={badge.name || 'Badge'}
-                        className="h-6 rounded object-contain"
+                        className="profile-badge-image"
                         style={{ 
-                          minWidth: '24px',
-                          maxWidth: '48px',
+                          height: '32px',
+                          minWidth: '32px',
+                          maxWidth: '64px',
                           width: 'auto',
-                          // ✅ Preserve GIF animation for badges
+                          borderRadius: '4px',
+                          objectFit: 'cover',
+                          transition: 'transform 0.2s',
                           imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
                         }}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
+                        onError={handleBadgeError}
                       />
+                      
+                      {/* Tooltip */}
+                      {badge.name && (
+                        <div 
+                          className="profile-badge-tooltip"
+                          style={{
+                            position: 'absolute',
+                            bottom: '100%',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            marginBottom: '8px',
+                            padding: '4px 8px',
+                            backgroundColor: '#000000',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            borderRadius: '4px',
+                            opacity: 0,
+                            transition: 'opacity 0.2s',
+                            whiteSpace: 'nowrap',
+                            zIndex: 20,
+                            pointerEvents: 'none'
+                          }}
+                        >
+                          {badge.name}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
-                
-                {/* Scroll indicators */}
-                {badges.length > 4 && (
-                  <div className="text-xs text-gray-500 mt-1 text-center">
-                    ← Scroll or use mouse wheel →
-                  </div>
-                )}
               </div>
             </div>
           )}
+
+          {/* Profile Info Footer */}
+          <div style={{ 
+            fontSize: '10px', 
+            color: '#000000', 
+            borderTop: '1px solid #1f2937', 
+            paddingTop: '12px', 
+            marginTop: '12px' 
+          }} className="profile-footer">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="profile-footer-label">User Profile</span>
+              {profile.created_at && (
+                <span title="Profile created" className="profile-footer-date">
+                  Joined {new Date(profile.created_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* CSS for rainbow animation and hidden scrollbars */}
+      {/* CSS Animations and Styles */}
       <style jsx>{`
         @keyframes rainbow {
           0% { color: #ff0000; }
@@ -433,6 +595,30 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           66.66% { color: #0080ff; }
           83.33% { color: #8000ff; }
           100% { color: #ff0000; }
+        }
+
+        @keyframes gradient {
+          0%, 100% { 
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+          }
+          50% { 
+            background: linear-gradient(45deg, #f093fb, #f5576c);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+          }
+        }
+
+        @keyframes glow {
+          0%, 100% { 
+            text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+          }
+          50% { 
+            text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor;
+          }
         }
 
         /* Hide all scrollbars completely */
@@ -445,31 +631,37 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
           -ms-overflow-style: none;
         }
 
-        /* Upload hover transitions */
-        .group .transition-opacity {
-          transition: opacity 0.2s ease-in-out;
+        /* Badge tooltip hover effect */
+        .profile-badge-item:hover .profile-badge-tooltip {
+          opacity: 1 !important;
         }
 
-        /* ✅ GIF optimization - ensure smooth playback */
+        /* GIF optimization */
         img[src*=".gif"],
         img[src*="data:image/gif"] {
           image-rendering: auto;
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
         }
+
+        /* Mobile responsive adjustments */
+        @media (max-width: 768px) {
+          .profile-card-custom {
+            width: calc(100vw - 40px) !important;
+            max-width: 300px !important;
+          }
+        }
+
+        /* Reduced motion support */
+        @media (prefers-reduced-motion: reduce) {
+          .profile-card-custom * {
+            animation: none !important;
+            transition: none !important;
+          }
+        }
       `}</style>
     </>
   );
 };
-
-function getStatusIndicator(status: string): string {
-  switch (status) {
-    case 'online': return 'text-green-500';
-    case 'idle': return 'text-yellow-500';
-    case 'dnd': return 'text-red-500';
-    case 'offline': return 'text-gray-500';
-    default: return 'text-gray-500';
-  }
-}
 
 export default ProfileCardPreview;
