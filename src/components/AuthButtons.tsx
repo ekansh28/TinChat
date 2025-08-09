@@ -261,17 +261,6 @@ export default function AuthButtons({ onOpenProfileCustomizer, isMobile = false 
   return (
     <>
       <div className="flex items-center space-x-2">
-<<<<<<< HEAD
-=======
-        <Button 
-          onClick={() => setShowAuthModal(true)}
-          className="text-xs p-1" 
-          variant="outline" 
-          disabled={signingOut}
-        >
-          Sign In
-        </Button>
->>>>>>> parent of 80cc64c (added icons for signin/up)
         <Button 
           onClick={() => setShowAuthModal(true)}
           className="text-xs p-1" 
