@@ -206,32 +206,22 @@ const AuthButtons = () => {
   // Show sign in button if user is not signed in
   return (
     <>
-      <div className="flex items-center space-x-2">
-<<<<<<< HEAD
-=======
-        <Button 
-          onClick={() => setShowAuthModal(true)}
-          className="text-xs p-1" 
-          variant="outline" 
-          disabled={signingOut}
-        >
-          Sign In
-        </Button>
->>>>>>> parent of 80cc64c (added icons for signin/up)
-        <Button 
-          onClick={() => setShowAuthModal(true)}
-          className="text-xs p-1" 
-          disabled={signingOut}
-        >
-          Sign Up
-        </Button>
-      </div>
+      <Button
+        onClick={() => setShowAuthModal(true)}
+        className="text-xs p-1"
+        variant="outline"
+      >
+        Sign In
+      </Button>
 
-      {/* Auth Modal */}
-      <AuthModal 
-        isOpen={showAuthModal}
-        onClose={handleModalClose}
-      />
+      {/* AuthModal rendered via portal */}
+      {showAuthModal && typeof window !== 'undefined' && createPortal(
+        <AuthModal 
+          isOpen={showAuthModal}
+          onClose={handleModalClose}
+        />,
+        document.body
+      )}
     </>
   );
 };
