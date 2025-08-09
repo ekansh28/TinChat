@@ -34,7 +34,7 @@ const nextConfig = {
         https://*.googleapis.com https://unpkg.com
         https://static.cloudflareinsights.com https://cdn.jsdelivr.net
         https://*.clerk.accounts.dev https://challenges.cloudflare.com;
-      style-src 'self' 'unsafe-inline' ${cdn} https://fonts.googleapis.com https://unpkg.com;
+      style-src 'self' 'unsafe-inline' ${cdn} https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net;
       font-src 'self' ${cdn} https://fonts.gstatic.com https://unpkg.com;
       img-src 'self' data: blob: *;
       media-src 'self' blob: *;

@@ -1,0 +1,398 @@
+* [33m0955cf6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev[m[33m, [m[1;31morigin/dev[m[33m)[m d
+* [33m380338f[m Revert "making adjustments to run on linux"
+* [33m5143611[m making adjustments to run on linux
+* [33m60ed50a[m[33m ([m[1;31morigin/archive[m[33m, [m[1;32marchive[m[33m)[m better friends?
+* [33me5bb8ad[m fixed friends system
+* [33m5731fc4[m still broken
+* [33m0c6dc4a[m fixing friends service
+* [33m7259477[m ui fixes
+* [33m5a3e0a4[m made css browser prototype and added cdn link
+* [33mb1a2049[m Update page.tsx
+* [33m41f0088[m added css browser
+* [33m8f12160[m Update deploy-server.yml
+* [33mdedf159[m added a logo!
+* [33md93c9b8[m removed debug apis
+* [33m3c6c747[m auth now supported
+* [33meb4c90d[m added sentry and tried to fix oauth
+* [33m0049e29[m Update deploy-site.yml
+* [33m97bfced[m Update MessageRow.tsx
+* [33m87fde2d[m better api handling
+* [33mc2af7ba[m fixed username page.tsx and added friends routes
+* [33m9663f9b[m fixed profilecardpreview
+* [33mbbd5be1[m trying to fix profile card preview
+* [33m77e3e83[m increased banner size
+* [33m2ed9aa0[m better layout
+* [33m70d166d[m added a code editor and now supports banner image editor
+* [33mb4f3ebb[m added ImageEditor
+* [33m62e5bb7[m ProfilePopUp badge visibilty fix
+* [33m1bf82f0[m fixed some profile fetching issues
+* [33ma004482[m Update FriendsCacheModule.ts
+* [33m7074be3[m fixed profile customization fully.
+* [33m7c1f189[m trying to fix it again
+* [33m8106dcc[m profile customization fixes
+* [33m3791e42[m backend now works properly with frontend
+* [33m079323f[m fixed profile customizer
+* [33mfaf7898[m tryign to fix authmodal using clerk webhook
+* [33m9a685bc[m no
+* [33mc06301a[m fixed clerkauth
+* [33m80cc64c[m added icons for signin/up
+* [33m52ba341[m added authmodals with clerk auth
+* [33m2820515[m yes
+* [33m04ee170[m Update SideLinks.tsx
+* [33m28ac202[m Update ProfilePopup.tsx
+* [33m6d455ae[m Update deploy-server.yml
+* [33m6bd1285[m Update deploy-server.yml
+* [33m1f0a8e6[m Update deploy-server.yml
+* [33mab13739[m Update deploy-server.yml
+* [33me86bfaf[m Update deploy-server.yml
+* [33mebf24c8[m fixed chat to some extent
+* [33mfd9ef11[m tried to bring back the old hooks
+* [33mb928859[m Update ChatPageClientContent.tsx
+* [33m4a6597c[m fixed socket issues
+* [33md58c987[m Update deploy-site.yml
+* [33m6bfe993[m Update deploy-server.yml
+* [33m1a3f924[m Update deploy-site.yml
+* [33m3cb139a[m Update deploy-site.yml
+* [33m5e32fcd[m Update deploy-site.yml
+* [33m4585983[m Update fingerprint.ts
+* [33m741aa8b[m Update deploy-server.yml
+* [33m6c41d45[m Update deploy-server.yml
+* [33m52a2e7e[m Update deploy-server.yml
+* [33m393218d[m Update deploy-site.yml
+* [33m47af698[m Update deploy-site.yml
+* [33m37aaf6b[m Update deploy-site.yml
+* [33m7264fb8[m Update deploy-site.yml
+* [33m3d6fb6b[m Update deploy-site.yml
+* [33me2794ac[m Update deploy-site.yml
+* [33m33c8950[m Update deploy-server.yml
+* [33m22fa79c[m Update deploy-server.yml
+* [33m0b4499d[m tried to fix again....
+* [33md785b7c[m yml fix
+* [33m7f1e103[m j
+* [33m6146cc9[m Update deploy-server.yml
+* [33md4211af[m Update deploy-server.yml
+* [33m8b8c665[m Update deploy-site.yml
+* [33mb6c515e[m Update deploy-site.yml
+* [33m613c0ba[m Update deploy-site.yml
+* [33m042cb55[m Update deploy-site.yml
+* [33m24c2c37[m Update deploy-site.yml
+* [33m5bd2afb[m Update deploy-site.yml
+* [33mf6aedab[m Update deploy-site.yml
+* [33me58d326[m idk
+* [33m1ed07fa[m proper backend integration with the front end.
+* [33ma9044ba[m Update use-toast.ts
+*   [33m0428b7f[m Merge branch 'main' of https://github.com/ekansh28/TinChat
+[32m|[m[33m\[m  
+[32m|[m * [33m5a9ce7e[m Update deploy-server.yml
+* [33m|[m [33m38f9804[m Update package.json
+[33m|[m[33m/[m  
+* [33m1aca003[m G
+* [33md01403d[m h
+* [33md28e8ce[m dsf
+* [33me436bcf[m Update deploy-server.yml
+* [33m31cb2e8[m Update deploy-server.yml
+* [33m1dc720f[m Create deploy-server.yml
+* [33m91b19d9[m Delete deploy-server.yml
+* [33m89238f7[m Update deploy-server.yml
+* [33m8dbe066[m Update deploy-server.yml
+* [33m9fa5c46[m Update deploy-server.yml
+* [33ma228925[m Update deploy-server.yml
+* [33m02f8f92[m Create deploy-server.yml
+* [33mf040864[m tried to fix server side code
+* [33mffeb9f6[m Update TaskBar.tsx
+* [33m56405ea[m sdf
+* [33m4836fcf[m fixed some bugs?
+* [33m2c8047c[m d
+* [33m23c380e[m g
+*   [33m07b7c61[m Merge branch 'dev'
+[34m|[m[35m\[m  
+[34m|[m * [33mb2620fd[m jjjsdsadsad
+[34m|[m * [33m186303f[m hj
+[34m|[m * [33m03439ba[m h
+* [35m|[m [33md6fa74a[m j
+* [35m|[m [33me0775fc[m dfgdfgdf
+* [35m|[m [33mcd58f58[m Merge branch 'dev'
+[36m|[m[35m\[m[35m|[m 
+[36m|[m * [33mae5468e[m ffdsfds
+[36m|[m * [33m71db27e[m n
+[36m|[m * [33mf6ef3ed[m n
+[36m|[m * [33me5c52b2[m integrated friends in frontend
+[36m|[m * [33m04c07fc[m SDF
+[36m|[m * [33mf27319c[m f
+[36m|[m * [33m97d535c[m Update index.ts
+[36m|[m * [33mad849b5[m sdfds
+[36m|[m * [33m10a4d27[m fd
+[36m|[m * [33mda254db[m f
+* [1;31m|[m [33mbc4be07[m Delete unknown
+* [1;31m|[m [33m01811cf[m Update ChatPageClientContent.tsx
+* [1;31m|[m [33me9a5601[m sfsdf
+* [1;31m|[m [33m9534aa9[m Merge branch 'dev'
+[1;32m|[m[1;31m\[m[1;31m|[m 
+[1;32m|[m * [33md8d0234[m sdf
+* [1;33m|[m [33m4993047[m Merge branch 'dev'
+[1;34m|[m[1;33m\[m[1;33m|[m 
+[1;34m|[m * [33m3e44b96[m dfs
+* [1;35m|[m [33m85e113d[m Merge branch 'dev'
+[1;36m|[m[1;35m\[m[1;35m|[m 
+[1;36m|[m * [33me8a42ed[m sdf
+* [31m|[m [33m8ac69c6[m Revert "Merge branch 'dev'"
+* [31m|[m [33mfc4fb3b[m Merge branch 'dev'
+[32m|[m[31m\[m[31m|[m 
+[32m|[m * [33mf9fc48a[m redis fixed
+[32m|[m * [33mc407548[m Update MessageHandler.ts
+[32m|[m * [33mf19c77d[m Update next.config.ts
+[32m|[m * [33m58cc4e9[m fixed redis?
+[32m|[m * [33m7cee226[m added redis successfully
+[32m|[m * [33mc062791[m DSF
+[32m|[m * [33m0a0184d[m df
+[32m|[m * [33m9e04975[m tried to add redis
+[32m|[m * [33ma2d3ecb[m df
+[32m|[m * [33m38045d4[m dsf
+[32m|[m * [33mae29627[m added redis
+* [33m|[m [33m19c1594[m Update next.config.ts
+* [33m|[m [33m36abb1e[m fixed media src
+* [33m|[m [33m0cd7957[m Better UI
+* [33m|[m [33ma50f1bd[m Update ProfilePopup.tsx
+[33m|[m[33m/[m  
+* [33me86aff4[m Update ProfilePopupProvider.tsx
+* [33m6a60b18[m fixed profile popup
+* [33m8de3a8d[m f
+* [33m536da84[m sdf
+* [33m774500e[m Update MessageRow.tsx
+* [33maa817ce[m tried to fix profile pop up again
+* [33mb2e257f[m Update VideoChatPageClientContent.tsx
+* [33mb6395a9[m idk
+* [33mba02876[m Update MessageRow.tsx
+* [33ma2afcaf[m tried to fix profile popup again
+* [33mbe7755e[m now anyone can upload files without content policy violation
+* [33made8bc6[m Update MessageRow.tsx
+* [33m0404236[m tried to fid profile popup
+* [33m372f9f6[m Update ProfilePopup.tsx
+* [33m7657c46[m dsf
+* [33m1a8e026[m Update useWebRTC.ts
+*   [33m7e092aa[m Merge branch 'dev'
+[34m|[m[35m\[m  
+[34m|[m * [33m9dd05c2[m Update ColorPicker.tsx
+[34m|[m * [33mdf9ea75[m fixed profile customization
+[34m|[m * [33m03dcd4a[m fixed profile customization
+[34m|[m * [33mcda4fb0[m f
+[34m|[m * [33m96c526c[m dsf
+[34m|[m * [33mfcc5d4c[m g
+[34m|[m * [33m0d4f22e[m added server for testing
+* [35m|[m [33m293a8ff[m Create ads.txt
+* [35m|[m [33m4226806[m fixed webamp reopening bug and added adsense meta
+* [35m|[m [33mc3ecb93[m fixed missing win7 theme icon
+* [35m|[m [33mbe35701[m Update useVideoChat.ts
+[35m|[m[35m/[m  
+* [33ma552a4f[m f
+* [33mdfcb231[m UI fixes
+* [33m3fe8f65[m added audio for messages being sent and received
+* [33mcad15c6[m df
+* [33ma0ae751[m fd
+* [33med47ba0[m fd
+* [33mc24c643[m added taskbar
+* [33m62a2420[m Update EventRouter.ts
+* [33m6c69543[m sda
+* [33mca86a3e[m j
+* [33mf959f09[m Revert "Update MessageRow.tsx"
+* [33md3bd19b[m Update MessageRow.tsx
+* [33mfe1a303[m Update MessageRow.tsx
+* [33m84b57ce[m Update MessageRow.tsx
+* [33m476f3d0[m Update ProfileCard.tsx
+* [33mcc5761e[m Profilecard fix
+* [33m4b629d0[m Update SideLinks.tsx
+* [33m7dbe599[m Update butterchurn.d.ts
+* [33mae5bf8e[m gfd
+* [33m574fba6[m df
+* [33mf263800[m Update Webamp.tsx
+* [33m1cd0cd8[m Update MainCard.tsx
+* [33m512a4e8[m fixed profile preview
+* [33m1bd99cb[m Update ClientEffectManager.tsx
+* [33md4a3468[m j
+* [33m48677af[m Update page.tsx
+* [33m3140674[m dsfds
+* [33mbe00503[m ds
+* [33m7ed138a[m d
+* [33m1e59e5e[m fdg
+* [33m5d28654[m dsfds
+* [33m1fbdd92[m dfdf
+* [33m9116652[m i
+* [33m78e16f9[m f
+* [33m0087fa9[m fg
+* [33mae238f8[m g
+* [33mede511c[m s
+* [33m0242376[m rew
+*   [33m8c3870c[m Merge branch 'main' of https://github.com/ekansh28/chat
+[36m|[m[1;31m\[m  
+[36m|[m * [33md146f7e[m Update deploy-site.yml
+* [1;31m|[m [33m4168651[m dfg
+* [1;31m|[m [33md356b39[m Update VideoChatPageClientContent.tsx
+[1;31m|[m[1;31m/[m  
+* [33m66b6b23[m j
+* [33maae03cf[m cxf
+* [33mf4814b1[m Update ChatPageClientContent.tsx
+* [33m6f79fd8[m f
+* [33m75a5360[m j
+* [33me1c1f38[m fixing
+* [33ma58aba3[m Update next.config.ts
+* [33m5dfb8f2[m Update globals.css
+* [33m6c728cb[m Update page.tsx
+* [33me4203c0[m Update deploy-site.yml
+* [33m7665f2b[m Update deploy-site.yml
+* [33mbf6229a[m fixed video chat
+* [33mf887e3c[m trying to fix video chat
+* [33m6edb6d9[m dep key
+* [33me4ab92a[m Update deploy-site.yml
+*   [33m1f083ab[m Merge branch 'main' of https://github.com/ekansh28/chat
+[1;32m|[m[1;33m\[m  
+[1;32m|[m * [33m6a7b893[m Create deploy-site.yml
+* [1;33m|[m [33ma7c91fd[m Delete azure-static-web-apps-delightful-pond-0cb3e0010.yml
+[1;33m|[m[1;33m/[m  
+* [33me4dd622[m Update next.config.ts
+* [33ma94c43f[m Update azure-static-web-apps-delightful-pond-0cb3e0010.yml
+* [33m10e92cb[m fixed 404 error
+* [33m9e104a3[m added leaf theme
+* [33m2af09f4[m deleted some files since im using cdn now
+* [33m364f7d5[m j
+* [33mc0ee687[m g
+* [33m8932e16[m fixed viewport typo
+* [33me51e5e9[m tried to fix profile customization
+* [33mdb58d1c[m FIXED SERVER CODE
+* [33m7de2948[m g
+* [33m4c6a044[m trying to fix backend performance
+* [33m0e98b19[m g
+* [33m9eff986[m j
+* [33m4c40ccf[m h
+* [33m9588741[m Added WebAmp to homepage
+* [33m8a14ab1[m ADDED WINDOWS XP SUPPORT
+* [33m149b041[m fixed top bar
+* [33m0dd1453[m Update azure-static-web-apps-delightful-pond-0cb3e0010.yml
+* [33m2d52835[m azure yaml fixed??
+* [33m26e53d4[m ADDED BETTER MOBILE RESPONSIVENESS + BUG FIXES
+* [33mad21a8e[m added coral reefs to the frutiger1 theme and goldfish too
+* [33m5a80774[m ADDED BETTER VISUALS FOR FRUTIGER1 THEME
+* [33me7bba36[m Update azure-static-web-apps-delightful-pond-0cb3e0010.yml
+* [33mc8dc949[m ps3 theme
+* [33mcf2d712[m added one more win 7 theme
+* [33m37a645a[m added windows 7 theme selector
+* [33mdeea13e[m Update azure-static-web-apps-delightful-pond-0cb3e0010.yml
+* [33m8352971[m H
+* [33m4f457ca[m tried to fix partner typing
+* [33m04950c7[m tried to fix profilecustomzation again
+* [33m4000ada[m make the username display in white
+* [33ma3c07fd[m Update AuthButtons.tsx
+* [33mca9e686[m h
+* [33m87ffa24[m tried to fix profile customization
+* [33m8142b8e[m g
+* [33m7bd2fdc[m theme updates
+* [33ma76f8b3[m typo fix
+* [33mc3c3b11[m j
+* [33madf2879[m added online users list
+* [33m47a3741[m Create Active.tsx
+* [33m4a0055a[m made sidelinks in the bottom
+* [33m61d6ccb[m dsfds
+* [33md2736ef[m ProfileCustomization Button integrated with AuthButtons, Header Fix along with page.tsx and MatchStatus.tsx
+* [33mde1c0e0[m Fixed Stranger/User Color Name
+* [33m5890a8e[m Update MessageRow.tsx
+* [33mad8e6d5[m added the top bar sub theme again
+* [33me270254[m More Emotes/Fixed ChatPage CSS
+* [33mf1f2436[m vgf
+* [33md9ea729[m Update ChatWindow.tsx
+* [33m7459a03[m DF
+* [33ma5f16c5[m dsf
+* [33m9630e38[m Update AuthButtons.tsx
+* [33m0e5dfa8[m gds
+*   [33mc7057bb[m Merge branch 'main' of https://github.com/ekansh28/chat
+[1;34m|[m[1;35m\[m  
+[1;34m|[m * [33m2c9fc24[m Add server/dist/ to .gitignore
+* [1;35m|[m [33m2d70d63[m Update index.ts
+[1;35m|[m[1;35m/[m  
+* [33md501887[m tried to fix index.ts
+* [33m00c0b17[m gh
+* [33mb307df3[m tried to fix profile customizer.
+* [33md29b067[m removed 98.css from globals.css
+* [33m06cbb14[m better profile customization
+* [33md1a1ef3[m Update layout.tsx
+* [33mc7257d4[m trying to css imports
+* [33maed9e90[m BETTER FILE HANDLING AND SOME CHANGES TO THE SERVER
+* [33m416cd70[m Update ChatPageClientContent.tsx
+* [33ma91521b[m sdfsdf
+* [33m58bcfa0[m j
+* [33m2607886[m cgat
+* [33m0603767[m H
+* [33m184ece6[m file managing in index.ts
+* [33mc3407c6[m idk
+* [33m5e9a947[m fixed profile customization and split in different files for better readability
+* [33m45c4a63[m Update page.tsx
+* [33m2488718[m Update page.tsx
+* [33m69ce8a5[m some bug fixes
+* [33mfede13a[m idkf
+* [33m7694c40[m Update index.ts
+* [33mc89cad6[m Update index.ts
+* [33mae52149[m Update index.ts
+* [33m743aea8[m fdf
+* [33m455a221[m idk
+* [33m0832e82[m h
+* [33m0608812[m d
+* [33md253424[m df
+* [33m12da9d1[m Update ProfileCustomizer.tsx
+* [33m9d5e0e8[m Update ProfileCustomizer.tsx
+* [33m5edfb31[m Update ProfileCustomizer.tsx
+* [33m96de274[m Profile Customization big upgrade, fixed main page bug
+* [33m14d502e[m Update page.tsx
+* [33m27d615b[m Update next.config.ts
+* [33m0eff780[m donate button
+* [33mb8f5e35[m Update page.tsx
+* [33m7777cf4[m Update ChatPageClientContent.tsx
+* [33m4a0f28d[m Update next.config.ts
+* [33md9c3f63[m Update next.config.ts
+*   [33m006eb16[m Merge branch 'main' of https://github.com/ekansh28/chat
+[1;36m|[m[31m\[m  
+[1;36m|[m * [33mb538bd1[m idk
+* [31m|[m [33m4cb58dc[m Merge branch 'main' of https://github.com/ekansh28/chat
+[32m|[m[31m\[m[31m|[m 
+[32m|[m * [33mec4b723[m Create main.yml
+* [33m|[m [33m6939549[m Update index.ts
+[33m|[m[33m/[m  
+* [33mbf29085[m added some new profile features and better ui ux
+* [33m3c512fb[m Update ChatPageClientContent.tsx
+* [33ma0ff9a4[m Update ChatPageClientContent.tsx
+* [33m4362ef3[m added mobile responsiveness
+* [33m5220d3c[m fixed some seo
+* [33ma6bbcee[m f
+* [33m5de82b2[m made some bug fixes
+* [33m0dfab6d[m Update top-bar.tsx
+* [33m0f74393[m Update AuthButtons.tsx
+* [33m3d14510[m Update index.ts
+* [33m6440891[m some fixes
+* [33md9faf31[m fixed profiles
+* [33m99ef353[m Update ChatPageClientContent.tsx
+* [33m9843d9b[m Update ChatPageClientContent.tsx
+* [33md3203f4[m Update ProfileCustomizer.tsx
+* [33mbaaaea8[m Update ChatPageClientContent.tsx
+* [33m9a53459[m added profile cards
+*   [33mdf031a0[m Merge branch 'main' of https://github.com/ekansh28/chat
+[34m|[m[35m\[m  
+[34m|[m * [33m6aca61d[m Dsdsfsdf
+[34m|[m * [33m12132f3[m gdgdg
+[34m|[m * [33m6402151[m gdgd
+[34m|[m * [33m88009de[m gdgd
+[34m|[m * [33m92a4348[m updated chat page
+[34m|[m * [33m7d928c7[m fixed server and chat page
+[34m|[m * [33m92d529c[m My Node.js + Socket.IO server (index.ts) is working, but users (even ano
+[34m|[m * [33m26bd7ab[m make the changes
+[34m|[m * [33ma409302[m implement these changes in client chat page content
+[34m|[m * [33m28e9c1f[m make the changes
+[34m|[m * [33m05383b0[m the log out/sign out button doesnt worj
+[34m|[m * [33m30b3aa3[m OnboardingPage component is being loaded/rendered by Next.js page-0fda4e
+[34m|[m * [33m99e835c[m no remove everything firebase related like analytics firebase.ts and eve
+[34m|[m * [33mce707cf[m remove the firebase api key
+[34m|[m * [33m04d24c9[m you dont need to load auth check if the user is not logged in
+[34m|[m * [33m0ee4552[m still Searching for a partner...
+* [35m|[m [33mea00bec[m dsf
+[35m|[m[35m/[m  
+* [33mec3309d[m its stuck in ChatPageClientContent: Auto-starting partner search on conn
+* [33mc0453ce[m it doesnt match users when theyre in a queue
+* [33ma0242b4[m IS EVERYTHIGN WORKING ACCORDING TO THE INDEX.TS
+* [33m00e24d4[m now video chat client
+* [33m8389054[m now fix chat client page according to that
