@@ -1,7 +1,13 @@
 // components/myspace/ProfileSong.tsx
 import { useState } from 'react';
 
-export default function ProfileSong({ title, artist, audioUrl }) {
+interface ProfileSongProps {
+  title: string;
+  artist: string;
+  audioUrl?: string; // Optional since the component checks for its existence
+}
+
+export default function ProfileSong({ title, artist, audioUrl }: ProfileSongProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   return (
