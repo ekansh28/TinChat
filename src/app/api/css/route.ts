@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const tags = searchParams.get('tags')?.split(',').filter(Boolean);
-    const fileType = searchParams.get('type') as 'profile' | 'chat_theme' | null;
+    const fileType = searchParams.get('type') as 'profile' | 'chat_theme' | 'all' | null;
     const sortBy = searchParams.get('sort') || 'date';
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       .select('*');
 
     // Apply filters
-    if (fileType && fileType !== 'all') {
+    if (fileType && fileType !== 'all' && fileType !== null) {
       query = query.eq('file_type', fileType);
     }
 
@@ -159,210 +159,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('CSS upload error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-}
-
-// src/app/api/css/[id]/route.ts - Individual CSS file API
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 200,
-    headers: corsHeaders,
-  });
-}
-
-// GET - Fetch single CSS file
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    
-    const { data, error } = await supabase
-      .from('css_files')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'CSS file not found' },
-          { status: 404, headers: corsHeaders }
-        );
-      }
-      throw error;
-    }
-
-    return NextResponse.json({
-      success: true,
-      data
-    }, { headers: corsHeaders });
-
-  } catch (error) {
-    console.error('CSS file fetch error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-}
-
-// PUT - Update CSS file (author only)
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { userId } = await auth();
-    const { id } = await params;
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-
-    const body = await request.json();
-    const { title, tags, previewImageUrl } = body;
-
-    // Check if user owns this CSS file
-    const { data: cssFile, error: fetchError } = await supabase
-      .from('css_files')
-      .select('author_id')
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !cssFile) {
-      return NextResponse.json(
-        { error: 'CSS file not found' },
-        { status: 404, headers: corsHeaders }
-      );
-    }
-
-    if (cssFile.author_id !== userId) {
-      return NextResponse.json(
-        { error: 'Not authorized to edit this CSS file' },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-
-    // Update CSS file
-    const { data, error } = await supabase
-      .from('css_files')
-      .update({
-        title: title?.trim(),
-        tags: tags || null,
-        preview_image_url: previewImageUrl,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating CSS file:', error);
-      return NextResponse.json(
-        { error: 'Failed to update CSS file' },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data
-    }, { headers: corsHeaders });
-
-  } catch (error) {
-    console.error('CSS file update error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-}
-
-// DELETE - Delete CSS file (author only)
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { userId } = await auth();
-    const { id } = await params;
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-
-    // Check if user owns this CSS file
-    const { data: cssFile, error: fetchError } = await supabase
-      .from('css_files')
-      .select('author_id, file_url, preview_image_url')
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !cssFile) {
-      return NextResponse.json(
-        { error: 'CSS file not found' },
-        { status: 404, headers: corsHeaders }
-      );
-    }
-
-    if (cssFile.author_id !== userId) {
-      return NextResponse.json(
-        { error: 'Not authorized to delete this CSS file' },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-
-    // Delete from database (this will cascade to likes and comments)
-    const { error: deleteError } = await supabase
-      .from('css_files')
-      .delete()
-      .eq('id', id);
-
-    if (deleteError) {
-      console.error('Error deleting CSS file:', deleteError);
-      return NextResponse.json(
-        { error: 'Failed to delete CSS file' },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    // TODO: Also delete files from storage
-    // This would require extracting the file paths from the URLs
-
-    return NextResponse.json({
-      success: true,
-      message: 'CSS file deleted successfully'
-    }, { headers: corsHeaders });
-
-  } catch (error) {
-    console.error('CSS file delete error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: corsHeaders }
