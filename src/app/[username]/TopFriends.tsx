@@ -2,14 +2,29 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-export default function TopFriends({ friends }) {
+interface Friend {
+  id: string;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+}
+
+interface FriendshipItem {
+  friend: Friend;
+}
+
+interface TopFriendsProps {
+  friends: FriendshipItem[];
+}
+
+export default function TopFriends({ friends }: TopFriendsProps) {
   return (
     <div className="grid grid-cols-3 gap-2 p-2">
       {friends.map(({ friend }) => (
         <Link key={friend.id} href={`/${friend.username}`} className="text-center">
           <Image
             src={friend.avatar_url || '/default-avatar.png'}
-            alt={friend.display_name}
+            alt={friend.display_name || friend.username}
             width={80}
             height={80}
             className="rounded-full border-2 border-blue-500 mx-auto"
