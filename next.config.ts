@@ -41,7 +41,6 @@ const nextConfig = {
       connect-src 'self'
         ${cdn} ${socketServerUrl} ${socketWsUrl}
         https://${supabaseHostname} wss://${supabaseHostname}
-        wss://chat.tinchat.online
         https://*.clerk.accounts.dev https://clerk-telemetry.com
         https://unpkg.com https://s3-us-east-2.amazonaws.com
         https://static.cloudflareinsights.com;

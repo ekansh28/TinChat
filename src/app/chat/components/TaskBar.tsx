@@ -5,13 +5,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { FriendsWindow } from './FriendsWindow';
-import { useAuth } from '../hooks/useAuth';
-import AuthModal from '../../../components/AuthModal';
 
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
-
-
 
 // ✅ FIXED: Audio context for message sounds with proper typing
 interface AudioManager {
@@ -81,10 +77,9 @@ export const TaskBar: React.FC = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [audioVolume, setAudioVolume] = useState(2); // Range: 0-3 for all themes
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const [showFriendsWindow, setShowFriendsWindow] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
-  const auth = useAuth(); // Auth state (do not remove existing)
+  // ✅ FIXED: Friends system state
+  const [showFriendsWindow, setShowFriendsWindow] = useState(false);
 
   // ✅ FIXED: Mobile detection with proper cleanup
   const checkIfMobile = useCallback(() => {
@@ -186,24 +181,12 @@ export const TaskBar: React.FC = () => {
   // ✅ FIXED: Handle audio icon click
   const handleAudioIconClick = useCallback(() => {
     setShowVolumeSlider(prev => !prev);
-  }, [])
-  
-const handleAuthModalClose = (success?: boolean) => {
-  setShowAuthModal(false);
-  if (success) {
-    setShowFriendsWindow(true);
-  }
-};
+  }, []);
 
   // ✅ FIXED: Handle friends icon click
   const handleFriendsIconClick = useCallback(() => {
-  if (auth.authId) {
-    setShowFriendsWindow((v) => !v);
-  } else {
-    setShowAuthModal(true);
-  }
-}, [auth.authId]);
-
+    setShowFriendsWindow(prev => !prev);
+  }, []);
 
   // ✅ FIXED: Close volume slider when clicking outside
   useEffect(() => {
@@ -463,15 +446,12 @@ const handleAuthModalClose = (success?: boolean) => {
         </div>
 
         {/* Friends Window */}
-{showFriendsWindow && auth.authId && (
-  <FriendsWindow
-    isOpen={showFriendsWindow}
-    onClose={() => setShowFriendsWindow(false)}
-    onOpenChat={() => { /* handle opening chat if needed */ }}
-    theme={'win98'} // e.g., from your theme state
-  />
-)}
-
+        {showFriendsWindow && (
+          <FriendsWindow
+            isOpen={showFriendsWindow}
+            onClose={() => setShowFriendsWindow(false)}
+          />
+        )}
       </>
     );
   }
@@ -658,15 +638,12 @@ const handleAuthModalClose = (success?: boolean) => {
         </div>
 
         {/* Friends Window */}
-        {showFriendsWindow && auth.authId && (
-        <FriendsWindow
-          isOpen={showFriendsWindow}
-          onClose={() => setShowFriendsWindow(false)}
-          onOpenChat={() => {}}
-          theme={'win7'} // e.g., 'win7' | 'winxp' | 'win98'
-        />
-      )}
-
+        {showFriendsWindow && (
+          <FriendsWindow
+            isOpen={showFriendsWindow}
+            onClose={() => setShowFriendsWindow(false)}
+          />
+        )}
       </>
     );
   }
@@ -844,15 +821,12 @@ const handleAuthModalClose = (success?: boolean) => {
         </footer>
 
         {/* Friends Window */}
-        {showFriendsWindow && auth.authId && (
-  <FriendsWindow
-    isOpen={showFriendsWindow}
-    onClose={() => setShowFriendsWindow(false)}
-    onOpenChat={() => {}}
-    theme={'winxp'} // e.g., 'win7' | 'winxp' | 'win98'
-  />
-)}
-
+        {showFriendsWindow && (
+          <FriendsWindow
+            isOpen={showFriendsWindow}
+            onClose={() => setShowFriendsWindow(false)}
+          />
+        )}
       </>
     );
   }
