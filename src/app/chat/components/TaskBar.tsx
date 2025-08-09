@@ -5,6 +5,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { FriendsWindow } from './FriendsWindow';
+// ✅ FIXED: Import all interfaces from friends.ts
+import {
+  Friend,
+  FriendRequest,
+  FriendsWindowProps,
+  FriendsState,
+  ChatMessage,
+  FriendsApiResponse,
+  FriendRequestApiData, // ✅ Add this
+  FriendRequestsApiResponse, // ✅ Add this
+  UserStatus // ✅ Add this if not already imported
+} from '../../../types/friends';
 
 const WIN7_CSS_LINK_ID = 'win7-css-link';
 const WINXP_CSS_LINK_ID = 'winxp-css-link';
@@ -89,6 +101,18 @@ export const TaskBar: React.FC = () => {
     }
   }, []);
 
+  // 1. ADD: Define a handler for opening a chat.
+  // This can be expanded later to manage chat window state.
+    // 2. UPDATE THE HANDLER TO USE THE 'Friend' TYPE
+  const handleOpenChat = (friend: Friend) => {
+    // Now you have access to the full friend object
+    console.log(`Request to open chat with friend: ${friend.id}`);
+    // TODO: Implement logic to open a chat window using friend.id or other properties.
+  };
+
+  // 2. ADD: Determine the current theme string to pass as a prop.
+  const currentTheme = isWin7Mode ? 'win7' : isWinXPMode ? 'winxp' : 'win98';
+  
   // ✅ FIXED: Mobile detection effect
   useEffect(() => {
     checkIfMobile();
@@ -450,7 +474,9 @@ export const TaskBar: React.FC = () => {
           <FriendsWindow
             isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-          />
+            onOpenChat={handleOpenChat} // <-- PASS THE HANDLER
+            theme={currentTheme}        // <-- PASS THE THEME
+        />
         )}
       </>
     );
@@ -642,7 +668,9 @@ export const TaskBar: React.FC = () => {
           <FriendsWindow
             isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-          />
+            onOpenChat={handleOpenChat} // <-- PASS THE HANDLER
+            theme={currentTheme}        // <-- PASS THE THEME
+        />
         )}
       </>
     );
@@ -825,7 +853,9 @@ export const TaskBar: React.FC = () => {
           <FriendsWindow
             isOpen={showFriendsWindow}
             onClose={() => setShowFriendsWindow(false)}
-          />
+            onOpenChat={handleOpenChat} // <-- PASS THE HANDLER
+            theme={currentTheme}        // <-- PASS THE THEME
+        />
         )}
       </>
     );
