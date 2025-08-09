@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_1dec60504912c3",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS blocked_users (id uuid PRIMARY KEY, blocker_id uuid, blocked_id uuid, reason text, created_at timestamptz)"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_1dec60504912c3",
+  "parent": "sql_e25ceb21e7f7c3",
+  "schema": "public",
+  "startedAt": "2025-06-29T14:52:49.414348Z"
+}

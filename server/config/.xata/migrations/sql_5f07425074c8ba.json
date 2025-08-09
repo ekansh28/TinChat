@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_5f07425074c8ba",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS blocked_users (id serial PRIMARY KEY, blocker_id text NOT NULL, blocked_id text NOT NULL, reason text, created_at timestamptz DEFAULT now(), CONSTRAINT chk_different_block_users CHECK (blocker_id <> blocked_id), CONSTRAINT unq_block UNIQUE (blocker_id, blocked_id))"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_5f07425074c8ba",
+  "parent": "sql_e99d716008ae50",
+  "schema": "public",
+  "startedAt": "2025-06-30T15:22:02.994044Z"
+}

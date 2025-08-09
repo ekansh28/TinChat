@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_a2875572bf53e2",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS friend_requests (id serial PRIMARY KEY, sender_id text NOT NULL, receiver_id text NOT NULL, message text, status text DEFAULT 'pending', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), CONSTRAINT chk_different_request_users CHECK (sender_id <> receiver_id), CONSTRAINT unq_pending_request UNIQUE (sender_id, receiver_id))"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_a2875572bf53e2",
+  "parent": "sql_e43999015789fb",
+  "schema": "public",
+  "startedAt": "2025-06-30T16:06:56.318236Z"
+}

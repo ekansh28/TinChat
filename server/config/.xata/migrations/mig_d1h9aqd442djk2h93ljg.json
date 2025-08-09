@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "mig_d1h9aqd442djk2h93ljg",
+    "operations": [
+      {
+        "drop_table": {
+          "name": "mutual_friends"
+        }
+      }
+    ]
+  },
+  "migrationType": "pgroll",
+  "name": "mig_d1h9aqd442djk2h93ljg",
+  "parent": "mig_d1h9ant442djk2h93lig",
+  "schema": "public",
+  "startedAt": "2025-06-30T13:47:22.267737Z"
+}

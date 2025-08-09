@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "mig_d1hbm0e3bkbl0uadvbn0",
+    "operations": [
+      {
+        "drop_table": {
+          "name": "user_profiles"
+        }
+      }
+    ]
+  },
+  "migrationType": "pgroll",
+  "name": "mig_d1hbm0e3bkbl0uadvbn0",
+  "parent": "mig_d1hbiju3bkbl0uadvblg",
+  "schema": "public",
+  "startedAt": "2025-06-30T16:34:52.491267Z"
+}

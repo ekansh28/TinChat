@@ -1,0 +1,18 @@
+{
+  "done": true,
+  "migration": {
+    "name": "sql_7297e9ff25c76b",
+    "operations": [
+      {
+        "sql": {
+          "up": "CREATE TABLE IF NOT EXISTS friendships (id serial PRIMARY KEY, user1_id text NOT NULL, user2_id text NOT NULL, status text DEFAULT 'active', initiated_by text NOT NULL, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), CONSTRAINT chk_different_users CHECK (user1_id <> user2_id), CONSTRAINT unq_friendship UNIQUE (user1_id, user2_id))"
+        }
+      }
+    ]
+  },
+  "migrationType": "inferred",
+  "name": "sql_7297e9ff25c76b",
+  "parent": "sql_daf56084bfe7a5",
+  "schema": "public",
+  "startedAt": "2025-06-30T15:22:01.362742Z"
+}
