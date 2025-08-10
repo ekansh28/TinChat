@@ -1,114 +1,66 @@
+// src/components/AuthButtons.tsx
+
+'use client';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useUser, useClerk } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button-themed';
 import AuthModal from './AuthModal';
-import ProfileCustomizer from './ProfileCustomizer'; // Added import
+// The ProfileCustomizer is no longer imported or rendered here.
 
-const AuthButtons = () => {
+// Define the interface for the component's props.
+interface AuthButtonsProps {
+  onOpenProfileCustomizer: () => void;
+  isMobile: boolean;
+}
+
+// Update the component to accept and use the new props.
+const AuthButtons = ({ onOpenProfileCustomizer, isMobile }: AuthButtonsProps) => {
   const { user, isSignedIn } = useUser();
   const { signOut } = useClerk();
-  
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showProfileCustomizer, setShowProfileCustomizer] = useState(false); // Added state
   const [signingOut, setSigningOut] = useState(false);
   const [profileExists, setProfileExists] = useState<boolean | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
-  
-  const lastCheckedUserId = useRef<string | null>(null);
-  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check if user profile exists
+  const checkProfileCalled = useRef(false);
+
+  // This function checks if a user profile exists in your database.
   const checkProfile = useCallback(async (userId: string) => {
-    if (lastCheckedUserId.current === userId && profileExists !== null) {
-      return;
-    }
-
+    if (profileExists !== null || loading) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`/api/profiles/${userId}`);
-      
-      // Check if the response is ok and content-type is JSON
-      if (!response.ok) {
-        console.error(`API request failed with status: ${response.status}`);
-        setProfileExists(false);
-        return;
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('API response is not JSON:', contentType);
-        setProfileExists(false);
-        return;
-      }
-      
-      const data = await response.json();
-      
-      if (data.success) {
+      const response = await fetch(`/api/profile/${userId}`);
+      if (response.ok) {
+        const data = await response.json();
         setProfileExists(true);
-        setUserProfile(data.profile);
-      } else {
+        setUserProfile(data);
+      } else if (response.status === 404) {
         setProfileExists(false);
+        setUserProfile(null);
       }
-      lastCheckedUserId.current = userId;
     } catch (error) {
-      console.error('Error checking profile:', error);
-      setProfileExists(false);
+      console.error("Failed to check profile:", error);
+      setProfileExists(null); // Set to null on error to allow retry
     } finally {
       setLoading(false);
     }
-  }, [profileExists]);
+  }, [profileExists, loading]);
 
-  // Check profile when user changes
   useEffect(() => {
-    if (isSignedIn && user?.id) {
-      // Clear any existing timeout
-      if (checkTimeoutRef.current) {
-        clearTimeout(checkTimeoutRef.current);
-      }
-      
-      // Check immediately, then set up periodic checks
+    if (isSignedIn && user?.id && !checkProfileCalled.current) {
       checkProfile(user.id);
-      
-      checkTimeoutRef.current = setTimeout(() => {
-        if (user?.id) {
-          checkProfile(user.id);
-        }
-      }, 1000);
-    } else {
-      // Reset state when user signs out
-      setProfileExists(null);
-      setUserProfile(null);
-      lastCheckedUserId.current = null;
-      if (checkTimeoutRef.current) {
-        clearTimeout(checkTimeoutRef.current);
-        checkTimeoutRef.current = null;
-      }
+      checkProfileCalled.current = true;
     }
-
-    return () => {
-      if (checkTimeoutRef.current) {
-        clearTimeout(checkTimeoutRef.current);
-      }
-    };
   }, [isSignedIn, user?.id, checkProfile]);
 
-  // Handle modal close with delayed profile recheck
   const handleModalClose = useCallback(() => {
     setShowAuthModal(false);
-    setShowProfileCustomizer(false); // Added this line
-    // Reset profile check state and recheck after a delay
+    // After closing the auth modal, re-check the profile if the user just signed in.
     if (user?.id) {
-      lastCheckedUserId.current = null;
-      setProfileExists(null);
-      setUserProfile(null);
-      // Wait a bit for webhook to process, then recheck
-      setTimeout(() => {
-        if (user?.id) {
-          checkProfile(user.id);
-        }
-      }, 2000);
+      checkProfile(user.id);
     }
   }, [user?.id, checkProfile]);
 
@@ -116,94 +68,63 @@ const AuthButtons = () => {
     setSigningOut(true);
     try {
       await signOut();
+      // Reset state after signing out
+      setProfileExists(null);
+      setUserProfile(null);
+      checkProfileCalled.current = false;
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Sign out failed", error);
     } finally {
       setSigningOut(false);
     }
   };
 
-  // Show loading state while checking profile
-  if (isSignedIn && user && loading && profileExists === null) {
-    return (
-      <Button className="text-xs p-1" disabled>
-        Checking...
-      </Button>
-    );
+  if (loading && isSignedIn) {
+    return <span>Loading...</span>;
   }
 
-  // Show setup completion prompt if user exists but no profile
+  // Show "Complete Setup" if user is signed in but has no profile.
   if (isSignedIn && user && profileExists === false) {
     return (
       <>
         <Button
-          onClick={() => setShowProfileCustomizer(true)} // Changed from setShowAuthModal
+          onClick={onOpenProfileCustomizer} // Call the parent's function to open the customizer
           className="text-xs p-1 bg-yellow-600 hover:bg-yellow-700"
           disabled={signingOut}
           title="Complete your profile setup"
         >
           Complete Setup
         </Button>
-        
-        <Button
-          onClick={handleSignOut}
-          className="text-xs p-1"
-          variant="outline"
-          disabled={signingOut}
-        >
+        <Button onClick={handleSignOut} className="text-xs p-1" disabled={signingOut}>
           {signingOut ? 'Signing Out...' : 'Sign Out'}
         </Button>
-
-        {/* ProfileCustomizer Modal rendered via portal */}
-        {showProfileCustomizer && typeof window !== 'undefined' && createPortal(
-          <ProfileCustomizer 
-            isOpen={showProfileCustomizer}
-            onClose={() => setShowProfileCustomizer(false)}
-          />,
-          document.body
-        )}
+        {/* The ProfileCustomizer modal is no longer rendered from here */}
       </>
     );
   }
 
-  // Show user profile info and sign out if user is signed in and has profile
+  // Show user info and "Edit Profile" if user is signed in and has a profile.
   if (isSignedIn && user && profileExists === true && userProfile) {
     return (
-      <>
-        <div className="flex items-center gap-2">
-          <img 
-            src="https://cdn.tinchat.online/icons/paint.png" 
-            alt="Edit Profile"
-            className="w-4 h-4 cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => setShowProfileCustomizer(true)}
-            title="Edit Profile"
-          />
-          <span className="text-xs text-gray-300">
-            {userProfile.display_name || userProfile.displayName || user.username || user.emailAddresses[0]?.emailAddress}
-          </span>
-          <Button
-            onClick={handleSignOut}
-            className="text-xs p-1"
-            variant="outline"
-            disabled={signingOut}
-          >
-            {signingOut ? 'Signing Out...' : 'Sign Out'}
-          </Button>
-        </div>
-
-        {/* ProfileCustomizer Modal rendered via portal */}
-        {showProfileCustomizer && typeof window !== 'undefined' && createPortal(
-          <ProfileCustomizer 
-            isOpen={showProfileCustomizer}
-            onClose={() => setShowProfileCustomizer(false)}
-          />,
-          document.body
-        )}
-      </>
+      <div className="flex items-center space-x-2">
+        <Button
+          onClick={onOpenProfileCustomizer} // Call the parent's function to open the customizer
+          title="Edit Profile"
+        >
+          Edit Profile
+        </Button>
+        <span className="text-sm">
+          {userProfile.display_name || user.username}
+        </span>
+        <Button onClick={handleSignOut} className="text-xs p-1" disabled={signingOut}>
+          {signingOut ? 'Signing Out...' : 'Sign Out'}
+        </Button>
+        {/* The ProfileCustomizer modal is no longer rendered from here */}
+      </div>
     );
   }
 
-  // Show sign in button if user is not signed in
+  // Default: Show "Sign In" button if not signed in.
   return (
     <>
       <Button
@@ -213,8 +134,6 @@ const AuthButtons = () => {
       >
         Sign In
       </Button>
-
-      {/* AuthModal rendered via portal */}
       {showAuthModal && typeof window !== 'undefined' && createPortal(
         <AuthModal 
           isOpen={showAuthModal}
