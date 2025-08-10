@@ -44,8 +44,8 @@ interface UserVote {
   like_type: 'like' | 'dislike';
 }
 
-export default function CSSFileDetailPage() {
-  const params = useParams();
+export default function CSSFileDetailPage({ params }: { params: { id: string } }) {
+ 
   const { user, isLoaded } = useUser();
   const [cssFile, setCSSFile] = useState<CSSFile | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -57,7 +57,9 @@ export default function CSSFileDetailPage() {
   const [deletingComments, setDeletingComments] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
-  
+  const [showProfileCustomizer, setShowProfileCustomizer] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
   // Enhanced carousel state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [autoSlideInterval, setAutoSlideInterval] = useState<NodeJS.Timeout | null>(null);
@@ -65,6 +67,13 @@ export default function CSSFileDetailPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [preloadedImages, setPreloadedImages] = useState<Set<string>>(new Set());
   
+  // Handlers for the Profile Customizer modal
+  const handleOpenProfileCustomizer = () => setShowProfileCustomizer(true);
+  const handleCloseProfileCustomizer = () => setShowProfileCustomizer(false);
+
+  // Hardcoded for example; could be dynamic
+  const isMobile = false; 
+
   // Video controls state
   const [videoStates, setVideoStates] = useState<{[key: string]: {isPlaying: boolean, isMuted: boolean}}>({});
 
@@ -74,6 +83,7 @@ export default function CSSFileDetailPage() {
       fetchComments();
       if (user) {
         fetchUserVote();
+        setLoading(false);
       }
     }
   }, [params.id, user]);
@@ -610,12 +620,18 @@ export default function CSSFileDetailPage() {
                       {user.fullName || user.username || 'User'}
                     </span>
                   </div>
-                  <AuthButtons />
+                            <AuthButtons 
+            onOpenProfileCustomizer={handleOpenProfileCustomizer}
+            isMobile={isMobile}
+          />
                 </div>
               ) : (
                 <div className="text-white text-sm">
                   <span className="mr-2 hidden sm:inline">Please log in to vote and comment</span>
-                  <AuthButtons />
+                            <AuthButtons 
+            onOpenProfileCustomizer={handleOpenProfileCustomizer}
+            isMobile={isMobile}
+          />
                 </div>
               )}
             </div>
@@ -1000,7 +1016,10 @@ export default function CSSFileDetailPage() {
                 <p className="text-purple-300 text-sm mb-3">
                   Sign in to join the discussion
                 </p>
-                <AuthButtons />
+                  <AuthButtons 
+            onOpenProfileCustomizer={handleOpenProfileCustomizer}
+            isMobile={isMobile}
+          />
               </div>
             )}
 

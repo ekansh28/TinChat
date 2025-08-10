@@ -1,7 +1,7 @@
 // src/app/css-browser/upload/page.tsx
 'use client';
-
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -24,6 +24,13 @@ export default function CSSUploadPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // --- STATE AND HANDLERS FOR THE MODAL ---
+  // 3. Add state and handlers for the ProfileCustomizer modal
+  const [showProfileCustomizer, setShowProfileCustomizer] = useState(false);
+  const handleOpenProfileCustomizer = () => setShowProfileCustomizer(true);
+  const handleCloseProfileCustomizer = () => setShowProfileCustomizer(false);
+    // Define the isMobile prop (can be dynamic based on screen size)
+  const isMobile = false;
 
   const handleCSSFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -262,12 +269,18 @@ export default function CSSUploadPage() {
                       {user.fullName || user.username || 'User'}
                     </span>
                   </div>
-                  <AuthButtons />
+                              <AuthButtons
+              onOpenProfileCustomizer={handleOpenProfileCustomizer}
+              isMobile={isMobile}
+            />
                 </div>
               ) : (
                 <div className="text-white text-xs">
                   <span className="mr-2">Please log in</span>
-                  <AuthButtons />
+                              <AuthButtons
+              onOpenProfileCustomizer={handleOpenProfileCustomizer}
+              isMobile={isMobile}
+            />
                 </div>
               )}
             </div>
@@ -307,7 +320,10 @@ export default function CSSUploadPage() {
           <div className="bg-black bg-opacity-40 rounded-lg border border-purple-500 p-6 text-center">
             <h2 className="text-xl font-bold text-white mb-3">Authentication Required</h2>
             <p className="text-purple-300 mb-4">Please sign in to upload CSS files.</p>
-            <AuthButtons />
+                        <AuthButtons
+              onOpenProfileCustomizer={handleOpenProfileCustomizer}
+              isMobile={isMobile}
+            />
           </div>
         ) : (
           /* Compact Upload Form */
