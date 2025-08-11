@@ -44,8 +44,10 @@ interface UserVote {
   like_type: 'like' | 'dislike';
 }
 
-export default function CSSFileDetailPage({ params }: { params: { id: string } }) {
- 
+export default function CSSFileDetailPage() {
+  const params = useParams();
+  const fileId = params?.id as string;
+  
   const { user, isLoaded } = useUser();
   const [cssFile, setCSSFile] = useState<CSSFile | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -78,7 +80,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
   const [videoStates, setVideoStates] = useState<{[key: string]: {isPlaying: boolean, isMuted: boolean}}>({});
 
   useEffect(() => {
-    if (params.id) {
+    if (fileId) {
       fetchCSSFile();
       fetchComments();
       if (user) {
@@ -86,7 +88,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
         setLoading(false);
       }
     }
-  }, [params.id, user]);
+  }, [fileId, user]);
 
   // Preload images for smooth transitions
   useEffect(() => {
@@ -129,11 +131,13 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
   };
 
   const fetchCSSFile = async () => {
+    if (!fileId) return;
+    
     try {
       const { data, error } = await supabase
         .from('css_files')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', fileId)
         .single();
 
       if (error) {
@@ -150,11 +154,13 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
   };
 
   const fetchComments = async () => {
+    if (!fileId) return;
+    
     try {
       const { data, error } = await supabase
         .from('css_file_comments')
         .select('*')
-        .eq('file_id', params.id)
+        .eq('file_id', fileId)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -169,13 +175,13 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
   };
 
   const fetchUserVote = async () => {
-    if (!user) return;
+    if (!user || !fileId) return;
 
     try {
       const { data, error } = await supabase
         .from('css_file_likes')
         .select('like_type')
-        .eq('file_id', params.id)
+        .eq('file_id', fileId)
         .eq('user_id', user.id)
         .single();
 
@@ -191,7 +197,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
   };
 
   const handleVote = async (voteType: 'like' | 'dislike') => {
-    if (!user || !cssFile) return;
+    if (!user || !cssFile || !fileId) return;
 
     setVotingLoading(true);
     
@@ -202,7 +208,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileId: params.id,
+          fileId: fileId,
           voteType,
           currentVote: userVote?.like_type
         }),
@@ -225,7 +231,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
 
   const handleComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !commentText.trim()) return;
+    if (!user || !commentText.trim() || !fileId) return;
 
     setSubmittingComment(true);
 
@@ -236,7 +242,7 @@ export default function CSSFileDetailPage({ params }: { params: { id: string } }
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileId: params.id,
+          fileId: fileId,
           commentText: commentText.trim()
         }),
       });
