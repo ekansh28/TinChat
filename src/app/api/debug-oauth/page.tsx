@@ -2,8 +2,7 @@
 'use client';
 
 import { useUser, useAuth } from '@clerk/nextjs';
-import { useState } from 'react';
-window.location.href = '/';
+import { useState, useEffect } from 'react';
 
 export default function DebugOAuthPage() {
   const { user, isLoaded: userLoaded, isSignedIn } = useUser();
@@ -11,6 +10,12 @@ export default function DebugOAuthPage() {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Move the redirect logic inside useEffect to ensure it runs on the client
+  useEffect(() => {
+    // Uncomment the next line if you want to redirect immediately when the component mounts
+    // window.location.href = '/';
+  }, []);
 
   const checkProfile = async () => {
     setLoading(true);
@@ -61,15 +66,36 @@ export default function DebugOAuthPage() {
   };
 
   const forceSignOut = async () => {
-      try {
-    // By checking 'typeof window', we ensure this code only runs on the client
-    if (typeof window !== 'undefined') {
-      window.location.href = '/';
+    try {
+      // By checking 'typeof window', we ensure this code only runs on the client
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      console.error('Sign out error:', err);
     }
-  } catch (err) {
-    console.error('Sign out error:', err);
-  }
   };
+
+  // Add safety check for browser-only APIs
+  const getBrowserInfo = () => {
+    if (typeof window === 'undefined') {
+      return {
+        currentUrl: 'N/A (SSR)',
+        localStorageItems: 0,
+        sessionStorageItems: 0,
+        cookies: 'N/A (SSR)'
+      };
+    }
+
+    return {
+      currentUrl: window.location.href,
+      localStorageItems: Object.keys(localStorage).length,
+      sessionStorageItems: Object.keys(sessionStorage).length,
+      cookies: document.cookie ? 'Present' : 'None'
+    };
+  };
+
+  const browserInfo = getBrowserInfo();
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -105,8 +131,7 @@ export default function DebugOAuthPage() {
                 updatedAt: user.updatedAt,
                 externalAccounts: user.externalAccounts?.map(acc => ({
                   provider: acc.provider,
-                  emailAddress: acc.emailAddress,
-               
+                  emailAddress: acc.emailAddress
                 }))
               }, null, 2)}
             </pre>
@@ -126,7 +151,11 @@ export default function DebugOAuthPage() {
             
             <div className="mt-4">
               <button
-                onClick={() => window.location.href = '/'}
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.href = '/';
+                  }
+                }}
                 className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2"
               >
                 Go to Home Page
@@ -209,10 +238,10 @@ export default function DebugOAuthPage() {
         <div className="bg-gray-50 p-4 rounded">
           <h2 className="text-lg font-semibold mb-2">Browser Info</h2>
           <div className="space-y-1 text-sm">
-            <div><strong>Current URL:</strong> {window.location.href}</div>
-            <div><strong>Local Storage Items:</strong> {Object.keys(localStorage).length}</div>
-            <div><strong>Session Storage Items:</strong> {Object.keys(sessionStorage).length}</div>
-            <div><strong>Cookies:</strong> {document.cookie ? 'Present' : 'None'}</div>
+            <div><strong>Current URL:</strong> {browserInfo.currentUrl}</div>
+            <div><strong>Local Storage Items:</strong> {browserInfo.localStorageItems}</div>
+            <div><strong>Session Storage Items:</strong> {browserInfo.sessionStorageItems}</div>
+            <div><strong>Cookies:</strong> {browserInfo.cookies}</div>
           </div>
         </div>
       </div>
