@@ -3,6 +3,7 @@
 
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useState } from 'react';
+window.location.href = '/';
 
 export default function DebugOAuthPage() {
   const { user, isLoaded: userLoaded, isSignedIn } = useUser();
@@ -60,12 +61,14 @@ export default function DebugOAuthPage() {
   };
 
   const forceSignOut = async () => {
-    try {
-      // Clear everything and redirect to home
+      try {
+    // By checking 'typeof window', we ensure this code only runs on the client
+    if (typeof window !== 'undefined') {
       window.location.href = '/';
-    } catch (err) {
-      console.error('Sign out error:', err);
     }
+  } catch (err) {
+    console.error('Sign out error:', err);
+  }
   };
 
   return (
