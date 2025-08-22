@@ -1,4 +1,3 @@
-// src/app/css-browser/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -41,10 +40,7 @@ export default function CSSBrowserPage() {
   const [sortBy, setSortBy] = useState<SortBy>('date');
   const [filterBy, setFilterBy] = useState<FilterBy>('all');
   const [allTags, setAllTags] = useState<string[]>([]);
-  
-  if (!isLoaded) {
-    return <div>Loading...</div>;
-  }
+
   useEffect(() => {
     fetchCSSFiles();
     fetchAllTags();
@@ -218,12 +214,12 @@ const getSortIcon = (sort: SortBy) => {
                       {user.fullName || user.username || 'User'}
                     </span>
                   </div>
-                  <AuthButtons onOpenProfileCustomizer={() => {}} isMobile={false} />
+                  <AuthButtons />
                 </div>
               ) : (
                 <div className="text-white text-sm">
                   <span className="mr-2">Please log in to upload CSS files</span>
-                  <AuthButtons onOpenProfileCustomizer={() => {}} isMobile={false} />
+                  <AuthButtons />
                 </div>
               )}
             </div>
