@@ -304,7 +304,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/auth/sso-callback`;
+      const redirectUrl = `${window.location.origin}/oauth-callback`;
       const redirectUrlComplete = `${window.location.origin}`;
 
       if (isSignUp && signUpLoaded && signUp) {
