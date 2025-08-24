@@ -710,8 +710,8 @@ export function TopBar() {
                 borderRadius: '8px 8px 0 0',
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
               } : isWin7Mode ? {
-                background: 'rgba(240, 240, 240, 0.98)',
-                border: '1px solid #999',
+                background: 'rgba(240, 240, 240, 0)',
+                border: '1px solid #999999',
                 borderRadius: '8px',
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
                 backdropFilter: 'blur(10px)'
