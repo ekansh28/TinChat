@@ -16,9 +16,6 @@ export default function OAuthTest() {
     setStatus('Starting OAuth flow...');
     
     try {
-      console.log(`Starting ${provider} OAuth...`);
-      console.log('Clerk loaded states:', { signUpLoaded, signInLoaded });
-      console.log('Current URL:', window.location.href);
       
       if (signUpLoaded && signUp) {
         setStatus(`Initiating ${provider} with sign-up...`);
@@ -38,7 +35,6 @@ export default function OAuthTest() {
         setStatus('Error: Clerk not loaded');
       }
     } catch (error: any) {
-      console.error('OAuth error:', error);
       setStatus(`Error: ${error.message || 'OAuth failed'}`);
       setLoading(false);
     }

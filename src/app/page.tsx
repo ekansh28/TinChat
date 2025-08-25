@@ -69,7 +69,6 @@ export default function SelectionLobby() {
 
   const handleStartChat = (type: 'text' | 'video') => {
     if (!router) {
-      console.error("Router not available in handleStartChat.");
       toast({ 
         variant: "destructive",
         title: "Navigation Error", 
@@ -93,7 +92,6 @@ export default function SelectionLobby() {
     try {
       router.push(path);
     } catch (err) {
-      console.error("Navigation failed:", err);
       toast({ 
         variant: "destructive",
         title: "Navigation Error", 
@@ -156,7 +154,6 @@ export default function SelectionLobby() {
       transformOrigin: 'center center'
     }}
     onError={(e) => {
-      console.warn('Logo failed to load, hiding element');
       e.currentTarget.style.display = 'none';
     }}
   />

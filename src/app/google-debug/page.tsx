@@ -14,7 +14,6 @@ export default function GoogleDebug() {
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     const logMessage = `[${timestamp}] ${message}`;
-    console.log(logMessage);
     setLogs(prev => [...prev, logMessage]);
   };
 
@@ -68,7 +67,6 @@ export default function GoogleDebug() {
           addLog(`❌ Error ${index + 1}: ${err.code} - ${err.message}`);
         });
       }
-      console.error('Full error object:', error);
       setLoading(false);
     }
   };
@@ -103,7 +101,6 @@ export default function GoogleDebug() {
           addLog(`❌ Discord Error ${index + 1}: ${err.code} - ${err.message}`);
         });
       }
-      console.error('Full Discord error object:', error);
       setLoading(false);
     }
   };

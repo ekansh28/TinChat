@@ -125,7 +125,6 @@ export function ProfilePopup({
       setProfileError(null);
       
       try {
-        console.log('🔍 Loading profile data from API for user:', userId);
 
         let clerkUserId: string;
         if (typeof userId === 'string') {
@@ -205,7 +204,6 @@ export function ProfilePopup({
                 typeof badge.url === 'string';
             });
           } catch (e) {
-            console.error('Failed to process badges from API:', e);
             processedBadges = [];
           }
         }
@@ -236,7 +234,6 @@ export function ProfilePopup({
         setCustomCSS(profileFromAPI.profile_card_css || '');
         
       } catch (error) {
-        console.error('Failed to load profile data from API:', error);
         
         const userIdStr = typeof userId === 'string' ? userId : (userId as any)?.id || 'unknown';
         const errorProfile: UserProfile = {
@@ -304,7 +301,6 @@ export function ProfilePopup({
           setFriendshipStatus(data.status);
         }
       } catch (error) {
-        console.error('Failed to load friendship status:', error);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -424,7 +420,6 @@ export function ProfilePopup({
         });
       }
     } catch (error) {
-      console.error('Error sending friend request:', error);
     } finally {
       setActionLoading(null);
     }
@@ -456,7 +451,6 @@ export function ProfilePopup({
         setFriendshipStatus({ status: 'none' });
       }
     } catch (error) {
-      console.error('Error removing friend:', error);
     } finally {
       setActionLoading(null);
     }
@@ -490,7 +484,6 @@ export function ProfilePopup({
         setFriendshipStatus({ status: 'blocked' });
       }
     } catch (error) {
-      console.error('Error blocking user:', error);
     } finally {
       setActionLoading(null);
     }
@@ -522,7 +515,6 @@ export function ProfilePopup({
         setFriendshipStatus({ status: 'none' });
       }
     } catch (error) {
-      console.error('Error unblocking user:', error);
     } finally {
       setActionLoading(null);
     }

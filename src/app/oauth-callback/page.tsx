@@ -14,10 +14,8 @@ export default function OAuthCallback() {
       if (!isLoaded) return;
 
       try {
-        console.log('🔗 OAuth callback - user loaded:', !!user);
         
         if (user) {
-          console.log('✅ OAuth authentication successful');
           
           // Give webhook time to process user creation
           setTimeout(() => {
@@ -25,13 +23,11 @@ export default function OAuthCallback() {
             window.location.href = '/';
           }, 1500);
         } else {
-          console.log('❌ No user found after OAuth callback');
           setTimeout(() => {
             window.location.href = '/?oauth_error=true';
           }, 2000);
         }
       } catch (error) {
-        console.error('❌ OAuth callback processing error:', error);
         setTimeout(() => {
           window.location.href = '/?oauth_error=true';
         }, 2000);

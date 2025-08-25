@@ -121,14 +121,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           signUpData.username = trimmedUsername;
         }
 
-        console.log('Signup attempt with data:', { 
-          email: cleanEmail, 
-          hasUsername: !!trimmedUsername,
-          passwordLength: trimmedPassword.length 
-        });
 
         const result = await signUp.create(signUpData);
-        console.log('Signup result:', result.status);
 
         if (result.status === 'complete') {
           // Account created and verified - set the session active
@@ -152,7 +146,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             try {
               await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
             } catch (prepareError) {
-              console.warn('Email verification preparation failed:', prepareError);
             }
           } else {
             setError(`Please complete: ${result.missingFields?.join(', ') || 'required fields'}`);
@@ -191,7 +184,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
       
       if (err.errors && err.errors.length > 0) {
         const errorMessage = err.errors[0].message;
@@ -281,7 +273,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         setError('Verification incomplete. Please try again.');
       }
     } catch (err: any) {
-      console.error('Verification error:', err);
       if (err.errors && err.errors.length > 0) {
         const errorMessage = err.errors[0].message;
         if (errorMessage.includes('invalid')) {
@@ -321,7 +312,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
       }
     } catch (err: any) {
-      console.error('OAuth error:', err);
       setError('OAuth authentication failed. Please try again.');
       setLoading(false);
     }
@@ -336,7 +326,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setSuccess('Verification email sent! Please check your inbox.');
       setError(null);
     } catch (err) {
-      console.error('Resend verification error:', err);
       setError('Failed to resend verification email. Please try again.');
     } finally {
       setLoading(false);

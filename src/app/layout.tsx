@@ -25,7 +25,7 @@ export default function RootLayout({
           <meta name="google-adsense-account" content="ca-pub-5670235631357216" />
           <link rel="stylesheet" href="https://unpkg.com/98.css" crossOrigin="anonymous" />
         </head>
-        <body className={inter.className}>
+        <body className={inter.className} suppressHydrationWarning={true}>
           <ThemeProvider
             attribute="class"
             defaultTheme="theme-98"

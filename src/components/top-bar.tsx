@@ -25,9 +25,11 @@ const availableStamps: ThemeStamp[] = [
   { name: 'Pink Windows', imageUrl: '/theme_stamps/coquette.png', cssFile: 'pink-theme.css', dataAiHint: 'pink theme stamp' },
   { name: 'Star Pattern', imageUrl: '/theme_stamps/starpattern.png', cssFile: 'starpattern-theme.css', dataAiHint: 'star pattern theme stamp' },
   { name: 'Dark Theme', imageUrl: '/theme_stamps/darktheme.png', cssFile: 'dark-theme.css', dataAiHint: 'dark theme stamp' },
+  { name: 'Trippy Theme', imageUrl: '/theme_stamps/666.png', cssFile: 'trippy-theme.css', dataAiHint: 'trippy theme stamp' },
   { name: '666', imageUrl: '/theme_stamps/666.png', cssFile: '666-theme.css', dataAiHint: '666 theme stamp' },
   { name: 'Default 98', imageUrl: 'https://placehold.co/100x75/c0c0c0/000000.png?text=Default', cssFile: null, dataAiHint: 'default theme stamp', isDefault: true },
   { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
+
 ];
 
 const available7Stamps: ThemeStamp[] = [
@@ -88,7 +90,6 @@ export function TopBar() {
   // Load custom stamps from localStorage with loading state
   const loadAllCustomStamps = useCallback(async () => {
     setIsLoadingStamps(true);
-    console.log('[TopBar] Loading custom stamps...');
     
     try {
       // Add a small delay to show loading state
@@ -98,11 +99,6 @@ export function TopBar() {
       const win7Stamps = loadCustomStamps('win7');
       const winxpStamps = loadCustomStamps('winxp');
       
-      console.log('[TopBar] Loaded stamps:', {
-        win98: win98Stamps.length,
-        win7: win7Stamps.length,
-        winxp: winxpStamps.length
-      });
       
       setCustomStamps({
         win98: win98Stamps,
@@ -114,7 +110,6 @@ export function TopBar() {
       setRefreshTrigger(prev => prev + 1);
       
     } catch (error) {
-      console.error('[TopBar] Error loading custom stamps:', error);
     } finally {
       setIsLoadingStamps(false);
     }
@@ -155,7 +150,6 @@ export function TopBar() {
     };
 
     const allStamps = [...builtInStamps, ...customThemeStamps, addThemeStamp];
-    console.log('[TopBar] Current stamps for', currentMode, ':', allStamps.length);
     
     return allStamps;
   }, [isWinXPMode, isWin7Mode, customStamps, currentMode, refreshTrigger]);
@@ -163,7 +157,6 @@ export function TopBar() {
   // Load custom stamps on mount and when mode changes
   useEffect(() => {
     if (mounted) {
-      console.log('[TopBar] Mode changed, reloading stamps for:', currentMode);
       loadAllCustomStamps();
     }
   }, [mounted, loadAllCustomStamps, isWin7Mode, isWinXPMode]);
@@ -171,7 +164,6 @@ export function TopBar() {
   // Load stamps when uploader closes
   useEffect(() => {
     if (!isUploaderOpen && mounted) {
-      console.log('[TopBar] Uploader closed, reloading stamps');
       loadAllCustomStamps();
     }
   }, [isUploaderOpen, loadAllCustomStamps, mounted]);
@@ -188,47 +180,19 @@ export function TopBar() {
       height: '18px',
       minWidth: '18px',
       minHeight: '18px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '10px',
-      fontWeight: 'bold' as const,
-      padding: '0',
-      margin: '0',
+
       cursor: 'pointer',
-      transition: 'all 0.1s ease',
       userSelect: 'none' as const,
     };
 
     if (currentMode === 'win7') {
       return {
-        ...baseStyle,
-        backgroundColor: isClose ? '#ff6b6b' : '#f0f0f0',
-        border: '1px solid #999',
-        borderRadius: '3px',
-        '&:hover': {
-          backgroundColor: isClose ? '#ff5252' : '#e0e0e0'
-        }
       };
     } else if (currentMode === 'winxp') {
       return {
-        ...baseStyle,
-        backgroundColor: isClose ? '#ff6b6b' : '#ece9d8',
-        border: '1px solid #0054e3',
-        borderRadius: '2px',
-        color: '#000',
-        '&:hover': {
-          backgroundColor: isClose ? '#ff5252' : '#ddd9c3'
-        }
       };
     } else {
       return {
-        ...baseStyle,
-        backgroundColor: '#c0c0c0',
-        border: '1px outset #c0c0c0',
-        '&:active': {
-          borderStyle: 'inset'
-        }
       };
     }
   }, []);
@@ -250,7 +214,6 @@ export function TopBar() {
     if (typeof window === 'undefined') return;
     
     setIsApplyingTheme(true);
-    console.log('[TopBar] Applying theme:', cssFile, 'for mode:', forceMode || currentMode);
     
     try {
       const currentMode = forceMode || (isWinXPMode ? 'winxp' : (isWin7Mode ? 'win7' : 'win98'));
@@ -312,7 +275,6 @@ export function TopBar() {
       
       htmlElement.classList.remove('theme-transitioning');
     } catch (error) {
-      console.error('[TopBar] Error applying theme:', error);
     } finally {
       setIsApplyingTheme(false);
     }
@@ -320,7 +282,6 @@ export function TopBar() {
 
   // Handle stamp created with better integration
   const handleStampCreated = useCallback(async (stampData: StampData) => {
-    console.log('[TopBar] Theme stamp created:', stampData);
     
     setIsLoadingStamps(true);
     
@@ -333,10 +294,8 @@ export function TopBar() {
         await applySubTheme(stampData.cssFile, currentMode);
       }
       
-      console.log('[TopBar] Successfully integrated new theme:', stampData.name);
       
     } catch (error) {
-      console.error('[TopBar] Error integrating new theme:', error);
     } finally {
       setIsLoadingStamps(false);
       
@@ -552,9 +511,7 @@ export function TopBar() {
         // Reload stamps to update UI
         await loadAllCustomStamps();
         
-        console.log(`[TopBar] Deleted custom theme: ${cssFile}`);
       } catch (error) {
-        console.error('[TopBar] Error deleting custom theme:', error);
       } finally {
         setIsLoadingStamps(false);
       }
@@ -704,21 +661,6 @@ export function TopBar() {
               opacity: 1,
               transform: 'translateZ(0)',
               overflow: 'hidden',
-              ...(isWinXPMode ? {
-                background: '#ece9d8',
-                border: '1px solid #0054e3',
-                borderRadius: '8px 8px 0 0',
-                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
-              } : isWin7Mode ? {
-                background: 'rgba(240, 240, 240, 0)',
-                border: '1px solid #999999',
-                borderRadius: '8px',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-                backdropFilter: 'blur(10px)'
-              } : {
-                background: '#c0c0c0',
-                border: '3px outset'
-              })
             }}
           >
             {/* Compact Title Bar */}
@@ -728,20 +670,8 @@ export function TopBar() {
                 height: '24px',
                 minHeight: '24px',
                 display: 'flex',
-                alignItems: 'center',
                 padding: '0 4px',
                 flexShrink: 0,
-                ...(isWinXPMode ? {
-                  background: 'linear-gradient(to bottom, #0054e3, #0040b3)',
-                  color: '#fff',
-                  borderTopLeftRadius: '6px',
-                  borderTopRightRadius: '6px'
-                } : isWin7Mode ? {
-                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
-                  borderBottom: '1px solid #ccc',
-                  borderTopLeftRadius: '6px',
-                  borderTopRightRadius: '6px'
-                } : {})
               }}
             >
               <div className="title-bar-text" style={{ 
@@ -750,9 +680,8 @@ export function TopBar() {
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                ...(isWinXPMode ? { color: '#fff' } : isWin7Mode ? { color: '#333' } : {})
               }}>
-                Theme Customizer {needsScrolling && `(${currentStamps.length} themes)`}
+                Theme Customizer {needsScrolling}
                 {isLoadingStamps && ' - Loading...'}
               </div>
               
@@ -775,14 +704,7 @@ export function TopBar() {
                   aria-label="Close" 
                   onClick={handleClose}
                   style={{
-                    ...getTitleButtonStyle(currentMode, true),
-                    ...(isWinXPMode ? {
-                      backgroundColor: '#ff6b6b',
-                      ':hover': { backgroundColor: '#ff5252' }
-                    } : isWin7Mode ? {
-                      backgroundColor: '#ff6b6b',
-                      ':hover': { backgroundColor: '#ff5252' }
-                    } : {})
+                    ...getTitleButtonStyle(currentMode, true)
                   }}
                 ></button>
               </div>
@@ -800,16 +722,6 @@ export function TopBar() {
                 display: 'flex',
                 flexDirection: 'column',
                 maxHeight: 'calc(80vh - 24px)',
-                ...(isWinXPMode ? {
-                  background: '#ece9d8',
-                  color: '#000'
-                } : isWin7Mode ? {
-                  background: 'rgba(255, 255, 255, 0.8)',
-                  backdropFilter: 'blur(5px)',
-                  color: '#333',
-                  borderBottomLeftRadius: '6px',
-                  borderBottomRightRadius: '6px'
-                } : {})
               }}
             >
               {/* Header text - fixed at top */}
@@ -859,7 +771,7 @@ export function TopBar() {
                     <li 
                       key={`${stamp.name}-${index}-${refreshTrigger}`}
                       className={cn(
-                        "mb-2 p-1 cursor-pointer flex items-center transition-colors relative group",
+                        "mb-2 p-1 cursor-pointer flex transition-colors relative group",
                         isWinXPMode
                           ? "hover:bg-blue-100 rounded"
                           : isWin7Mode 

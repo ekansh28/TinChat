@@ -42,7 +42,6 @@ export function ThemeProvider({
     const win7Link = document.getElementById(WIN7_CSS_LINK_ID);
     if (win7Link) {
       win7Link.remove();
-      console.log("ThemeProvider: Removed Windows 7 CSS on home navigation");
     }
   }, []);
 
@@ -52,7 +51,6 @@ export function ThemeProvider({
     const winxpLink = document.getElementById(WINXP_CSS_LINK_ID);
     if (winxpLink) {
       winxpLink.remove();
-      console.log("ThemeProvider: Removed Windows XP CSS on home navigation");
     }
   }, []);
 
@@ -65,7 +63,6 @@ export function ThemeProvider({
           setUserSelectedTheme(savedTheme);
         }
       } catch (e) {
-        console.error("ThemeProvider: Error loading from localStorage:", e);
       }
     }
   }, [storageKey]);
@@ -99,13 +96,11 @@ export function ThemeProvider({
         win7Link.rel = 'stylesheet';
         win7Link.href = 'https://unpkg.com/7.css';
         document.head.appendChild(win7Link);
-        console.log("ThemeProvider: Loaded Windows 7 CSS");
       }
     } else {
       // Remove Windows 7 CSS if present
       if (win7Link) {
         win7Link.remove();
-        console.log("ThemeProvider: Removed Windows 7 CSS");
       }
     }
 
@@ -113,7 +108,6 @@ export function ThemeProvider({
     try {
       localStorage.setItem(storageKey, currentAppliedTheme);
     } catch (e) {
-      console.error("ThemeProvider: Error setting localStorage:", e);
     }
 
     const timer = setTimeout(() => {
@@ -126,7 +120,6 @@ export function ThemeProvider({
   // ✅ ENHANCED: Force clear all external themes when on home page
   useEffect(() => {
     if (pathname === '/' && typeof window !== 'undefined') {
-      console.log("ThemeProvider: On home page, clearing ALL external themes and CSS");
       
       const htmlElement = document.documentElement;
       
@@ -135,8 +128,10 @@ export function ThemeProvider({
         { cssFile: 'pink-theme.css' },
         { cssFile: 'starpattern-theme.css' },
         { cssFile: 'dark-theme.css' },
+        { cssFile: 'trippy-theme.css' },
         { cssFile: '666-theme.css' },
-        { cssFile: 'watercolor-theme.css' }
+        { cssFile: 'watercolor-theme.css' },
+
       ];
       
       const available7Stamps = [
@@ -156,7 +151,6 @@ export function ThemeProvider({
           const existingSubThemeClass = `subtheme-${stamp.cssFile.replace('.css', '')}`;
           if (htmlElement.classList.contains(existingSubThemeClass)) {
             htmlElement.classList.remove(existingSubThemeClass);
-            console.log("ThemeProvider: Removed sub-theme class:", existingSubThemeClass);
           }
         }
       });
@@ -165,7 +159,6 @@ export function ThemeProvider({
       const link = document.getElementById(DYNAMIC_THEME_STYLE_ID);
       if (link) {
         link.remove();
-        console.log("ThemeProvider: Removed sub-theme CSS link");
       }
 
       // ✅ CRITICAL FIX: Remove Windows 7 and XP CSS when navigating to home
@@ -177,7 +170,6 @@ export function ThemeProvider({
       htmlElement.classList.add('theme-98');
       setUserSelectedTheme('theme-98');
       
-      console.log("ThemeProvider: ✅ Forced reset to Windows 98 theme on home page");
     }
   }, [pathname, removeWin7CSS, removeWinXPCSS]); // ✅ ADD DEPENDENCIES
 

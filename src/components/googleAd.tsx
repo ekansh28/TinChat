@@ -26,7 +26,6 @@ const GoogleAd: React.FC<GoogleAdProps> = ({
       // @ts-ignore
       (window.adsbygoogle = window.adsbygoogle || []).push({});
     } catch (err) {
-      console.error("Adsense push error:", err);
     }
   }, []);
 

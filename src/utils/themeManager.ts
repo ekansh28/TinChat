@@ -25,7 +25,6 @@ export const getCustomStamps = (mode: 'win98' | 'win7' | 'winxp'): CustomThemeSt
     const stamps = JSON.parse(stored);
     return Array.isArray(stamps) ? stamps : [];
   } catch (error) {
-    console.error('Failed to load custom stamps:', error);
     return [];
   }
 };
@@ -56,7 +55,6 @@ export const saveCustomStamp = (
     localStorage.setItem(STORAGE_KEYS[mode], JSON.stringify(existing));
     return true;
   } catch (error) {
-    console.error('Failed to save custom stamp:', error);
     return false;
   }
 };
@@ -73,7 +71,6 @@ export const removeCustomStamp = (
     localStorage.setItem(STORAGE_KEYS[mode], JSON.stringify(filtered));
     return true;
   } catch (error) {
-    console.error('Failed to remove custom stamp:', error);
     return false;
   }
 };
@@ -158,7 +155,6 @@ export const importCustomStamps = (jsonData: string): boolean => {
     
     return true;
   } catch (error) {
-    console.error('Failed to import custom stamps:', error);
     return false;
   }
 };
@@ -169,7 +165,6 @@ export const clearCustomStamps = (mode: 'win98' | 'win7' | 'winxp'): boolean => 
     localStorage.removeItem(STORAGE_KEYS[mode]);
     return true;
   } catch (error) {
-    console.error('Failed to clear custom stamps:', error);
     return false;
   }
 };
@@ -182,7 +177,6 @@ export const clearAllCustomStamps = (): boolean => {
     });
     return true;
   } catch (error) {
-    console.error('Failed to clear all custom stamps:', error);
     return false;
   }
 };
@@ -235,7 +229,6 @@ export const downloadBackup = (): void => {
     
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Failed to create backup:', error);
   }
 };
 

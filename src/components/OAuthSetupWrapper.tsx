@@ -17,33 +17,15 @@ export default function OAuthSetupWrapper({ children }: OAuthSetupWrapperProps) 
   // Debug logging
   React.useEffect(() => {
     if (userLoaded) {
-      console.log('🔍 OAuthSetupWrapper Debug:', {
-        userLoaded,
-        hasUser: !!user,
-        userId: user?.id,
-        externalAccounts: user?.externalAccounts?.map(acc => ({
-          provider: acc.provider,
-          id: acc.id
-        })),
-        needsUsernameSetup,
-        isLoading,
-        profile: profile ? {
-          id: profile.id,
-          username: profile.username,
-          profile_complete: profile.profile_complete
-        } : null
-      });
     }
   }, [userLoaded, user, needsUsernameSetup, isLoading, profile]);
 
   const handleSetupComplete = () => {
-    console.log('✅ OAuth setup completed, refreshing page...');
     // Refresh the page to reload user data
     window.location.reload();
   };
 
   if (!userLoaded) {
-    console.log('⏳ User not loaded yet...');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -55,7 +37,6 @@ export default function OAuthSetupWrapper({ children }: OAuthSetupWrapperProps) 
   }
 
   if (isLoading) {
-    console.log('⏳ OAuth setup check in progress...');
     // Show a simple loading state while checking
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -67,7 +48,6 @@ export default function OAuthSetupWrapper({ children }: OAuthSetupWrapperProps) 
     );
   }
 
-  console.log('🎯 OAuthSetupWrapper final state:', { needsUsernameSetup });
 
   return (
     <>

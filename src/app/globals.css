@@ -41,7 +41,17 @@ body {
   box-sizing: inherit;
 }
 
+/* Add this to your global CSS file */
+.window.glass.active::before,
+.window-body.glass.active::before {
+  display: none !important;
+}
 
+.window.glass.active,
+.window-body.glass.active {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+}
 /* ===== PORTAL-BASED AUTH MODAL STYLES ===== */
 /* Add this to your globals.css file - REPLACE the old .auth-modal-backdrop styles */
 

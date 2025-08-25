@@ -1,4 +1,4 @@
-// src/app/chat/components/ChatWindow.tsx - FIXED TO REMOVE SEARCHING MESSAGE
+// src/app/chat/components/ChatWindow.tsx - FIXED GLASS EFFECT PRESERVATION
 
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -63,6 +63,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const windowBodyRef = useRef<HTMLDivElement>(null);
   
   // Track the most recent partner message data for typing indicator
   const [recentPartnerData, setRecentPartnerData] = useState<{
@@ -77,7 +78,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // ✅ SAFE MESSAGES: Ensure messages is always an array
   const safeMessages = useMemo(() => {
     if (!Array.isArray(messages)) {
-      console.warn('ChatWindow: messages prop is not an array, defaulting to empty array');
       return [];
     }
     return messages;
@@ -210,7 +210,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     </div>
   );
 
-  // Apply glass classes effect
+  // ✅ FIXED: Enhanced glass effect application and preservation
   useEffect(() => {
     if (isWindows7Theme) {
       const windowElements = document.querySelectorAll('.window, .window-body, .title-bar, .input-area, form');
@@ -227,13 +227,104 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       if (chatContainer) {
         chatContainer.classList.add('glass-window-body', 'glass', 'active');
       }
+
+      // ✅ CRITICAL FIX: Apply glass styling directly to prevent override
+      if (windowBodyRef.current) {
+        const windowBody = windowBodyRef.current;
+        // Apply the glass effect directly with !important to prevent override
+        windowBody.style.setProperty('background-color', 'rgba(255, 255, 255, 0.1)', 'important');
+        windowBody.style.setProperty('backdrop-filter', 'blur(10px)', 'important');
+        windowBody.style.setProperty('-webkit-backdrop-filter', 'blur(10px)', 'important');
+        windowBody.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.2)', 'important');
+        
+        // Also apply to messages container
+        if (messagesContainerRef.current) {
+          const messagesContainer = messagesContainerRef.current;
+          messagesContainer.style.setProperty('background-color', 'rgba(255, 255, 255, 0.05)', 'important');
+          messagesContainer.style.setProperty('backdrop-filter', 'blur(5px)', 'important');
+          messagesContainer.style.setProperty('-webkit-backdrop-filter', 'blur(5px)', 'important');
+          messagesContainer.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.1)', 'important');
+        }
+      }
+      
     } else {
+      // Remove glass classes and direct styling when not Win7
       const glassElements = document.querySelectorAll('.glass');
       glassElements.forEach(element => {
         element.classList.remove('glass');
         element.classList.remove('active');
       });
+      
+      if (windowBodyRef.current) {
+        const windowBody = windowBodyRef.current;
+        windowBody.style.removeProperty('background-color');
+        windowBody.style.removeProperty('backdrop-filter');
+        windowBody.style.removeProperty('-webkit-backdrop-filter');
+        windowBody.style.removeProperty('border');
+        
+        if (messagesContainerRef.current) {
+          const messagesContainer = messagesContainerRef.current;
+          messagesContainer.style.removeProperty('background-color');
+          messagesContainer.style.removeProperty('backdrop-filter');
+          messagesContainer.style.removeProperty('-webkit-backdrop-filter');
+          messagesContainer.style.removeProperty('border');
+        }
+      }
+      
     }
+  }, [isWindows7Theme]);
+
+  // ✅ FIXED: Continuous glass preservation - run every 2 seconds to maintain glass effect
+  useEffect(() => {
+    if (!isWindows7Theme) return;
+
+    const preserveGlass = () => {
+      if (windowBodyRef.current && isWindows7Theme) {
+        const windowBody = windowBodyRef.current;
+        
+        // Check if glass styling is still applied
+        const currentBg = getComputedStyle(windowBody).backgroundColor;
+        if (!currentBg.includes('rgba') || currentBg === 'rgba(0, 0, 0, 0)') {
+          // Reapply glass effect
+          windowBody.style.setProperty('background-color', 'rgba(255, 255, 255, 0.1)', 'important');
+          windowBody.style.setProperty('backdrop-filter', 'blur(10px)', 'important');
+          windowBody.style.setProperty('-webkit-backdrop-filter', 'blur(10px)', 'important');
+          windowBody.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.2)', 'important');
+          
+        }
+        
+        if (messagesContainerRef.current) {
+          const messagesContainer = messagesContainerRef.current;
+          const currentMsgBg = getComputedStyle(messagesContainer).backgroundColor;
+          if (!currentMsgBg.includes('rgba') || currentMsgBg === 'rgba(0, 0, 0, 0)') {
+            messagesContainer.style.setProperty('background-color', 'rgba(255, 255, 255, 0.05)', 'important');
+            messagesContainer.style.setProperty('backdrop-filter', 'blur(5px)', 'important');
+            messagesContainer.style.setProperty('-webkit-backdrop-filter', 'blur(5px)', 'important');
+            messagesContainer.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.1)', 'important');
+          }
+        }
+      }
+    };
+
+    // Initial application
+    preserveGlass();
+    
+    // Set up interval to preserve glass effect
+    const preservationInterval = setInterval(preserveGlass, 2000);
+    
+    // Also preserve on scroll and resize
+    const handlePreserveGlass = () => {
+      requestAnimationFrame(preserveGlass);
+    };
+    
+    window.addEventListener('scroll', handlePreserveGlass);
+    window.addEventListener('resize', handlePreserveGlass);
+    
+    return () => {
+      clearInterval(preservationInterval);
+      window.removeEventListener('scroll', handlePreserveGlass);
+      window.removeEventListener('resize', handlePreserveGlass);
+    };
   }, [isWindows7Theme]);
 
   // ✅ MOBILE: Force input area visibility
@@ -248,7 +339,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         element.style.position = 'relative';
         element.style.zIndex = '10';
         element.style.flexShrink = '0';
-        console.log('[ChatWindow] Mobile: Force input area visibility');
       }
     }
   }, [isMobile]);
@@ -257,7 +347,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const renderContent = () => {
     const content = [];
     
-    // ✅ FIXED: REMOVED ALL "Searching" and "Waiting" MESSAGES
     // Empty state messages - ONLY show connection status
     if (!isConnected && safeMessages.length === 0) {
       content.push(
@@ -271,7 +360,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       );
     }
-    // ✅ REMOVED: No more "Waiting for partner..." or "Searching..." messages
     
     // ✅ MESSAGES: Same layout for mobile and desktop - traditional format
     safeMessages.forEach((msg, index) => {
@@ -321,9 +409,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   return (
     <div 
+      ref={windowBodyRef}
       className={cn(
         'window-body window-body-content flex flex-col',
-        isWindows7Theme ? 'glass-body-padding has-space' : 'p-0.5',
+        isWindows7Theme ? 'glass-body-padding has-space glass active' : 'p-0.5',
         isMobile && 'p-1',
         isPinkThemeActive && theme === 'theme-98' && 'relative'
       )} 
@@ -331,7 +420,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         position: 'relative',
         height: '100%',
         minHeight: 0,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        // ✅ CRITICAL: Initial glass styling to prevent flash
+        ...(isWindows7Theme && {
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+        })
       }}
     >
       
@@ -344,7 +440,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         className={cn(
           "flex-1 overflow-y-auto overscroll-contain",
           isWindows7Theme 
-            ? 'border p-2 bg-white bg-opacity-20 dark:bg-gray-700 dark:bg-opacity-20' 
+            ? 'border p-2 glass active' 
             : 'sunken-panel tree-view p-1',
           isMobile && 'p-2'
         )} 
@@ -360,6 +456,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           // ✅ MOBILE: Bottom-anchored (messages stick to bottom)
           // ✅ DESKTOP: Top-anchored (traditional)
           justifyContent: isMobile ? 'flex-end' : 'flex-start',
+          
+          // ✅ CRITICAL: Initial glass styling for messages container
+          ...(isWindows7Theme && {
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          })
         }}
       >
         {/* ✅ MOBILE: Add spacer to push content to bottom when there are few messages */}

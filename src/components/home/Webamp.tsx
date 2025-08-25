@@ -119,7 +119,6 @@ const WebampPlayer: React.FC<WebampProps> = ({
       
       await webamp.renderWhenReady(webampContainerRef.current);
     } catch (error) {
-      console.error('Webamp initialization error:', error);
     }
   }, [initialTracks, calculateLayout]);
 
@@ -134,7 +133,6 @@ const WebampPlayer: React.FC<WebampProps> = ({
         try {
           webampInstanceRef.current.dispose();
         } catch (error) {
-          console.warn('Webamp disposal error:', error);
         }
         webampInstanceRef.current = null;
         initializedRef.current = false;

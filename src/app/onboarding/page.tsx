@@ -13,7 +13,6 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 
-console.log('OnboardingPage component is being loaded/rendered by Next.js');
 
 interface UserProfile {
   id: string; // Must match auth.users.id
@@ -56,18 +55,15 @@ export default function OnboardingPage() {
       setLoading(true);
       
       try {
-        console.log("Onboarding: Checking user session...");
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.error('Onboarding: Session error:', sessionError);
           toast({ title: 'Authentication Error', description: 'Please sign in again.', variant: 'destructive' });
           router.replace('/signin');
           return;
         }
 
         if (!session?.user) {
-          console.log("Onboarding: No user session found, redirecting to signin");
           router.replace('/signin');
           return;
         }
@@ -75,7 +71,6 @@ export default function OnboardingPage() {
         if (!mountedRef.current) return;
 
         setUser(session.user);
-        console.log(`Onboarding: User ID: ${session.user.id}`);
 
         // Fetch existing profile
         try {
@@ -88,14 +83,11 @@ export default function OnboardingPage() {
           if (!mountedRef.current) return;
 
           if (error && error.code !== 'PGRST116') {
-            console.error('Onboarding: Error fetching profile:', error);
             // Continue with empty profile
           } else if (profile) {
-            console.log('Onboarding: Profile found:', profile);
             
             // If profile is complete, redirect to home
             if (profile.profile_complete) {
-              console.log('Onboarding: Profile already complete, redirecting to home');
               router.replace('/');
               return;
             }
@@ -109,14 +101,11 @@ export default function OnboardingPage() {
               setAvatarPreview(profile.avatar_url);
             }
           } else {
-            console.log('Onboarding: No existing profile found');
           }
         } catch (profileError) {
-          console.error('Onboarding: Exception fetching profile:', profileError);
           // Continue with empty profile
         }
       } catch (error) {
-        console.error('Onboarding: Exception in fetchUserAndProfile:', error);
         toast({ title: 'Error', description: 'Failed to load profile data.', variant: 'destructive' });
       } finally {
         if (mountedRef.current) {
@@ -148,14 +137,12 @@ export default function OnboardingPage() {
         if (!mountedRef.current) return;
 
         if (error) {
-          console.error('Error checking username:', error);
           toast({ title: "Username Check Failed", description: error.message, variant: "destructive" });
           setUsernameAvailable(null);
         } else {
           setUsernameAvailable(!data); // If data is null, username is available
         }
       } catch (error) {
-        console.error('Exception checking username:', error);
         if (mountedRef.current) {
           setUsernameAvailable(null);
         }
@@ -220,7 +207,6 @@ export default function OnboardingPage() {
     try {
       // Upload avatar if provided
       if (avatarFile) {
-        console.log('Onboarding: Uploading avatar...');
         const fileExt = avatarFile.name.split('.').pop();
         const fileName = `${uuidv4()}.${fileExt}`;
         const newAvatarStoragePath = `public/${user.id}/${fileName}`;
@@ -230,7 +216,6 @@ export default function OnboardingPage() {
           .upload(newAvatarStoragePath, avatarFile, { upsert: true });
 
         if (uploadError) {
-          console.error('Onboarding: Avatar upload error:', uploadError);
           toast({ title: 'Avatar Upload Failed', description: uploadError.message, variant: 'destructive' });
           setSaving(false);
           return;
@@ -243,7 +228,6 @@ export default function OnboardingPage() {
           return;
         }
         finalAvatarUrlToSave = urlData.publicUrl;
-        console.log('Onboarding: Avatar uploaded successfully');
       }
 
       // Check if user row exists
@@ -254,7 +238,6 @@ export default function OnboardingPage() {
         .maybeSingle();
 
       if (checkError && checkError.code !== 'PGRST116') {
-        console.error("Onboarding: Error checking for existing user row:", checkError);
         toast({ title: 'Profile Setup Error', description: `Could not verify profile: ${checkError.message}`, variant: 'destructive' });
         setSaving(false);
         return;
@@ -262,18 +245,15 @@ export default function OnboardingPage() {
       
       // Create initial row if needed
       if (!existingUserRow) {
-        console.log(`Onboarding: Creating initial user row for ${user.id}`);
         const { error: insertError } = await supabase
           .from('user_profiles')
           .insert({ id: user.id, username: username }); 
         
         if (insertError) {
-          console.error("Onboarding: Insert error:", insertError);
           toast({ title: 'Profile Setup Failed', description: `Could not create initial profile: ${insertError.message}`, variant: 'destructive' });
           setSaving(false);
           return;
         }
-        console.log(`Onboarding: Initial user row created successfully`);
       }
 
       // Update profile
@@ -285,7 +265,6 @@ export default function OnboardingPage() {
         profile_complete: true,
       };
 
-      console.log("Onboarding: Updating profile data:", profileDataToUpsert);
 
       const { error: upsertError } = await supabase
         .from('user_profiles')
@@ -294,10 +273,8 @@ export default function OnboardingPage() {
         .single(); 
 
       if (upsertError) {
-        console.error("Onboarding: Upsert error:", upsertError);
         toast({ title: 'Profile Update Failed', description: upsertError.message, variant: 'destructive' });
       } else {
-        console.log("Onboarding: Profile updated successfully");
         toast({ title: 'Profile Updated!', description: 'Your profile has been set up.' });
         
         // Small delay before redirect to ensure toast is visible
@@ -308,7 +285,6 @@ export default function OnboardingPage() {
         }, 500);
       }
     } catch (error: any) {
-      console.error("Onboarding: Exception during save:", error);
       toast({ title: 'Error', description: 'An unexpected error occurred.', variant: 'destructive' });
     } finally {
       if (mountedRef.current) {

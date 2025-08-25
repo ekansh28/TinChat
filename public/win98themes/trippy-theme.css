@@ -1,0 +1,429 @@
+/* Trippy Psychedelic Theme - Vibrant Rainbow Colors for Windows 98 */
+
+html.theme-98.subtheme-trippy-theme body {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy1.gif'), url('https://cdn.tinchat.online/wallpapers/trippy2.gif') !important;
+  background-repeat: repeat, repeat !important;
+  background-attachment: fixed, fixed !important;
+
+  background-position: 0 0, 200px 175px !important;
+  background-blend-mode: multiply !important;
+  background-color: #1a0033 !important;
+}
+
+/* Window - Psychedelic with rainbow accents */
+html.theme-98.subtheme-trippy-theme .window {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy2.gif') !important;
+  background-size: 200px !important;
+  background-color: #ff00ff23 !important;
+  border-top: 1px solid #00ffff !important;
+  border-left: 1px solid #00ffff !important;
+  border-right: 1px solid #ffff00 !important;
+  border-bottom: 1px solid #ffff00 !important;
+  box-shadow: inset 1px 1px 0px #ff6600, inset -1px -1px 0px #6600ff !important;
+}
+
+/* Window Body - Dark with psychedelic undertones */
+html.theme-98.subtheme-trippy-theme .window-body {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy.gif') !important;
+  background-size: 150px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: soft-light !important;
+  background-color: #001a33 !important;
+  color: #00ff99 !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #00ccff !important;
+  border-bottom: 1px solid #00ccff !important;
+  box-shadow: inset 1px 1px 0px #ff6600, inset -1px -1px 0px #cc00ff !important;
+}
+
+/* Title Bar - Using trippy4 wallpaper with psychedelic colors */
+html.theme-98.subtheme-trippy-theme .title-bar {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy4.gif') !important;
+  background-size: 120px !important;
+  background-repeat: repeat !important;
+  background-color: #ff0080 !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px #000000 !important;
+  padding: 2px 3px !important;
+}
+
+/* Active Title Bar - Brighter psychedelic colors */
+html.theme-98.subtheme-trippy-theme .window.active > .title-bar {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy4.gif') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-color: #8000ff !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px #ff00ff !important;
+}
+
+html.theme-98.subtheme-trippy-theme .title-bar-text {
+  color: #ffffff !important;
+  font-weight: bold !important;
+}
+
+/* General Buttons - Psychedelic style for UI buttons */
+html.theme-98.subtheme-trippy-theme button,
+html.theme-98.subtheme-trippy-theme .button {
+  background-color: #330066 !important;
+  color: #00ffff !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #ccff00 !important;
+  border-bottom: 1px solid #ccff00 !important;
+  box-shadow: inset 1px 1px 0px #ff6600, 1px 1px 0px #6600ff !important;
+}
+
+
+
+/* Stop/Find/Skip Button - Special psychedelic treatment with maximum specificity */
+html.theme-98.subtheme-trippy-theme button[aria-label="Stop"],
+html.theme-98.subtheme-trippy-theme button[aria-label="Find"], 
+html.theme-98.subtheme-trippy-theme button[aria-label="Skip"],
+html.theme-98.subtheme-trippy-theme .button[aria-label="Stop"],
+html.theme-98.subtheme-trippy-theme .button[aria-label="Find"], 
+html.theme-98.subtheme-trippy-theme .button[aria-label="Skip"] {
+
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy3.gif') !important;
+
+}
+
+/* Override any potential conflicting background properties */
+html.theme-98.subtheme-trippy-theme button[aria-label="Stop"]:not(:active),
+html.theme-98.subtheme-trippy-theme button[aria-label="Find"]:not(:active), 
+html.theme-98.subtheme-trippy-theme button[aria-label="Skip"]:not(:active) {
+  background: url('https://cdn.tinchat.online/wallpapers/trippy3.gif')  repeat 0 0 / 90px 90px scroll padding-box padding-box !important;
+}
+
+/* Action Buttons (Send) - Special psychedelic wallpaper treatment */
+html.theme-98.subtheme-trippy-theme button[type="submit"],
+html.theme-98.subtheme-trippy-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]),
+html.theme-98.subtheme-trippy-theme .chat-window button {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy4.gif') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  background-color: #660033 !important;
+ 
+}
+
+html.theme-98.subtheme-trippy-theme button:focus,
+html.theme-98.subtheme-trippy-theme .button:focus {
+  
+
+}
+
+html.theme-98.subtheme-trippy-theme button:active,
+html.theme-98.subtheme-trippy-theme .button:active,
+html.theme-98.subtheme-trippy-theme button.active,
+html.theme-98.subtheme-trippy-theme .button.active {
+  background-color: #003366 !important;
+  color: #ffff00 !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #00ffcc !important;
+  border-bottom: 1px solid #00ffcc !important;
+  box-shadow: inset 1px 1px 0px #ff3366 !important;
+}
+
+/* Stop/Find/Skip Button - Active/Pressed state */
+html.theme-98.subtheme-trippy-theme button[aria-label="Stop"]:active,
+html.theme-98.subtheme-trippy-theme button[aria-label="Find"]:active,
+html.theme-98.subtheme-trippy-theme button[aria-label="Skip"]:active,
+html.theme-98.subtheme-trippy-theme button[aria-label="Stop"].active,
+html.theme-98.subtheme-trippy-theme button[aria-label="Find"].active,
+html.theme-98.subtheme-trippy-theme button[aria-label="Skip"].active {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy3.gif') !important;
+  background-size: 70px !important;
+  background-repeat: repeat !important;
+  background-color: #cc00ff !important;
+  color: #ffff00 !important;
+  border-top: 1px solid #ff0066 !important;
+  border-left: 1px solid #ff0066 !important;
+  border-right: 1px solid #00ff99 !important;
+  border-bottom: 1px solid #00ff99 !important;
+  box-shadow: inset 1px 1px 0px #0066ff !important;
+}
+
+/* Action Buttons - Active/Pressed state with red2 wallpaper */
+html.theme-98.subtheme-trippy-theme button[type="submit"]:active,
+html.theme-98.subtheme-trippy-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]):active,
+html.theme-98.subtheme-trippy-theme .chat-window button:active,
+html.theme-98.subtheme-trippy-theme button[type="submit"].active,
+html.theme-98.subtheme-trippy-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]).active,
+html.theme-98.subtheme-trippy-theme .chat-window button.active {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy2.gif') !important;
+  background-size: 60px !important;
+  background-repeat: repeat !important;
+  background-color: #1a0000 !important;
+  color: #ffffff !important;
+  border-top: 1px solid #000000 !important;
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #660000 !important;
+  border-bottom: 1px solid #660000 !important;
+  box-shadow: inset 1px 1px 0px #330000 !important;
+}
+
+/* Inputs - Dark red with light text */
+html.theme-98.subtheme-trippy-theme input[type="text"],
+html.theme-98.subtheme-trippy-theme input[type="password"],
+html.theme-98.subtheme-trippy-theme textarea,
+html.theme-98.subtheme-trippy-theme .themed-input {
+  background-color: #001a33 !important;
+  color: #ccffff !important;
+  border: 1px solid #ff00cc !important;
+  box-shadow: inset 1px 1px 1px #ff00cc, inset -1px -1px 1px #00ffcc !important;
+  padding: 2px 3px !important;
+}
+
+html.theme-98.subtheme-trippy-theme .themed-input-inner {
+  background-color: transparent !important;
+  color: #ccffff !important;
+}
+
+/* Sunken Panels - Dark with red tint and wallpaper */
+html.theme-98.subtheme-trippy-theme .sunken-panel,
+html.theme-98.subtheme-trippy-theme .tree-view {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy.gif') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: overlay !important;
+  background-color: #0d0033 !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #00ffcc !important;
+  border-bottom: 1px solid #00ffcc !important;
+  box-shadow: none !important;
+  padding: 2px !important;
+}
+
+/* Dropdown - Dark theme */
+html.theme-98.subtheme-trippy-theme select,
+html.theme-98.subtheme-trippy-theme .themed-select-trigger {
+  background-color: #001a33 !important;
+  color: #99ffff !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #ccff00 !important;
+  border-bottom: 1px solid #ccff00 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .themed-select-trigger.button {
+  background-color: #330066 !important;
+  color: #99ffff !important;
+  border-top: 1px solid #ff00cc !important;
+  border-left: 1px solid #ff00cc !important;
+  border-right: 1px solid #ccff00 !important;
+  border-bottom: 1px solid #ccff00 !important;
+  box-shadow: inset 1px 1px 0px #ff6600, 1px 1px 0px #6600ff !important;
+}
+
+html.theme-98.subtheme-trippy-theme .select-content.themed-select-content,
+html.theme-98.subtheme-trippy-theme .menu {
+  background-color: #330066 !important;
+  border-color: #ff00cc !important;
+}
+
+html.theme-98.subtheme-trippy-theme .select-item.themed-select-item ,
+html.theme-98.subtheme-trippy-theme .select-item.themed-select-item[data-highlighted] {
+  background-color: #cc00ff !important;
+  color: #ffff00 !important;
+}
+
+/* Scrollbars - Dark red theme */
+html.theme-98.subtheme-trippy-theme .themed-scrollbar-98 {
+  background-color: #330066 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .themed-scrollbar-98 > [data-radix-scroll-area-thumb] {
+  background-color: #cc00ff !important;
+  border-top: 1px solid #ff0080 !important;
+  border-left: 1px solid #ff0080 !important;
+  border-right: 1px solid #00ff80 !important;
+  border-bottom: 1px solid #00ff80 !important;
+  box-shadow: inset 1px 1px #ff3399, inset -1px -1px #3399ff !important;
+}
+
+/* Tabs - Dark theme */
+html.theme-98.subtheme-trippy-theme [role="tab"] {
+  background-color: #330066 !important;
+  border-color: #ff00cc #ff00cc #ccff00 #ff00cc !important;
+}
+
+html.theme-98.subtheme-trippy-theme [role="tab"][aria-selected="true"] {
+  background-color: #001a33 !important;
+  border-bottom-color: #001a33 !important;
+}
+
+/* Labels - Light red text */
+html.theme-98.subtheme-trippy-theme label,
+html.theme-98.subtheme-trippy-theme .label,
+html.theme-98.subtheme-trippy-theme .themed-label {
+  color: #99ffff !important;
+}
+
+/* Links - Blood red theme */
+html.theme-98.subtheme-trippy-theme a {
+  color: #33ffff !important;
+}
+html.theme-98.subtheme-trippy-theme a  {
+  color: #66ffff !important;
+}
+
+/* Card components - Dark theme */
+html.theme-98.subtheme-trippy-theme .card-title {
+  color: #ffffff !important;
+}
+html.theme-98.subtheme-trippy-theme .card-description {
+  color: #ccffff !important;
+}
+html.theme-98.subtheme-trippy-theme .card-header {
+  color: #ffffff !important;
+}
+
+/* Status bar - Dark with red accents */
+html.theme-98.subtheme-trippy-theme .status-bar,
+html.theme-98.subtheme-trippy-theme .input-area.status-bar {
+  color: #99ffff !important;
+  border-top: 1px solid #660000 !important;
+}
+html.theme-98.subtheme-trippy-theme .status-bar-field {
+  border-right: 1px solid #660000 !important;
+}
+
+/* Enhanced dark atmosphere */
+html.theme-98.subtheme-trippy-theme .window-body h1,
+html.theme-98.subtheme-trippy-theme .window-body h2,
+html.theme-98.subtheme-trippy-theme .window-body h3 {
+  color: #66ffff !important;
+  text-shadow: 1px 1px #000000 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .window-body p {
+  color: #ccffff !important;
+}
+
+/* Special effects for 666 theme */
+html.theme-98.subtheme-trippy-theme .window  {
+  box-shadow: inset 1px 1px 0px #ff0080, inset -1px -1px 0px #6600ff, 0 0 5px #cc00ff !important;
+}
+
+/* General button hover */
+html.theme-98.subtheme-trippy-theme button ,
+html.theme-98.subtheme-trippy-theme .button  {
+  background-color: #4d0066 !important;
+  box-shadow: inset 1px 1px 0px #660000, 1px 1px 0px #000000, 0 0 3px #330000 !important;
+}
+
+/* Stop/Find/Skip Button hover - with red3 wallpaper */
+html.theme-98.subtheme-trippy-theme button[aria-label="Stop"] ,
+html.theme-98.subtheme-trippy-theme button[aria-label="Find"] ,
+html.theme-98.subtheme-trippy-theme button[aria-label="Skip"]  {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy3.gif') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  box-shadow: inset 1px 1px 0px #ffff00, 1px 1px 0px #6600ff, 0 0 3px #ff00ff !important;
+}
+
+/* Action button hover - with red2 wallpaper */
+html.theme-98.subtheme-trippy-theme button[type="submit"] ,
+html.theme-98.subtheme-trippy-theme .input-area button:not([aria-label="Stop"]):not([aria-label="Find"]):not([aria-label="Skip"]) ,
+html.theme-98.subtheme-trippy-theme .chat-window button  {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy2.gif') !important;
+  background-size: 70px !important;
+  background-repeat: repeat !important;
+  background-color: #4d0066 !important;
+  box-shadow: inset 1px 1px 0px #660000, 1px 1px 0px #000000, 0 0 3px #330000 !important;
+}
+
+
+/* ===== trippy-theme.CSS ADDITIONS ===== */
+/* Add these rules to trippy-theme.css */
+
+/* TaskBar Styling for Psychedelic Theme - Using wallpaper images */
+html.theme-98.subtheme-trippy-theme .taskbar {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy4.gif') !important;
+  background-size: 150px !important;
+  background-repeat: repeat !important;
+  background-color: #330066 !important;
+  border-top: 2px outset #ff00cc !important;
+  box-shadow: 0 -2px 8px rgba(255, 0, 204, 0.5) !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .start-button {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy3.gif') !important;
+  background-size: 100px !important;
+  background-repeat: repeat !important;
+  background-color: #4d0066 !important;
+  border: 1px outset #ff00cc !important;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .start-button:hover {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy2.gif') !important;
+  background-size: 80px !important;
+  background-repeat: repeat !important;
+  background-color: #cc00ff !important;
+  border: 1px outset #ff0080 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .taskbar-divider {
+  background-color: #cc00ff !important;
+  border-left: 1px solid #330066 !important;
+  border-right: 1px solid #ff0080 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .tray {
+  background-image: url('https://cdn.tinchat.online/wallpapers/trippy.gif') !important;
+  background-size: 120px !important;
+  background-repeat: repeat !important;
+  background-color: #330066 !important;
+  border: 1px inset #ff00cc !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .taskbar-time {
+  color: #99ffff !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8) !important;
+  font-weight: bold !important;
+}
+
+/* ===== trippy-theme.CSS ADDITIONS ===== */
+/* Add these rules to trippy-theme.css */
+
+/* TaskBar Styling for Final Psychedelic Theme */
+html.theme-98.subtheme-trippy-theme .taskbar {
+  background-color: #ff00ff !important;
+  border-top: 2px outset #00ffff !important;
+  box-shadow: 0 -2px 8px rgba(255, 0, 255, 0.6) !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .start-button {
+  background-color: #00ffff !important;
+  border: 1px outset #ff00ff !important;
+  color: #ff00ff !important;
+  text-shadow: 1px 1px 2px rgba(255, 0, 255, 0.8) !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .start-button:hover {
+  background-color: #ffff00 !important;
+  border: 1px outset #ff8000 !important;
+  color: #8000ff !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .taskbar-divider {
+  background-color: #ff8000 !important;
+  border-left: 1px solid #8000ff !important;
+  border-right: 1px solid #00ff80 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .tray {
+  background-color: #00ff80 !important;
+  border: 1px inset #ff8000 !important;
+}
+
+html.theme-98.subtheme-trippy-theme .taskbar .taskbar-time {
+  color: #ff00ff !important;
+  text-shadow: 1px 1px 2px rgba(0, 255, 255, 0.8) !important;
+  font-weight: bold !important;
+}

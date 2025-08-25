@@ -91,13 +91,11 @@ export default function CSSBrowserPage() {
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching CSS files:', error);
         return;
       }
 
       setCSSFiles(data || []);
     } catch (error) {
-      console.error('Error fetching CSS files:', error);
     } finally {
       setLoading(false);
     }
@@ -110,7 +108,6 @@ export default function CSSBrowserPage() {
         .select('tags');
 
       if (error) {
-        console.error('Error fetching tags:', error);
         return;
       }
 
@@ -122,7 +119,6 @@ export default function CSSBrowserPage() {
 
       setAllTags(Array.from(uniqueTags).sort());
     } catch (error) {
-      console.error('Error fetching tags:', error);
     }
   };
 
@@ -152,7 +148,6 @@ export default function CSSBrowserPage() {
       link.download = `${file.title}.css`;
       link.click();
     } catch (error) {
-      console.error('Error downloading file:', error);
     }
   };
 const getSortIcon = (sort: SortBy) => {
