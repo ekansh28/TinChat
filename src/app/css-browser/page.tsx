@@ -209,12 +209,12 @@ const getSortIcon = (sort: SortBy) => {
                       {user.fullName || user.username || 'User'}
                     </span>
                   </div>
-                  <AuthButtons />
+                  <AuthButtons onOpenProfileCustomizer={() => {}} isMobile={false} />
                 </div>
               ) : (
                 <div className="text-white text-sm">
                   <span className="mr-2">Please log in to upload CSS files</span>
-                  <AuthButtons />
+                  <AuthButtons onOpenProfileCustomizer={() => {}} isMobile={false} />
                 </div>
               )}
             </div>
