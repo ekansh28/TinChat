@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
 
     try {
       // Update username in Clerk
-      await clerkClient.users.updateUser(userId, {
+      const client = await clerkClient();
+      await client.users.updateUser(userId, {
         username: trimmedUsername,
       });
 
