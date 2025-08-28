@@ -380,7 +380,7 @@ export default function SettingsPanel({
     console.log('✅ Default cursor restored');
   }, [removeOnekoScript]);
 
-  if (!isOpen) return null;
+  if (!isOpen || isMobile) return null;
 
   return (
     <div

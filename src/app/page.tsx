@@ -141,36 +141,38 @@ export default function SelectionLobby() {
       </div>
 
 {/* Logo Section - Below Header - Left aligned with subtle animation */}
-<div className="absolute left-4 z-0" style={{ top: isMobile ? '60px' : '80px' }}>
-  <img
-    src="https://cdn.tinchat.online/logo.png"
-    alt="TinChat Logo"
-    className="max-w-full h-auto"
-    style={{
-      maxHeight: isMobile ? '56px' : '84px',
-      width: 'auto',
-      objectFit: 'contain',
-      animation: 'subtleFloat 15s ease-in-out infinite',
-      transformOrigin: 'center center'
-    }}
-    onError={(e) => {
-      e.currentTarget.style.display = 'none';
-    }}
-  />
-  <style jsx>{`
-    @keyframes subtleFloat {
-      0% {
-        transform: rotate(-1.5deg) scale(1.02);
+{!isMobile && (
+  <div className="absolute left-4 z-0" style={{ top: '80px' }}>
+    <img
+      src="https://cdn.tinchat.online/logo.png"
+      alt="TinChat Logo"
+      className="max-w-full h-auto"
+      style={{
+        maxHeight: '84px',
+        width: 'auto',
+        objectFit: 'contain',
+        animation: 'subtleFloat 15s ease-in-out infinite',
+        transformOrigin: 'center center'
+      }}
+      onError={(e) => {
+        e.currentTarget.style.display = 'none';
+      }}
+    />
+    <style jsx>{`
+      @keyframes subtleFloat {
+        0% {
+          transform: rotate(-1.5deg) scale(1.02);
+        }
+        50% {
+          transform: rotate(1.5deg) scale(0.98);
+        }
+        100% {
+          transform: rotate(-1.5deg) scale(1.02);
+        }
       }
-      50% {
-        transform: rotate(1.5deg) scale(0.98);
-      }
-      100% {
-        transform: rotate(-1.5deg) scale(1.02);
-      }
-    }
-  `}</style>
-</div>
+    `}</style>
+  </div>
+)}
 
       {/* Webamp Container - Absolute positioned */}
       <div className={styles.webampContainer}>

@@ -84,10 +84,13 @@ export default function MainCard({
   }, [inputRef]);
 
   return (
-    <Card className="relative">
+    <Card className={cn(
+      "relative w-full",
+      isMobile && "max-w-full"
+    )}>
       <CardHeader className={cn(
         "relative",
-        isMobile && "pb-4"
+        isMobile && "pb-4 px-4"
       )}>
         <CardTitle className={cn(
           isMobile ? "text-lg text-center" : "text-xl"
@@ -143,40 +146,37 @@ export default function MainCard({
               Your Interests
             </Label>
             
-            {/* Settings Button - Mobile Positioned */}
-            <Button
-              className={cn(
-                "flex items-center justify-center relative z-30",
-                isMobile 
-                  ? "w-8 h-8 p-0 min-w-0" 
-                  : "p-0 w-[20px] h-[20px] min-w-0"
-              )}
-              aria-label="Settings"
-              onClick={onToggleSettings}
-              disabled={isNavigating}
-              variant={isMobile ? "outline" : "primary"}
-              size="sm"
-            >
-              <img
-                src="/icons/gears-0.png"
-                alt="Settings"
-                className={cn(
-                  "object-contain",
-                  isMobile ? "w-4 h-4" : "max-w-full max-h-full"
-                )}
-                data-ai-hint="settings icon"
-              />
-            </Button>
+            {/* Settings Button - Hidden on Mobile */}
+            {!isMobile && (
+              <Button
+                className="flex items-center justify-center relative z-30 p-0 w-[20px] h-[20px] min-w-0"
+                aria-label="Settings"
+                onClick={onToggleSettings}
+                disabled={isNavigating}
+                variant="primary"
+                size="sm"
+              >
+                <img
+                  src="/icons/gears-0.png"
+                  alt="Settings"
+                  className="object-contain max-w-full max-h-full"
+                  data-ai-hint="settings icon"
+                />
+              </Button>
+            )}
           </div>
           
           {/* Interests Input - Mobile Optimized */}
           <div
             className={cn(
               "flex flex-wrap items-center gap-1 cursor-text themed-input rounded-md",
-              isMobile ? "p-2 min-h-[44px]" : "p-1.5"
+              isMobile ? "p-3 min-h-[48px]" : "p-1.5"
             )}
             onClick={focusInput}
-            style={{ minHeight: isMobile ? '44px' : 'calc(1.5rem + 12px + 2px)' }}
+            style={{ 
+              minHeight: isMobile ? '48px' : 'calc(1.5rem + 12px + 2px)',
+              touchAction: 'manipulation'
+            }}
           >
             {selectedInterests.map((interest) => (
               <div
@@ -204,8 +204,12 @@ export default function MainCard({
               placeholder={selectedInterests.length < 5 ? "Add interest..." : "Max interests reached"}
               className={cn(
                 "flex-grow p-0 border-none outline-none shadow-none bg-transparent themed-input-inner",
-                isMobile ? "text-base min-w-[120px]" : "min-w-[80px]"
+                isMobile ? "min-w-[120px]" : "min-w-[80px]"
               )}
+              style={{
+                fontSize: isMobile ? '16px' : undefined,
+                lineHeight: isMobile ? '1.2' : undefined
+              }}
               disabled={(selectedInterests.length >= 5 && !currentInterest) || isNavigating}
               autoComplete="off"
               autoCapitalize="none"
