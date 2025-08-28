@@ -405,8 +405,9 @@ const InputArea: React.FC<InputAreaProps> = ({
                 isWindows7Theme && "glass-input" // Add glass input class
               )} 
               style={{
-                // MOBILE: Prevent zoom on iOS
+                // MOBILE: Prevent zoom on iOS - CRITICAL
                 fontSize: isMobile ? '16px' : undefined,
+                lineHeight: isMobile ? '1.2' : undefined,
                 // Force transparency for Windows 7 glass theme
                 ...(isWindows7Theme && {
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',

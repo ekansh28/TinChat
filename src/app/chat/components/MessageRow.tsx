@@ -216,11 +216,11 @@ const MessageRow: React.FC<MessageRowProps> = ({
   // System message render
   if (message.sender === 'system') {
     return (
-      <div className="message-row system-message mb-2">
+      <div className="message-row system-message mb-2 flex justify-center w-full">
         <div className={cn(
-          "text-center w-full text-xs italic",
+          "text-center italic",
           theme === 'theme-7' ? 'theme-7-text-shadow text-gray-100' : 'text-gray-500 dark:text-gray-400',
-          isMobile && "py-2 px-3 bg-black bg-opacity-10 rounded-lg"
+          isMobile ? "text-sm py-2 px-3 bg-black bg-opacity-10 rounded-lg" : "text-xs"
         )}>
           {message.content}
         </div>
@@ -245,13 +245,14 @@ const MessageRow: React.FC<MessageRowProps> = ({
       <span
         className={cn(
           "font-bold mr-1 relative username-click", // Added class for popup detection
-          isClickable && !isWindows7Theme && "cursor-pointer hover:underline",
+          isClickable && "cursor-pointer hover:underline",
           getDisplayNameClass(
             isSelfUser 
               ? ownInfo.displayNameAnimation 
               : message.senderDisplayNameAnimation
           ),
-          profileLoading && "opacity-70"
+          profileLoading && "opacity-70",
+          isMobile ? "text-lg font-semibold" : "text-sm"
         )}
         style={{
           color: isSelfUser 
@@ -262,7 +263,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
         onClick={isClickable ? handleUsernameClick : undefined}
         onKeyDown={isClickable ? handleKeyDown : undefined}
         tabIndex={isClickable ? 0 : undefined}
-        role={isClickable ? "button" : undefined}
+        role={isClickable ? "link" : undefined}
         title={isClickable ? "Click to view profile" : undefined}
         data-username={getDisplayedUsername(isSelfUser)}
       >
@@ -287,7 +288,8 @@ const MessageRow: React.FC<MessageRowProps> = ({
       )}
       <div className={cn(
         "break-words message-row mb-1",
-        message.sender === 'self' ? "ml-2" : "mr-2"
+        message.sender === 'self' ? "ml-2" : "mr-2",
+        isMobile && "mb-2"
       )}>
         <div className="flex items-start gap-2">
           <div className="flex-1">
@@ -295,9 +297,9 @@ const MessageRow: React.FC<MessageRowProps> = ({
               {displayedUsername}:
             </UsernameComponent>
             <span className={cn(
-              
               theme === 'theme-7' && 'theme-7-text-shadow',
-              "break-words hyphens-auto"
+              "break-words hyphens-auto",
+              isMobile ? "text-lg leading-relaxed" : "text-sm"
             )}>
               {emotesLoading && theme === 'theme-98' ? (
                 <span className="opacity-75">Loading emojis...</span>

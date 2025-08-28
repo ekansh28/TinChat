@@ -1346,3 +1346,54 @@ html.theme-transitioning * {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* ===== MOBILE CHAT IMPROVEMENTS ===== */
+@media (max-width: 768px) {
+  /* Mobile chat message improvements */
+  .message-row {
+    font-size: 18px !important;
+    line-height: 1.5 !important;
+    padding: 0.5rem 0 !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .message-row .username-click {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Mobile chat window improvements */
+  .window-body-content {
+    padding: 0.75rem !important;
+  }
+
+  /* Mobile input area improvements */
+  .mobile-input-area input {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+    padding: 0.75rem !important;
+    min-height: 44px !important;
+    border-radius: 4px !important;
+  }
+
+  .mobile-input-area button {
+    min-height: 44px !important;
+    font-size: 14px !important;
+    touch-action: manipulation !important;
+  }
+
+  /* Prevent zoom on any chat inputs */
+  .input-area input,
+  .input-area textarea,
+  .emoji-picker-search-input {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Better message spacing on mobile */
+  .message-row span {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+}
