@@ -25,7 +25,7 @@ const availableStamps: ThemeStamp[] = [
   { name: 'Pink Windows', imageUrl: '/theme_stamps/coquette.png', cssFile: 'pink-theme.css', dataAiHint: 'pink theme stamp' },
   { name: 'Star Pattern', imageUrl: '/theme_stamps/starpattern.png', cssFile: 'starpattern-theme.css', dataAiHint: 'star pattern theme stamp' },
   { name: 'Dark Theme', imageUrl: '/theme_stamps/darktheme.png', cssFile: 'dark-theme.css', dataAiHint: 'dark theme stamp' },
-  { name: 'Trippy Theme', imageUrl: '/theme_stamps/666.png', cssFile: 'trippy-theme.css', dataAiHint: 'trippy theme stamp' },
+  { name: 'Trippy Theme', imageUrl: '/theme_stamps/trippy.png', cssFile: 'trippy-theme.css', dataAiHint: 'trippy theme stamp' },
   { name: '666', imageUrl: '/theme_stamps/666.png', cssFile: '666-theme.css', dataAiHint: '666 theme stamp' },
   { name: 'Default 98', imageUrl: 'https://placehold.co/100x75/c0c0c0/000000.png?text=Default', cssFile: null, dataAiHint: 'default theme stamp', isDefault: true },
   { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
@@ -36,7 +36,7 @@ const available7Stamps: ThemeStamp[] = [
   { name: 'Frutiger Aero', imageUrl: '/theme_stamps/frutiger.png', cssFile: 'frutiger1-theme.css', dataAiHint: 'frutiger theme stamp' },
   { name: 'Frutiger Aero 2', imageUrl: '/theme_stamps/frutiger2.png', cssFile: 'frutiger2-theme.css', dataAiHint: 'frutiger2 theme stamp' },
   { name: 'PS3', imageUrl: '/theme_stamps/ps3.png', cssFile: 'ps3-theme.css', dataAiHint: 'ps3 theme stamp' },
-  { name: 'leaf', imageUrl: '/theme_stamps/ps3.png', cssFile: 'leaf-theme.css', dataAiHint: 'leaf theme stamp' },
+  { name: 'leaf', imageUrl: '/theme_stamps/leaf.png', cssFile: 'leaf-theme.css', dataAiHint: 'leaf theme stamp' },
   { name: 'Default', imageUrl: 'https://placehold.co/100x75/0078d4/ffffff.png?text=Default', cssFile: null, dataAiHint: 'default win7 theme stamp', isDefault: true },
   { name: 'Theme Browser', imageUrl: 'https://cdn.tinchat.online/icons/browser.png', cssFile: 'THEME_BROWSER_PLACEHOLDER', dataAiHint: 'theme browser stamp', isThemeBrowser: true },
 ];
@@ -771,7 +771,7 @@ export function TopBar() {
                     <li 
                       key={`${stamp.name}-${index}-${refreshTrigger}`}
                       className={cn(
-                        "mb-2 p-1 cursor-pointer flex transition-colors relative group",
+                        "mb-2 p-1 cursor-pointer flex flex-row items-center transition-colors relative group",
                         isWinXPMode
                           ? "hover:bg-blue-100 rounded"
                           : isWin7Mode 
@@ -780,13 +780,18 @@ export function TopBar() {
                         stamp.cssFile === 'ADD_THEME_PLACEHOLDER' && "border-2 border-dashed border-gray-400",
                         (isLoadingStamps || isApplyingTheme) && "pointer-events-none"
                       )}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'center'
+                      }}
                       onClick={() => !isLoadingStamps && !isApplyingTheme && handleSubThemeSelect(stamp.cssFile)}
                     >
                       <img 
                         src={stamp.imageUrl}
                         alt={stamp.name}
                         className={cn(
-                          "mr-2 flex-shrink-0",
+                          "flex-shrink-0",
                           // Only add border to default stamps
                           stamp.isDefault && "border border-gray-400"
                         )}
@@ -816,7 +821,7 @@ export function TopBar() {
                           }
                         }}
                       />
-                      <div className="flex-1">
+                      <div className="ml-2 flex-1">
                         <span 
                           className="text-sm font-medium" 
                           style={isWinXPMode ? { color: '#000' } : isWin7Mode ? { color: '#333' } : {}}
@@ -824,17 +829,17 @@ export function TopBar() {
                           {stamp.name}
                         </span>
                         {stamp.isCustom && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-gray-500">
                             Custom Theme
                           </div>
                         )}
                         {stamp.cssFile === 'ADD_THEME_PLACEHOLDER' && (
-                          <div className="text-xs text-blue-600 mt-1">
+                          <div className="text-xs text-blue-600">
                             Click to add custom theme
                           </div>
                         )}
                         {stamp.isThemeBrowser && (
-                          <div className="text-xs text-green-600 mt-1">
+                          <div className="text-xs text-green-600">
                             Browse themes online
                           </div>
                         )}
