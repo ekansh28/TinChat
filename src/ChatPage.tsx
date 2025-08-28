@@ -11,7 +11,6 @@ interface Message {
   sender: 'me' | 'partner' | 'system';
   timestamp: Date;
 }
-
 interface ChatPageProps {
   messages: Message[];
 }
