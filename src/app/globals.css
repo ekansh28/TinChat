@@ -830,6 +830,37 @@ html.theme-transitioning * {
 
 /* ===== WINDOWS 7 THEME MOBILE ADJUSTMENTS ===== */
 @media (max-width: 768px) {
+  /* Fix mobile opacity issue - hide ::before pseudo-elements on Windows 7 theme */
+  .chat-page-container .window.glass.active::before,
+  .chat-page-container .window-body.glass.active::before,
+  .chat-page-container .glass::before {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+  
+  /* Hide goldfish bubble on mobile screens in Frutiger Aero theme */
+  .subtheme-frutiger1-theme .window.flex.flex-col.relative .title-bar::after,
+  .subtheme-frutiger1-theme .title-bar::after {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+  
+  /* Remove title bar padding added for goldfish bubble on mobile */
+  .subtheme-frutiger1-theme .title-bar {
+    padding-right: 8px !important; /* Reset to normal padding */
+  }
+  
+  /* Ensure glass elements are properly transparent on mobile */
+  .chat-page-container .window.glass.active,
+  .chat-page-container .window-body.glass.active,
+  .chat-page-container .glass {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+  }
+  
   .chat-page-container .glass-window-body {
     /* Reduce glass effects on mobile for performance */
     backdrop-filter: blur(5px) !important;
