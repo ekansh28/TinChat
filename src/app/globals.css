@@ -1597,6 +1597,83 @@ html.theme-transitioning * {
   }
 }
 
+/* ===== GIF ANIMATION SUPPORT ===== */
+/* Ensure all GIFs animate properly */
+img[src*=".gif"], 
+img[src*="giphy.com"], 
+img[src*="tenor.com"], 
+img[src*="gfycat.com"],
+img[src*="imgur.com"] {
+  /* CRITICAL: Force GIF animation */
+  image-rendering: auto !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  animation-play-state: running !important;
+  
+  /* Optimize animation performance */
+  will-change: auto;
+  backface-visibility: hidden;
+  transform: translateZ(0); /* Force hardware acceleration */
+  
+  /* Ensure proper scaling without stopping animation */
+  object-fit: contain;
+  object-position: center;
+}
+
+/* Prevent any CSS that might stop GIF animation */
+img[src*=".gif"]:not([data-static]), 
+img[src*="giphy.com"]:not([data-static]), 
+img[src*="tenor.com"]:not([data-static]), 
+img[src*="gfycat.com"]:not([data-static]),
+img[src*="imgur.com"]:not([data-static]) {
+  animation: none !important; /* Don't override GIF's own animation */
+}
+
+/* Force animation on hover/focus for better UX */
+img[src*=".gif"]:hover, 
+img[src*="giphy.com"]:hover, 
+img[src*="tenor.com"]:hover, 
+img[src*="gfycat.com"]:hover,
+img[src*="imgur.com"]:hover {
+  animation-play-state: running !important;
+  transform: scale(1.02); /* Slight zoom on hover */
+  transition: transform 0.2s ease;
+}
+
+/* ===== CHAT SCROLLBAR HIDING ===== */
+/* Hide scrollbars in chat windows while keeping scroll functionality */
+.chat-messages, 
+.messages-container,
+.sunken-panel,
+.window-body.chat-messages,
+.overflow-y-auto.chat-area,
+.chat-window .window-body {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+.chat-messages::-webkit-scrollbar,
+.messages-container::-webkit-scrollbar,
+.sunken-panel::-webkit-scrollbar,
+.window-body.chat-messages::-webkit-scrollbar,
+.overflow-y-auto.chat-area::-webkit-scrollbar,
+.chat-window .window-body::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+  width: 0;
+  height: 0;
+}
+
+/* Ensure scroll functionality is preserved */
+.chat-messages, 
+.messages-container,
+.sunken-panel,
+.window-body.chat-messages,
+.overflow-y-auto.chat-area,
+.chat-window .window-body {
+  overflow-y: scroll; /* Keep scrolling enabled */
+  overflow-x: hidden; /* Hide horizontal scroll */
+}
+
 /* ===== MOBILE CHAT IMPROVEMENTS ===== */
 @media (max-width: 768px) {
   /* Mobile chat message improvements */

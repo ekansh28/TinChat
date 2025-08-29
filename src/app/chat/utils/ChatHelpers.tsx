@@ -752,6 +752,9 @@ export const detectMediaUrls = (text: string): { images: string[], videos: strin
   const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/i;
   const spotifyRegex = /https?:\/\/(?:open\.)?spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]{22})/i;
   
+  // Popular GIF hosting services (often don't have .gif in URL)
+  const gifHostingRegex = /https?:\/\/(?:media\.)?(?:giphy\.com\/media\/|tenor\.com\/view\/|gfycat\.com\/|imgur\.com\/[a-zA-Z0-9]+(?:\.gifv)?$)/i;
+  
   const images: string[] = [];
   const videos: string[] = [];
   const youtubeUrls: string[] = [];
@@ -766,7 +769,8 @@ export const detectMediaUrls = (text: string): { images: string[], videos: strin
       youtubeUrls.push(url);
     } else if (spotifyRegex.test(url)) {
       spotifyUrls.push(url);
-    } else if (imageExtensions.test(url)) {
+    } else if (imageExtensions.test(url) || gifHostingRegex.test(url)) {
+      // Include both file extension images AND popular GIF hosting services
       images.push(url);
     } else if (videoExtensions.test(url)) {
       videos.push(url);
@@ -817,6 +821,24 @@ export const createMediaEmbed = (url: string, type: 'image' | 'video', key: stri
       ...commonProps,
       src: url,
       alt: 'Embedded image',
+      style: {
+        ...commonProps.style,
+        // Ensure GIFs animate properly - CRITICAL for animation
+        imageRendering: 'auto',
+        objectFit: 'contain', // Preserve aspect ratio and animation
+        willChange: 'auto', // Optimize for animations
+        backfaceVisibility: 'hidden' // Smooth animation rendering
+      },
+      // CRITICAL: These attributes ensure GIF animation
+      autoPlay: true, // For some browsers
+      loop: true, // Ensure continuous loop
+      muted: true, // Required for some animated content
+      playsInline: true, // Mobile compatibility
+      onLoad: (e: React.SyntheticEvent<HTMLImageElement>) => {
+        // Force animation start on load
+        const img = e.currentTarget;
+        img.style.animationPlayState = 'running';
+      },
       onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
         const img = e.currentTarget;
         img.style.display = 'none';
