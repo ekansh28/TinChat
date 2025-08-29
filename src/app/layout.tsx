@@ -6,6 +6,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
 import ClientLayout from "@/components/ClientLayout"; // ✅ New client wrapper
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
@@ -36,6 +37,7 @@ export default function RootLayout({
           >
             <ClientLayout>{children}</ClientLayout> {/* ✅ Wrap here */}
           </ThemeProvider>
+          <SpeedInsights />
           <Analytics />
         </body>
       </html>

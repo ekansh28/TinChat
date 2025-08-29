@@ -50,6 +50,7 @@ export default function SelectionLobby() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
   const [isProfileCustomizerOpen, setIsProfileCustomizerOpen] = useState(false);
+  const [shouldHideWebamp, setShouldHideWebamp] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -66,6 +67,28 @@ export default function SelectionLobby() {
   useEffect(() => {
     setIsNavigating(false);
   }, [pathname]);
+
+  // Effect to check window size and hide Webamp at 1240px width or less, or mobile
+  useEffect(() => {
+    const checkWindowSize = () => {
+      const width = window.innerWidth;
+      
+      // Hide Webamp if window width is 1240px or less, or mobile
+      const shouldHide = isMobile || width <= 1240;
+      setShouldHideWebamp(shouldHide);
+    };
+
+    // Initial check
+    checkWindowSize();
+
+    // Add resize listener
+    window.addEventListener('resize', checkWindowSize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', checkWindowSize);
+    };
+  }, [isMobile]);
 
   const handleStartChat = (type: 'text' | 'video') => {
     if (!router) {
@@ -176,7 +199,7 @@ export default function SelectionLobby() {
 
       {/* Webamp Container - Absolute positioned */}
       <div className={styles.webampContainer}>
-        {!isMobile && <Webamp key="webamp-instance" />}
+        {!shouldHideWebamp && <Webamp key="webamp-instance" />}
       </div>
 
       <div className={styles.homeMainContent}>
