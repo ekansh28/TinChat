@@ -31,6 +31,9 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
   const maxReconnectAttempts = 3;
   const isInitializedRef = useRef(false);
   const isDestroyedRef = useRef(false);
+  
+  // ✅ CRITICAL FIX: Client-side message deduplication for video chat
+  const processedMessagesRef = useRef<Set<string>>(new Set());
 
   // ✅ FIXED: Stable params reference to prevent dependency loops
   const stableParamsRef = useRef(params);
@@ -191,6 +194,28 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
       if (!data || !data.message || data.senderId === socket.id) {
         return;
       }
+      
+      // ✅ CRITICAL FIX: Client-side message deduplication for video chat
+      const messageKey = `${data?.senderId}_${data?.message}_${data?.timestamp}`;
+      
+      if (processedMessagesRef.current.has(messageKey)) {
+        console.warn(`[VideoChatSocket] DUPLICATE MESSAGE BLOCKED: ${messageKey}`);
+        return; // Block duplicate message
+      }
+      
+      // Mark message as processed
+      processedMessagesRef.current.add(messageKey);
+      
+      // Clean up old messages (keep only last 50 to prevent memory leaks)
+      if (processedMessagesRef.current.size > 50) {
+        const messages = Array.from(processedMessagesRef.current);
+        const toKeep = messages.slice(-25); // Keep last 25
+        processedMessagesRef.current.clear();
+        toKeep.forEach(msg => processedMessagesRef.current.add(msg));
+        console.debug('[VideoChatSocket] Cleaned up old processed messages');
+      }
+      
+      console.log(`[VideoChatSocket] Processing new message: ${messageKey}`);
       stableParamsRef.current.onMessage(data);
     };
 

@@ -1,5 +1,5 @@
 // src/hooks/useSharedSocket.ts - Hook to use shared socket manager
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSocketManager, type ConnectionState } from '@/lib/socketManager';
 
 interface UseSharedSocketOptions {
@@ -33,6 +33,10 @@ export function useSharedSocket(options: UseSharedSocketOptions): UseSharedSocke
     isCircuitOpen: false,
     lastConnectionAttempt: 0
   });
+
+  // ✅ FIXED: Use refs to store callbacks to prevent useEffect re-runs
+  const callbacksRef = useRef({ onConnect, onDisconnect, onError });
+  callbacksRef.current = { onConnect, onDisconnect, onError };
 
   const socketManager = getSocketManager();
   const eventHandlers = new Map<string, (...args: any[]) => void>();
@@ -81,15 +85,15 @@ export function useSharedSocket(options: UseSharedSocketOptions): UseSharedSocke
       // Trigger callbacks on state changes
       if (!prevState.isConnected && newState.isConnected) {
         console.log(`[useSharedSocket:${namespace}] Connected`);
-        onConnect?.();
+        callbacksRef.current.onConnect?.();
       } else if (prevState.isConnected && !newState.isConnected) {
         console.log(`[useSharedSocket:${namespace}] Disconnected`);
-        onDisconnect?.();
+        callbacksRef.current.onDisconnect?.();
       }
 
       if (newState.connectionError && newState.connectionError !== prevState.connectionError) {
         console.error(`[useSharedSocket:${namespace}] Error:`, newState.connectionError);
-        onError?.(newState.connectionError);
+        callbacksRef.current.onError?.(newState.connectionError);
       }
     });
 
@@ -110,7 +114,7 @@ export function useSharedSocket(options: UseSharedSocketOptions): UseSharedSocke
       // Clean up any registered event handlers
       eventHandlers.clear();
     };
-  }, [namespace, autoConnect, onConnect, onDisconnect, onError, connect]);
+  }, [namespace, autoConnect, connect]); // ✅ FIXED: Remove callback dependencies to prevent constant reconnections
 
   return {
     isConnected: state.isConnected,

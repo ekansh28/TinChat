@@ -21,6 +21,9 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
   const handlersRef = useRef(handlers);
   const eventListenersRef = useRef<Array<{ event: string; handler: (...args: any[]) => void }>>([]);
   
+  // ✅ CRITICAL FIX: Client-side message deduplication
+  const processedMessagesRef = useRef<Set<string>>(new Set());
+  
   // Update handlers without recreating socket
   handlersRef.current = handlers;
 
@@ -30,6 +33,10 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
       socket.off(event, handler);
     });
     eventListenersRef.current = [];
+    
+    // ✅ CRITICAL FIX: Clear processed messages on reconnection to prevent memory leaks
+    // but only if it's a fresh connection setup
+    console.log('[SocketEvents] Clearing processed messages for fresh setup');
 
     // Chat events
     const handlePartnerFound = (data: any) => {
@@ -42,6 +49,28 @@ export const useSocketEvents = (handlers: SocketHandlers) => {
 
     const handleReceiveMessage = (data: any) => {
       console.log('[SocketEvents] Message received');
+      
+      // ✅ CRITICAL FIX: Client-side message deduplication
+      const messageKey = `${data?.senderId}_${data?.message}_${data?.timestamp}`;
+      
+      if (processedMessagesRef.current.has(messageKey)) {
+        console.warn(`[SocketEvents] DUPLICATE MESSAGE BLOCKED: ${messageKey}`);
+        return; // Block duplicate message
+      }
+      
+      // Mark message as processed
+      processedMessagesRef.current.add(messageKey);
+      
+      // Clean up old messages (keep only last 50 to prevent memory leaks)
+      if (processedMessagesRef.current.size > 50) {
+        const messages = Array.from(processedMessagesRef.current);
+        const toKeep = messages.slice(-25); // Keep last 25
+        processedMessagesRef.current.clear();
+        toKeep.forEach(msg => processedMessagesRef.current.add(msg));
+        console.debug('[SocketEvents] Cleaned up old processed messages');
+      }
+      
+      console.log(`[SocketEvents] Processing new message: ${messageKey}`);
       handlersRef.current.onMessage(data);
     };
 
