@@ -36,6 +36,7 @@ export default function RootLayout({
           >
             <ClientLayout>{children}</ClientLayout> {/* ✅ Wrap here */}
           </ThemeProvider>
+          <Analytics />
         </body>
       </html>
     </ClerkProvider>
