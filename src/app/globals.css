@@ -1559,6 +1559,44 @@ html.theme-transitioning * {
   }
 }
 
+/* ===== CLERK CAPTCHA STYLING ===== */
+#clerk-captcha, #clerk-captcha-modal, #clerk-captcha-oauth {
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 0; /* Will expand when CAPTCHA loads */
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+/* Ensure CAPTCHA is visible when Clerk loads it */
+#clerk-captcha:not(:empty), #clerk-captcha-modal:not(:empty), #clerk-captcha-oauth:not(:empty) {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-height: 78px; /* Standard CAPTCHA height when loaded */
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+/* Style the CAPTCHA iframe when it loads */
+#clerk-captcha iframe, #clerk-captcha-modal iframe, #clerk-captcha-oauth iframe {
+  max-width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: #fff;
+}
+
+/* Dark mode CAPTCHA styling */
+@media (prefers-color-scheme: dark) {
+  #clerk-captcha iframe, #clerk-captcha-modal iframe, #clerk-captcha-oauth iframe {
+    border-color: #374151;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+}
+
 /* ===== MOBILE CHAT IMPROVEMENTS ===== */
 @media (max-width: 768px) {
   /* Mobile chat message improvements */

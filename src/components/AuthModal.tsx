@@ -572,6 +572,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   </Button>
                 </form>
                 
+                {/* CAPTCHA Container - Visible in modal when needed */}
+                <div id="clerk-captcha-modal" className="mt-4 flex justify-center"></div>
+                
                 {/* Divider */}
                 <div className="flex items-center my-4">
                   <hr className="flex-grow border-t border-gray-300 dark:border-gray-600" />
@@ -599,6 +602,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   >
                     Continue with Discord
                   </Button>
+                  
+                  {/* Additional CAPTCHA Container for OAuth flows */}
+                  <div id="clerk-captcha-oauth" className="mt-2 flex justify-center"></div>
                 </div>
               </>
             )}
