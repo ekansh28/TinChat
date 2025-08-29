@@ -274,9 +274,9 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
 
         {/* Main content */}
         <div className="px-4 pb-4">
-          {/* Avatar and basic info */}
-          <div className="flex items-start gap-3 mb-3">
-            {/* Avatar with upload hover - match ProfilePopup avatar size */}
+          {/* Avatar and basic info - Match ProfileCard layout */}
+          <div className="flex items-center gap-4 mb-3">
+            {/* Avatar with upload hover - Match ProfileCard size */}
             <div 
               className="relative cursor-pointer group"
               onClick={handleAvatarClick}
@@ -286,7 +286,7 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               <img
                 src={profile.avatar_url || getDefaultAvatar()}
                 alt="Profile Avatar"
-                className="w-16 h-16 rounded-full object-cover border-4 border-white dark:border-gray-600"
+                className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-gray-600"
                 style={{
                   // ✅ Preserve GIF animation
                   imageRendering: isGifUrl(profile.avatar_url || '') ? 'auto' : 'auto'
@@ -312,10 +312,10 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
               )}
             </div>
 
-            <div className="flex-1 min-w-0">
-              {/* Display name */}
-              <h2
-                className="text-lg font-bold truncate"
+            <div>
+              {/* Display name - Match ProfileCard styling */}
+              <div
+                className="font-bold text-lg"
                 style={{
                   color: profile.display_name_color || undefined,
                   animation: profile.display_name_animation === 'rainbow' ? 
@@ -323,27 +323,16 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
                 }}
               >
                 {profile.display_name || profile.username || 'User'}
-              </h2>
+              </div>
               
-              {/* Username */}
-              {profile.display_name && profile.username && profile.display_name !== profile.username && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  @{profile.username}
-                </p>
-              )}
-
-              {/* Pronouns */}
-              {profile.pronouns && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {profile.pronouns}
-                </p>
-              )}
-
-              {/* Status */}
+              {/* Status - Match ProfileCard positioning */}
               {profile.status && (
-                <div className="flex items-center gap-1 text-xs">
-                  <span className={getStatusIndicator(profile.status)}>●</span>
-                  <span className="capitalize text-gray-600 dark:text-gray-300">
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={cn(
+                    "w-2 h-2 rounded-full",
+                    getStatusColor(profile.status)
+                  )} />
+                  <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
                     {profile.status}
                   </span>
                 </div>
@@ -372,51 +361,25 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
             </div>
           )}
 
-          {/* ✅ FIXED: Badges with proper scrolling */}
+          {/* ✅ FIXED: Badges layout - Match ProfileCard layout */}
           {badges.length > 0 && (
-            <div className="mb-3">
+            <div className="mt-3">
               <p className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-400">
-                Badges ({badges.length}):
+                Badges
               </p>
-              <div className="relative">
-                <div 
-                  ref={badgesContainerRef}
-                  className="flex gap-2 overflow-x-auto pb-1"
-                  style={{ 
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none'
-                  }}
-                  onWheel={handleBadgesWheel}
-                  onMouseMove={handleBadgesMouseMove}
-                >
-                  {badges.map((badge) => (
-                    <div key={badge.id} className="flex-shrink-0">
-                      <img
-                        src={badge.url}
-                        alt={badge.name || 'Badge'}
-                        title={badge.name || 'Badge'}
-                        className="h-6 rounded object-contain"
-                        style={{ 
-                          minWidth: '24px',
-                          maxWidth: '48px',
-                          width: 'auto',
-                          // ✅ Preserve GIF animation for badges
-                          imageRendering: isGifUrl(badge.url) ? 'auto' : 'auto'
-                        }}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Scroll indicators */}
-                {badges.length > 4 && (
-                  <div className="text-xs text-gray-500 mt-1 text-center">
-                    ← Scroll or use mouse wheel →
-                  </div>
-                )}
+              <div className="flex flex-wrap gap-2">
+                {badges.map((badge) => (
+                  <img
+                    key={badge.id}
+                    src={badge.url}
+                    alt={badge.name || 'Badge'}
+                    className="w-6 h-6"
+                    title={badge.name}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -461,6 +424,16 @@ const ProfileCardPreview: React.FC<ProfileCardPreviewProps> = ({
     </>
   );
 };
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'online': return 'bg-green-500';
+    case 'idle': return 'bg-yellow-500';
+    case 'dnd': return 'bg-red-500';
+    case 'offline': return 'bg-gray-500';
+    default: return 'bg-gray-500';
+  }
+}
 
 function getStatusIndicator(status: string): string {
   switch (status) {
