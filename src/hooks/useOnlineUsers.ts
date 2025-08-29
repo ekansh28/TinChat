@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 export function useOnlineUsers() {
   const [usersOnline, setUsersOnline] = useState<number | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isCircuitOpen, setIsCircuitOpen] = useState(false);
 
   useEffect(() => {
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
@@ -16,11 +17,25 @@ export function useOnlineUsers() {
 
     let tempSocket: Socket | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;
+    let circuitTimeout: NodeJS.Timeout | null = null;
 
     const connectWithRetry = () => {
-      if (retryCount >= 3) {
-        console.warn("useOnlineUsers: Max retry attempts reached. Setting count to 0.");
+      if (isCircuitOpen) {
+        console.log("useOnlineUsers: Circuit breaker is open. Skipping connection attempt.");
+        return;
+      }
+
+      if (retryCount >= 5) {
+        console.warn("useOnlineUsers: Max retry attempts reached. Opening circuit breaker.");
         setUsersOnline(0);
+        setIsCircuitOpen(true);
+        
+        // Reset circuit breaker after 2 minutes
+        circuitTimeout = setTimeout(() => {
+          console.log("useOnlineUsers: Resetting circuit breaker.");
+          setIsCircuitOpen(false);
+          setRetryCount(0);
+        }, 120000);
         return;
       }
 
@@ -49,9 +64,20 @@ export function useOnlineUsers() {
         tempSocket.on('connect_error', (err) => {
           console.error("useOnlineUsers: Socket connection error for user count. Full error:", err);
           
-          // Check if it's a rate limit error
-          if (err.message?.includes('Too many connections') || (err as any).description?.includes('Too many connections')) {
-            console.log("useOnlineUsers: Rate limited. Will retry with exponential backoff.");
+          // Safely check error messages
+          const errorMessage = err?.message || '';
+          const errorDescription = (err as any)?.description || '';
+          const errorString = String(err);
+          
+          // Check if it's a rate limit or forbidden error
+          const isRateLimited = errorMessage.includes('Too many connections') || 
+                               errorDescription.includes('Too many connections');
+          const isForbidden = errorMessage.includes('403') || 
+                             errorString.includes('403') ||
+                             errorMessage.includes('Forbidden');
+          
+          if (isRateLimited || isForbidden) {
+            console.log("useOnlineUsers: Server rejected connection (rate limited or forbidden). Will retry with exponential backoff.");
             const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
             
             retryTimeout = setTimeout(() => {
@@ -84,6 +110,9 @@ export function useOnlineUsers() {
       if (retryTimeout) {
         clearTimeout(retryTimeout);
       }
+      if (circuitTimeout) {
+        clearTimeout(circuitTimeout);
+      }
       if (tempSocket?.connected) {
         console.log("useOnlineUsers: Disconnecting socket for user count on unmount.");
         tempSocket?.disconnect();
@@ -93,7 +122,7 @@ export function useOnlineUsers() {
         tempSocket.disconnect();
       }
     };
-  }, [retryCount]);
+  }, [retryCount, isCircuitOpen]);
 
   return usersOnline;
 }
