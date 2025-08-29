@@ -360,12 +360,18 @@ export function useVideoChatSocket(params: UseVideoChatSocketParams) {
     }
     
     try {
+      // ✅ CRITICAL FIX: Add UUID to prevent duplicate message processing
+      const messageId = `vid_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       socketRef.current.emit('sendMessage', {
         ...payload,
         roomId: roomIdRef.current,
         tabId: tabIdRef.current,
-        socketId: socketRef.current.id
+        socketId: socketRef.current.id,
+        messageId // ✅ Unique ID for deduplication
       });
+      
+      console.log(`[VideoChatSocket] Message sent with ID: ${messageId}`);
       return true;
     } catch (error) {
       console.error('[VideoChatSocket] Error sending message:', error);

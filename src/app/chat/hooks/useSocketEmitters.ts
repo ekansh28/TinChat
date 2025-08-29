@@ -110,10 +110,16 @@ export const useSocketEmitters = (
     }
     
     try {
+      // ✅ CRITICAL FIX: Add UUID to prevent duplicate message processing
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       socket.emit('sendMessage', {
         ...payload,
-        roomId: roomIdRef.current
+        roomId: roomIdRef.current,
+        messageId // ✅ Unique ID for deduplication
       });
+      
+      console.log(`[SocketEmitters] Message sent with ID: ${messageId}`);
       return true;
     } catch (error) {
       console.error('[SocketEmitters] Error emitting message:', error);

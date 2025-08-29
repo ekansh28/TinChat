@@ -30,6 +30,9 @@ export class MessageHandler {
   
   // ✅ ADDITIONAL: Track global message deduplication by room
   private roomRecentMessages = new Map<string, { message: string; timestamp: number; authId: string | null }>();
+  
+  // ✅ BULLETPROOF: UUID-based message deduplication
+  private processedMessageIds = new Map<string, number>(); // messageId -> timestamp
 
   constructor(
     private io: SocketIOServer,
@@ -48,7 +51,14 @@ export class MessageHandler {
     try {
       logger.info(`📨 MESSAGE ATTEMPT from ${socket.id}:`, payload);
       
-      const { roomId, message, username, authId } = this.extractMessageData(socket, payload);
+      const { roomId, message, username, authId, messageId } = this.extractMessageData(socket, payload);
+      
+      // ✅ BULLETPROOF: Check UUID-based deduplication FIRST
+      if (messageId && this.isProcessedMessage(messageId)) {
+        logger.warn(`🚫 DUPLICATE MESSAGE ID BLOCKED: ${messageId} from ${socket.id}`);
+        socket.emit('error', { message: 'Duplicate message detected.' });
+        return;
+      }
       
       // ✅ DEBUG: Log connection information to track duplicates
       if (authId) {
@@ -60,6 +70,12 @@ export class MessageHandler {
         
         if (socketsFromSameAuth > 1) {
           logger.warn(`🚨 MULTIPLE CONNECTIONS DETECTED: AuthID ${authId} has ${socketsFromSameAuth} active connections!`);
+          
+          // ✅ NUCLEAR OPTION: If too many connections, force disconnect duplicates
+          if (socketsFromSameAuth > 3) {
+            logger.error(`🚨 TOO MANY CONNECTIONS (${socketsFromSameAuth}) - FORCING CLEANUP for AuthID ${authId}`);
+            this.forceDisconnectDuplicateConnections(authId, socket.id);
+          }
         }
       }
       
@@ -92,6 +108,12 @@ export class MessageHandler {
       }
 
       const messageData = await this.prepareMessageData(socket.id, message, authId, room.id);
+      
+      // ✅ BULLETPROOF: Mark message ID as processed
+      if (messageId) {
+        this.markMessageAsProcessed(messageId);
+        logger.info(`✅ MESSAGE ID PROCESSED: ${messageId}`);
+      }
       
       // ✅ TRACK: Record this message in room to prevent duplicates
       this.recordRoomMessage(room.id, authId, message);
@@ -208,6 +230,7 @@ export class MessageHandler {
     let message: string;
     let username: string | undefined;
     let authId: string | null;
+    let messageId: string | undefined;
 
     if (typeof payload === 'object' && payload !== null) {
       const data = payload as any;
@@ -215,11 +238,12 @@ export class MessageHandler {
       message = data.message || '';
       username = data.username;
       authId = data.authId || null;
+      messageId = data.messageId; // ✅ NEW: Extract message ID
     } else {
       throw new Error('Invalid message payload');
     }
 
-    return { roomId, message, username, authId };
+    return { roomId, message, username, authId, messageId };
   }
 
   private validateMessage(socket: Socket, message: string): boolean {
@@ -429,6 +453,53 @@ export class MessageHandler {
     });
   }
   
+  // ✅ BULLETPROOF: UUID-based message tracking
+  private isProcessedMessage(messageId: string): boolean {
+    const now = Date.now();
+    const existing = this.processedMessageIds.get(messageId);
+    
+    if (!existing) {
+      return false; // Not processed yet
+    }
+    
+    // Check if within window (keep processed IDs for 10 seconds to prevent replays)
+    if (now - existing > 10000) {
+      this.processedMessageIds.delete(messageId);
+      return false; // Expired, allow processing
+    }
+    
+    return true; // Already processed recently
+  }
+  
+  private markMessageAsProcessed(messageId: string): void {
+    const now = Date.now();
+    this.processedMessageIds.set(messageId, now);
+  }
+  
+  // ✅ NUCLEAR OPTION: Force disconnect duplicate connections
+  private forceDisconnectDuplicateConnections(authId: string, keepSocketId: string): void {
+    const allSockets = Array.from(this.io.sockets.sockets.values());
+    let disconnectedCount = 0;
+    
+    allSockets.forEach(socket => {
+      if (socket.id === keepSocketId) return; // Keep the current socket
+      
+      const details = (this.io as any).connectionDetails?.get(socket.id);
+      if (details?.authId === authId) {
+        logger.warn(`🔨 FORCE DISCONNECTING duplicate socket ${socket.id} for AuthID ${authId}`);
+        socket.emit('force_disconnect', { 
+          reason: 'Multiple connections detected',
+          authId: authId,
+          timestamp: Date.now()
+        });
+        socket.disconnect(true);
+        disconnectedCount++;
+      }
+    });
+    
+    logger.info(`✅ Force disconnected ${disconnectedCount} duplicate connections for AuthID ${authId}`);
+  }
+  
   private cleanupOldMessages(): void {
     const now = Date.now();
     const cutoffTime = now - (this.DUPLICATE_WINDOW * 2); // Keep for 2x the window
@@ -451,6 +522,15 @@ export class MessageHandler {
       }
     }
     
+    // Clean up processed message IDs (10 second window)
+    const uuidCutoff = now - 10000;
+    for (const [messageId, timestamp] of this.processedMessageIds.entries()) {
+      if (timestamp < uuidCutoff) {
+        this.processedMessageIds.delete(messageId);
+        removedCount++;
+      }
+    }
+    
     if (removedCount > 0) {
       logger.debug(`🧹 Cleaned up ${removedCount} old message entries`);
     }
@@ -462,7 +542,8 @@ export class MessageHandler {
       batcherStats: this.messageBatcher.getStats(),
       roomMappings: this.socketToRoom.size,
       recentMessages: this.recentMessages.size,
-      roomRecentMessages: this.roomRecentMessages.size
+      roomRecentMessages: this.roomRecentMessages.size,
+      processedMessageIds: this.processedMessageIds.size
     };
   }
 }
