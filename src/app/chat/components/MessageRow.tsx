@@ -247,7 +247,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
     return (
       <span
         className={cn(
-          "font-bold mr-1 relative username-click", // Added class for popup detection
+          "font-bold relative username-click inline-block", // Removed mr-1, added inline-block for consistent spacing
           isClickable && "cursor-pointer hover:underline",
           getDisplayNameClass(
             isSelfUser 
@@ -294,23 +294,21 @@ const MessageRow: React.FC<MessageRowProps> = ({
         message.sender === 'self' ? "ml-2" : "mr-2",
         isMobile && "mb-2"
       )}>
-        <div className="flex items-start gap-2">
-          <div className="flex-1">
-            <UsernameComponent>
-              {displayedUsername}:
-            </UsernameComponent>
-            <span className={cn(
-              theme === 'theme-7' && 'theme-7-text-shadow',
-              "break-words hyphens-auto",
-              isMobile ? "text-xl leading-relaxed font-medium" : "text-sm"
-            )}>
-              {emotesLoading && theme === 'theme-98' ? (
-                <span className="opacity-75">Loading emojis...</span>
-              ) : (
-                messageContent
-              )}
-            </span>
-          </div>
+        <div className="flex items-baseline">
+          <UsernameComponent>
+            {displayedUsername}:
+          </UsernameComponent>
+          <span className={cn(
+            theme === 'theme-7' && 'theme-7-text-shadow',
+            "break-words hyphens-auto ml-1",
+            isMobile ? "text-xl leading-relaxed font-medium" : "text-sm"
+          )}>
+            {emotesLoading && theme === 'theme-98' ? (
+              <span className="opacity-75">Loading emojis...</span>
+            ) : (
+              messageContent
+            )}
+          </span>
         </div>
       </div>
     </>
