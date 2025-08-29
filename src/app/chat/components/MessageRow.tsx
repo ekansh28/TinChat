@@ -255,7 +255,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
               : message.senderDisplayNameAnimation
           ),
           profileLoading && "opacity-70",
-          isMobile ? "text-lg font-semibold" : "text-sm"
+          isMobile ? "text-xl font-bold" : "text-sm"
         )}
         style={{
           color: isSelfUser 
@@ -302,7 +302,7 @@ const MessageRow: React.FC<MessageRowProps> = ({
             <span className={cn(
               theme === 'theme-7' && 'theme-7-text-shadow',
               "break-words hyphens-auto",
-              isMobile ? "text-lg leading-relaxed" : "text-sm"
+              isMobile ? "text-xl leading-relaxed font-medium" : "text-sm"
             )}>
               {emotesLoading && theme === 'theme-98' ? (
                 <span className="opacity-75">Loading emojis...</span>
