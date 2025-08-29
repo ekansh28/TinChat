@@ -209,9 +209,9 @@ export const useChatActions = (props: ChatActionsProps) => {
     }, 200);
   }, [toast]);
 
-  // ✅ CRITICAL FIX: Message deduplication to prevent spam
+  // ✅ CRITICAL FIX: Message deduplication to prevent spam - AGGRESSIVE MODE
   const lastMessageRef = useRef<{ text: string; timestamp: number } | null>(null);
-  const DUPLICATE_THRESHOLD = 1000; // 1 second minimum between identical messages
+  const DUPLICATE_THRESHOLD = 3000; // 3 seconds minimum between identical messages - AGGRESSIVE
 
   // ✅ UPDATED: Message handler with send sound and deduplication
   const handleSendMessage = useCallback((message: string) => {

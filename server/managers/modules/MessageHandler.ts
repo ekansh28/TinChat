@@ -23,10 +23,13 @@ export interface MessageData {
 export class MessageHandler {
   private readonly DEFAULT_PROFILE_COLOR = '#667eea';
   
-  // ✅ CRITICAL FIX: Message deduplication to prevent spam
+  // ✅ CRITICAL FIX: Message deduplication to prevent spam - AGGRESSIVE MODE
   private recentMessages = new Map<string, { message: string; timestamp: number; count: number }>();
-  private readonly DUPLICATE_WINDOW = 2000; // 2 seconds
-  private readonly MAX_DUPLICATES = 3; // Allow max 3 identical messages in window
+  private readonly DUPLICATE_WINDOW = 5000; // 5 seconds - longer window
+  private readonly MAX_DUPLICATES = 1; // Allow only 1 identical message in window - AGGRESSIVE
+  
+  // ✅ ADDITIONAL: Track global message deduplication by room
+  private roomRecentMessages = new Map<string, { message: string; timestamp: number; authId: string | null }>();
 
   constructor(
     private io: SocketIOServer,
@@ -47,13 +50,26 @@ export class MessageHandler {
       
       const { roomId, message, username, authId } = this.extractMessageData(socket, payload);
       
+      // ✅ DEBUG: Log connection information to track duplicates
+      if (authId) {
+        const allSockets = Array.from(this.io.sockets.sockets.values());
+        const socketsFromSameAuth = allSockets.filter(s => {
+          const details = (this.io as any).connectionDetails?.get(s.id);
+          return details?.authId === authId;
+        }).length;
+        
+        if (socketsFromSameAuth > 1) {
+          logger.warn(`🚨 MULTIPLE CONNECTIONS DETECTED: AuthID ${authId} has ${socketsFromSameAuth} active connections!`);
+        }
+      }
+      
       if (!this.validateMessage(socket, message)) {
         return;
       }
 
-      // ✅ CRITICAL FIX: Check for duplicate messages
+      // ✅ CRITICAL FIX: Check for duplicate messages - DOUBLE CHECK
       if (this.isDuplicateMessage(socket.id, authId, message)) {
-        logger.warn(`🚫 DUPLICATE MESSAGE BLOCKED from ${socket.id}: "${message.substring(0, 50)}..."`);
+        logger.warn(`🚫 USER DUPLICATE MESSAGE BLOCKED from ${socket.id}: "${message.substring(0, 50)}..."`);
         socket.emit('error', { message: 'Please wait before sending the same message again.' });
         return;
       }
@@ -63,12 +79,22 @@ export class MessageHandler {
         return;
       }
 
+      // ✅ ADDITIONAL: Check for room-level duplicates (prevents multiple connections sending same message)
+      if (this.isRoomDuplicateMessage(room.id, authId, message)) {
+        logger.warn(`🚫 ROOM DUPLICATE MESSAGE BLOCKED in ${room.id}: "${message.substring(0, 50)}..."`);
+        socket.emit('error', { message: 'This message was just sent in this room.' });
+        return;
+      }
+
       const partnerId = this.findAndValidatePartner(socket, room);
       if (!partnerId) {
         return;
       }
 
       const messageData = await this.prepareMessageData(socket.id, message, authId, room.id);
+      
+      // ✅ TRACK: Record this message in room to prevent duplicates
+      this.recordRoomMessage(room.id, authId, message);
       
       await this.deliverMessage(socket.id, partnerId, messageData, room);
       
@@ -369,14 +395,58 @@ export class MessageHandler {
     return false;
   }
   
+  // ✅ NEW: Room-level duplicate detection
+  private isRoomDuplicateMessage(roomId: string, authId: string | null, message: string): boolean {
+    const roomMessageKey = `${roomId}:${message}`;
+    const now = Date.now();
+    
+    const existing = this.roomRecentMessages.get(roomMessageKey);
+    
+    if (!existing) {
+      return false; // No duplicate found
+    }
+    
+    // Check if message is within duplicate window
+    if (now - existing.timestamp > this.DUPLICATE_WINDOW) {
+      return false; // Outside window, not a duplicate
+    }
+    
+    // ✅ AGGRESSIVE: Block if same message from same user OR different user (prevent spam)
+    // This prevents multiple connections from same user AND copycat spam
+    logger.info(`🔍 Room duplicate check: existing authId=${existing.authId}, current authId=${authId}`);
+    return true; // Block all duplicates in room within window
+  }
+  
+  // ✅ NEW: Record message in room for duplicate tracking
+  private recordRoomMessage(roomId: string, authId: string | null, message: string): void {
+    const roomMessageKey = `${roomId}:${message}`;
+    const now = Date.now();
+    
+    this.roomRecentMessages.set(roomMessageKey, {
+      message,
+      timestamp: now,
+      authId
+    });
+  }
+  
   private cleanupOldMessages(): void {
     const now = Date.now();
     const cutoffTime = now - (this.DUPLICATE_WINDOW * 2); // Keep for 2x the window
     
     let removedCount = 0;
+    
+    // Clean up user-level messages
     for (const [key, data] of this.recentMessages.entries()) {
       if (data.timestamp < cutoffTime) {
         this.recentMessages.delete(key);
+        removedCount++;
+      }
+    }
+    
+    // Clean up room-level messages
+    for (const [key, data] of this.roomRecentMessages.entries()) {
+      if (data.timestamp < cutoffTime) {
+        this.roomRecentMessages.delete(key);
         removedCount++;
       }
     }
@@ -391,7 +461,8 @@ export class MessageHandler {
       messagesProcessed: this.performanceMonitor.getStats().totalMessages,
       batcherStats: this.messageBatcher.getStats(),
       roomMappings: this.socketToRoom.size,
-      recentMessages: this.recentMessages.size
+      recentMessages: this.recentMessages.size,
+      roomRecentMessages: this.roomRecentMessages.size
     };
   }
 }
