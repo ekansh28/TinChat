@@ -37,9 +37,9 @@ class SocketManager {
     this.config = {
       serverUrl: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:3001',
       maxRetries: 5,
-      baseDelay: 1000,
-      maxDelay: 30000,
-      circuitBreakerDuration: 120000, // 2 minutes
+      baseDelay: 3000, // Increased to 3s to respect nginx rate limits
+      maxDelay: 60000, // Increased to 1 minute max delay
+      circuitBreakerDuration: 300000, // Increased to 5 minutes
       ...config
     };
 
@@ -185,14 +185,17 @@ class SocketManager {
       throw new Error('Circuit breaker is open - too many failed connection attempts');
     }
 
-    // Check rate limiting
+    // Check rate limiting with nginx-friendly minimum intervals
     const now = Date.now();
     const timeSinceLastAttempt = now - this.state.lastConnectionAttempt;
-    const minDelay = Math.min(this.config.baseDelay * Math.pow(2, this.state.retryCount), this.config.maxDelay);
-
-    if (timeSinceLastAttempt < minDelay) {
-      const waitTime = minDelay - timeSinceLastAttempt;
-      console.log(`[SocketManager] Rate limiting - waiting ${waitTime}ms before connection attempt`);
+    const exponentialDelay = Math.min(this.config.baseDelay * Math.pow(2, this.state.retryCount), this.config.maxDelay);
+    
+    // Enforce minimum 5-second interval to respect nginx rate limiting
+    const nginxFriendlyMinDelay = Math.max(5000, exponentialDelay);
+    
+    if (timeSinceLastAttempt < nginxFriendlyMinDelay) {
+      const waitTime = nginxFriendlyMinDelay - timeSinceLastAttempt;
+      console.log(`[SocketManager] Rate limiting (nginx-friendly) - waiting ${waitTime}ms before connection attempt`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
@@ -226,8 +229,11 @@ class SocketManager {
 
   private handleConnectionError(error: Error) {
     const errorMessage = error.message || String(error);
-    const isServerRejection = errorMessage.includes('403') || 
-                             errorMessage.includes('Forbidden') ||
+    const isNginxRateLimit = errorMessage.includes('403') || 
+                            errorMessage.includes('Forbidden') ||
+                            errorMessage.includes('Too many rapid connections');
+    
+    const isServerRejection = isNginxRateLimit ||
                              errorMessage.includes('Too many connections') ||
                              errorMessage.includes('xhr poll error') ||
                              errorMessage.includes('websocket error');
@@ -239,9 +245,13 @@ class SocketManager {
 
       if (this.state.retryCount >= this.config.maxRetries) {
         console.log('[SocketManager] Opening circuit breaker due to repeated failures');
+        const errorMsg = isNginxRateLimit 
+          ? 'Rate limited by server. Please wait a few minutes before trying again.'
+          : 'Server is rejecting connections. Please try again later.';
+        
         this.updateState({
           isConnecting: false,
-          connectionError: 'Server is rejecting connections. Please try again later.',
+          connectionError: errorMsg,
           isCircuitOpen: true
         });
 

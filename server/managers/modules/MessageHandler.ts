@@ -22,6 +22,11 @@ export interface MessageData {
 // ✅ FIXED: Added export to MessageHandler class
 export class MessageHandler {
   private readonly DEFAULT_PROFILE_COLOR = '#667eea';
+  
+  // ✅ CRITICAL FIX: Message deduplication to prevent spam
+  private recentMessages = new Map<string, { message: string; timestamp: number; count: number }>();
+  private readonly DUPLICATE_WINDOW = 2000; // 2 seconds
+  private readonly MAX_DUPLICATES = 3; // Allow max 3 identical messages in window
 
   constructor(
     private io: SocketIOServer,
@@ -31,7 +36,10 @@ export class MessageHandler {
     private profileCache: ProfileCache,
     private performanceMonitor: PerformanceMonitor,
     private socketToRoom: Map<string, string>
-  ) {}
+  ) {
+    // Clean up old messages every 30 seconds
+    setInterval(() => this.cleanupOldMessages(), 30000);
+  }
 
   async handleSendMessage(socket: Socket, payload: unknown): Promise<void> {
     try {
@@ -40,6 +48,13 @@ export class MessageHandler {
       const { roomId, message, username, authId } = this.extractMessageData(socket, payload);
       
       if (!this.validateMessage(socket, message)) {
+        return;
+      }
+
+      // ✅ CRITICAL FIX: Check for duplicate messages
+      if (this.isDuplicateMessage(socket.id, authId, message)) {
+        logger.warn(`🚫 DUPLICATE MESSAGE BLOCKED from ${socket.id}: "${message.substring(0, 50)}..."`);
+        socket.emit('error', { message: 'Please wait before sending the same message again.' });
         return;
       }
 
@@ -321,11 +336,62 @@ export class MessageHandler {
     logger.info(`🧹 Room ${roomId} cleaned up by MessageHandler`);
   }
 
+  // ✅ CRITICAL FIX: Message deduplication methods
+  private isDuplicateMessage(socketId: string, authId: string | null, message: string): boolean {
+    const key = authId || socketId; // Use authId if available, otherwise socketId
+    const messageKey = `${key}:${message}`;
+    const now = Date.now();
+    
+    const existing = this.recentMessages.get(messageKey);
+    
+    if (!existing) {
+      // First time seeing this message from this user
+      this.recentMessages.set(messageKey, { message, timestamp: now, count: 1 });
+      return false;
+    }
+    
+    // Check if message is within duplicate window
+    if (now - existing.timestamp > this.DUPLICATE_WINDOW) {
+      // Outside window, reset counter
+      this.recentMessages.set(messageKey, { message, timestamp: now, count: 1 });
+      return false;
+    }
+    
+    // Within window, increment counter
+    existing.count++;
+    existing.timestamp = now;
+    
+    if (existing.count > this.MAX_DUPLICATES) {
+      logger.warn(`🚨 DUPLICATE MESSAGE SPAM DETECTED: ${key} sent "${message}" ${existing.count} times`);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  private cleanupOldMessages(): void {
+    const now = Date.now();
+    const cutoffTime = now - (this.DUPLICATE_WINDOW * 2); // Keep for 2x the window
+    
+    let removedCount = 0;
+    for (const [key, data] of this.recentMessages.entries()) {
+      if (data.timestamp < cutoffTime) {
+        this.recentMessages.delete(key);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      logger.debug(`🧹 Cleaned up ${removedCount} old message entries`);
+    }
+  }
+
   getStats() {
     return {
       messagesProcessed: this.performanceMonitor.getStats().totalMessages,
       batcherStats: this.messageBatcher.getStats(),
-      roomMappings: this.socketToRoom.size
+      roomMappings: this.socketToRoom.size,
+      recentMessages: this.recentMessages.size
     };
   }
 }

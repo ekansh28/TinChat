@@ -209,11 +209,29 @@ export const useChatActions = (props: ChatActionsProps) => {
     }, 200);
   }, [toast]);
 
-  // ✅ UPDATED: Message handler with send sound
+  // ✅ CRITICAL FIX: Message deduplication to prevent spam
+  const lastMessageRef = useRef<{ text: string; timestamp: number } | null>(null);
+  const DUPLICATE_THRESHOLD = 1000; // 1 second minimum between identical messages
+
+  // ✅ UPDATED: Message handler with send sound and deduplication
   const handleSendMessage = useCallback((message: string) => {
     const currentProps = propsRef.current;
     
     if (!currentProps.isPartnerConnected) return;
+
+    // ✅ CRITICAL FIX: Prevent duplicate message spam
+    const now = Date.now();
+    const lastMessage = lastMessageRef.current;
+    
+    if (lastMessage && 
+        lastMessage.text === message && 
+        now - lastMessage.timestamp < DUPLICATE_THRESHOLD) {
+      console.warn('[ChatActions] Duplicate message blocked:', message);
+      return;
+    }
+    
+    // Update last message tracking
+    lastMessageRef.current = { text: message, timestamp: now };
 
     currentProps.addMessage({
       text: message,

@@ -183,7 +183,11 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
     }
   }, [toast]);
 
-  // ✅ ENHANCED: Send message handler with video chat context
+  // ✅ CRITICAL FIX: Message deduplication to prevent spam
+  const lastMessageRef = useRef<{ text: string; timestamp: number } | null>(null);
+  const DUPLICATE_THRESHOLD = 1000; // 1 second minimum between identical messages
+
+  // ✅ ENHANCED: Send message handler with video chat context and deduplication
   const handleSendMessage = useCallback((message: string) => {
     const currentProps = propsRef.current;
     
@@ -209,6 +213,20 @@ export const useVideoChatActions = (props: VideoChatActionsProps) => {
       });
       return;
     }
+
+    // ✅ CRITICAL FIX: Prevent duplicate message spam
+    const now = Date.now();
+    const lastMessage = lastMessageRef.current;
+    
+    if (lastMessage && 
+        lastMessage.text === trimmedMessage && 
+        now - lastMessage.timestamp < DUPLICATE_THRESHOLD) {
+      console.warn('[VideoChatActions] Duplicate message blocked:', trimmedMessage);
+      return;
+    }
+    
+    // Update last message tracking
+    lastMessageRef.current = { text: trimmedMessage, timestamp: now };
 
     try {
       // Add message to local state

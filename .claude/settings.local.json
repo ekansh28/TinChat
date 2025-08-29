@@ -7,7 +7,8 @@
       "Bash(do echo \"=== $file ===\")",
       "Bash(done)",
       "Bash(echo $NEXT_PUBLIC_SOCKET_SERVER_URL)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(do echo \"Request $i:\")"
     ],
     "deny": [],
     "ask": []
