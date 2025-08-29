@@ -95,6 +95,47 @@ export const useSocketCore = ({
     // ✅ CRITICAL FIX: Reset creation flag on error
     initializationRef.current.isCreating = false;
     
+    // Check for common server rejection patterns
+    const errorMessage = error?.message || '';
+    const errorString = String(error);
+    const isServerRejection = errorMessage.includes('403') || 
+                             errorString.includes('403') ||
+                             errorMessage.includes('Forbidden') ||
+                             errorMessage.includes('Too many connections') ||
+                             errorString.includes('xhr poll error');
+    
+    if (isServerRejection) {
+      log('Server rejected connection, implementing backoff strategy');
+      connectionAttemptsRef.current++;
+      
+      // Exponential backoff for server rejections
+      const backoffDelay = Math.min(1000 * Math.pow(2, connectionAttemptsRef.current - 1), 30000);
+      
+      if (connectionAttemptsRef.current <= 5) {
+        setTimeout(() => {
+          if (!initializationRef.current.isDestroyed && mountedRef.current) {
+            log(`Retrying connection after ${backoffDelay}ms (attempt ${connectionAttemptsRef.current})`);
+            forceReconnect();
+          }
+        }, backoffDelay);
+      } else {
+        log('Max connection attempts reached, opening circuit breaker');
+        setState(prev => ({
+          ...prev,
+          connectionError: 'Connection rejected by server. Please try again later.',
+          isConnecting: false
+        }));
+        
+        // Reset attempts after 2 minutes
+        setTimeout(() => {
+          if (!initializationRef.current.isDestroyed && mountedRef.current) {
+            log('Resetting connection attempts');
+            connectionAttemptsRef.current = 0;
+          }
+        }, 120000);
+      }
+    }
+    
     if (mountedRef.current && !initializationRef.current.isDestroyed) {
       setState(prev => ({
         ...prev,
@@ -144,13 +185,15 @@ export const useSocketCore = ({
     try {
       const socket = io(socketServerUrl, {
         withCredentials: true,
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'], // ✅ Prioritize polling over websocket
         reconnection: autoReconnect,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 10000,
-        timeout: 20000,
+        reconnectionAttempts: 3, // ✅ Reduce attempts to prevent server overload
+        reconnectionDelay: Math.min(3000 * connectionAttemptsRef.current, 15000), // ✅ Dynamic delay
+        reconnectionDelayMax: 30000,
+        timeout: 15000, // ✅ Shorter timeout
         forceNew: true, // ✅ CRITICAL: Always create new connection
+        upgrade: false, // ✅ Start with polling, don't auto-upgrade
+        rememberUpgrade: false, // ✅ Don't remember transport upgrades
         query: {
           clientId: generateDeviceFingerprint(),
           timestamp: Date.now(),
