@@ -59,6 +59,10 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: cspHeader,
           },
+          {
+            key: "Permissions-Policy",
+            value: "browsing-topics=(), interest-cohort=(), camera=(), microphone=(), geolocation=()"
+          },
         ],
       },
     ];
