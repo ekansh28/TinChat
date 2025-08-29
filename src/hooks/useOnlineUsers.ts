@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 
 export function useOnlineUsers() {
   const [usersOnline, setUsersOnline] = useState<number | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const socketServerUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
@@ -14,41 +15,75 @@ export function useOnlineUsers() {
     }
 
     let tempSocket: Socket | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
 
-    try {
-      tempSocket = io(socketServerUrl, {
-        withCredentials: true,
-        transports: ['websocket', 'polling']
-      });
-
-      tempSocket.on('connect', () => {
-        console.log("useOnlineUsers: Connected to socket server for user count.");
-        tempSocket?.emit('getOnlineUserCount');
-      });
-
-      tempSocket.on('onlineUserCount', (count: number) => {
-        setUsersOnline(count);
-        tempSocket?.disconnect();
-      });
-
-      tempSocket.on('connect_error', (err) => {
-        console.error("useOnlineUsers: Socket connection error for user count. Full error:", err);
-        setUsersOnline(0); 
-        if (tempSocket?.connected) tempSocket.disconnect();
-      });
-
-      tempSocket.on('error', (err) => { 
-        console.error("useOnlineUsers: General socket error for user count:", err);
+    const connectWithRetry = () => {
+      if (retryCount >= 3) {
+        console.warn("useOnlineUsers: Max retry attempts reached. Setting count to 0.");
         setUsersOnline(0);
-        if (tempSocket?.connected) tempSocket.disconnect();
-      });
+        return;
+      }
 
-    } catch (error) {
+      try {
+        tempSocket = io(socketServerUrl, {
+          withCredentials: true,
+          transports: ['polling', 'websocket'], // Try polling first
+          timeout: 10000,
+          forceNew: true, // Ensure fresh connection
+        });
+
+        tempSocket.on('connect', () => {
+          console.log("useOnlineUsers: Connected to socket server for user count.");
+          setRetryCount(0); // Reset retry count on successful connection
+          tempSocket?.emit('getOnlineUserCount');
+        });
+
+        tempSocket.on('onlineUserCount', (count: number) => {
+          setUsersOnline(count);
+          // Delay disconnect to avoid rapid reconnections
+          setTimeout(() => {
+            tempSocket?.disconnect();
+          }, 1000);
+        });
+
+        tempSocket.on('connect_error', (err) => {
+          console.error("useOnlineUsers: Socket connection error for user count. Full error:", err);
+          
+          // Check if it's a rate limit error
+          if (err.message?.includes('Too many connections') || err.description?.includes('Too many connections')) {
+            console.log("useOnlineUsers: Rate limited. Will retry with exponential backoff.");
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
+            
+            retryTimeout = setTimeout(() => {
+              setRetryCount(prev => prev + 1);
+              connectWithRetry();
+            }, delay);
+          } else {
+            setUsersOnline(0);
+          }
+          
+          if (tempSocket?.connected) tempSocket.disconnect();
+        });
+
+        tempSocket.on('error', (err) => { 
+          console.error("useOnlineUsers: General socket error for user count:", err);
+          setUsersOnline(0);
+          if (tempSocket?.connected) tempSocket.disconnect();
+        });
+
+      } catch (error) {
         console.error("useOnlineUsers: Failed to initialize socket for user count:", error);
         setUsersOnline(0);
-    }
+      }
+    };
+
+    // Initial connection attempt
+    connectWithRetry();
 
     return () => {
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
       if (tempSocket?.connected) {
         console.log("useOnlineUsers: Disconnecting socket for user count on unmount.");
         tempSocket?.disconnect();
@@ -58,7 +93,7 @@ export function useOnlineUsers() {
         tempSocket.disconnect();
       }
     };
-  }, []);
+  }, [retryCount]);
 
   return usersOnline;
 }

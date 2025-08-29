@@ -5,7 +5,9 @@
       "Bash(git checkout:*)",
       "Bash(for:*)",
       "Bash(do echo \"=== $file ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(echo $NEXT_PUBLIC_SOCKET_SERVER_URL)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
