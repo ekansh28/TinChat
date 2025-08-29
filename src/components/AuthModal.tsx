@@ -295,7 +295,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/oauth-callback`;
+      // Use the current page as redirect URL for localhost development
+      const redirectUrl = `${window.location.origin}/sso-callback`;
       const redirectUrlComplete = `${window.location.origin}`;
 
       if (isSignUp && signUpLoaded && signUp) {
@@ -312,7 +313,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
       }
     } catch (err: any) {
-      setError('OAuth authentication failed. Please try again.');
+      console.error('OAuth error:', err);
+      if (err.errors && err.errors.length > 0) {
+        setError(err.errors[0].message || 'OAuth authentication failed. Please try again.');
+      } else {
+        setError('OAuth authentication failed. Please try again.');
+      }
       setLoading(false);
     }
   };

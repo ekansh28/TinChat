@@ -37,6 +37,7 @@ export default function RootLayout({
           >
             <ClientLayout>{children}</ClientLayout> {/* ✅ Wrap here */}
           </ThemeProvider>
+          <div id="clerk-captcha" style={{ display: 'none' }}></div>
           <SpeedInsights />
           <Analytics />
         </body>
