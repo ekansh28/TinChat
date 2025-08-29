@@ -1347,6 +1347,187 @@ html.theme-transitioning * {
   animation: spin 1s linear infinite;
 }
 
+/* ===== MACOS AQUA BUTTONS FOR WINDOWS 7 THEME ===== */
+
+/* Base button styling for Aqua effect */
+.aqua-button {
+  font-family: "Segoe UI", "Myriad Pro", system-ui, sans-serif;
+  font-size: 0.875rem; /* 14px equivalent */
+  height: 1.75em;
+  padding: 0 2em;
+  min-width: 6em;
+  border-radius: 1000px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+  border: none;
+  transition: all 0.15s ease-out;
+}
+
+/* Primary Aqua Button (for Send button) - Transparent */
+.aqua-button.primary {
+  background: linear-gradient(rgba(160, 160, 160, 0), rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
+  box-shadow: 0 0.375em 0.5em rgba(0, 0, 0, 0.3), 
+              0 0.125em 0.125em rgba(0, 0, 0, 0.3),  
+              inset 0 0.25em 0.25em rgba(0, 0, 0, 0.4),
+              inset 0 0.375em 0.5em 0.25em rgba(187, 187, 187, 0);
+}
+
+.aqua-button.primary:focus,
+.aqua-button.primary:active {
+  box-shadow: 0 0.375em 0.5em rgba(0, 0, 0, 0.2), 
+              0 0.125em 0.125em rgba(0, 0, 0, 0.3),  
+              inset 0 0.25em 0.25em rgba(0, 0, 0, 0.4),
+              inset 0 0.375em 0.5em 0.25em rgba(187, 187, 187, 0),
+              0 0 0.5em rgba(0, 0, 0, 0.25);
+}
+
+/* Secondary Aqua Button (for Find/Stop/Skip button) - Transparent */
+.aqua-button.secondary {
+  background: linear-gradient(rgba(160, 160, 160, 0), rgba(255, 255, 255, 0));
+  box-shadow: 0 0.375em 0.5em rgba(0, 0, 0, 0.2), 
+              0 0.125em 0.125em rgba(0, 0, 0, 0.3),  
+              inset 0 0.25em 0.25em rgba(0, 0, 0, 0.4),
+              inset 0 0.375em 0.5em 0.25em rgba(187, 187, 187, 0);
+}
+
+.aqua-button.secondary:focus,
+.aqua-button.secondary:active {
+  box-shadow: 0 0.375em 0.5em rgba(0, 0, 0, 0.2), 
+              0 0.125em 0.125em rgba(0, 0, 0, 0.3),  
+              inset 0 0.25em 0.25em rgba(0, 0, 0, 0.4),
+              inset 0 0.375em 0.5em 0.25em rgba(187, 187, 187, 0),
+              0 0 0.5em rgba(0, 0, 0, 0.25);
+}
+
+/* Top shine effect */
+.aqua-button::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.3));
+  width: calc(100% - 0.875em);
+  height: 33%;
+  border-radius: 2em 2em 0.5em 0.5em;
+  top: 5%;
+  filter: blur(1px);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Bottom glow effect */
+.aqua-button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.5));
+  width: calc(100% - 1.25em);
+  height: 33%;
+  border-radius: 0.75em;
+  bottom: 10%;
+  filter: blur(3px);
+  pointer-events: none;
+}
+
+/* Button text styling */
+.aqua-button span {
+  position: relative;
+  top: -1px;
+  z-index: 1;  
+  letter-spacing: 0.0375em;
+  -webkit-text-stroke-width: 0.025em;
+  -webkit-text-stroke-color: #000000;
+}
+
+.aqua-button.primary span {
+  color: #000000;
+  text-shadow: 0 0.25em 0.2em rgba(0, 0, 0, 0.25);
+}
+
+.aqua-button.secondary span {
+  color: #000000;
+  text-shadow: 0 0.25em 0.2em rgba(0, 0, 0, 0.25);
+}
+
+/* Disabled state */
+.aqua-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.aqua-button:disabled::before,
+.aqua-button:disabled::after {
+  display: none;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .aqua-button {
+    font-size: 0.75rem; /* 12px equivalent */
+    height: 1.5em;
+    min-width: 4em;
+    padding: 0 1.5em;
+  }
+}
+
+/* ===== MACOS AQUA INPUT FIELDS FOR WINDOWS 7 THEME ===== */
+
+/* Base Aqua input styling */
+.aqua-input {
+  font-family: "Segoe UI", "Myriad Pro", system-ui, sans-serif;
+  font-size: 0.875rem; /* 14px equivalent */
+  padding: 0.5em 0.75em;
+  border-radius: 12px; /* Rounded like classic Aqua */
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: linear-gradient(to bottom, #ffffff 0%, #f8f8f8 50%, #e8e8e8 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12),
+              inset 0 1px 2px rgba(0, 0, 0, 0.08),
+              0 1px 0 rgba(255, 255, 255, 0.6);
+  color: #333;
+  transition: all 0.2s ease-out;
+  outline: none;
+}
+
+.aqua-input:focus {
+  border-color: rgba(0, 122, 255, 0.8); /* Blue focus ring like macOS */
+  background: linear-gradient(to bottom, #ffffff 0%, #fbfbfb 50%, #f0f0f0 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1),
+              inset 0 1px 2px rgba(0, 0, 0, 0.06),
+              0 0 0 3px rgba(0, 122, 255, 0.2), /* Blue glow */
+              0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.aqua-input:hover:not(:focus) {
+  background: linear-gradient(to bottom, #ffffff 0%, #fafafa 50%, #eeeeee 100%);
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.aqua-input:disabled {
+  background: linear-gradient(to bottom, #f5f5f5 0%, #eeeeee 50%, #e0e0e0 100%);
+  color: #999;
+  border-color: rgba(0, 0, 0, 0.15);
+  cursor: not-allowed;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.aqua-input::placeholder {
+  color: #999;
+  opacity: 1;
+}
+
+/* Mobile adjustments for Aqua inputs */
+@media (max-width: 768px) {
+  .aqua-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 0.75em 1em;
+    border-radius: 10px;
+  }
+}
+
 /* ===== MOBILE CHAT IMPROVEMENTS ===== */
 @media (max-width: 768px) {
   /* Mobile chat message improvements */

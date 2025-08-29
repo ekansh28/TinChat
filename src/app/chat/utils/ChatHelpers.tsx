@@ -703,5 +703,340 @@ export const initializeAudioSystem = (): void => {
   console.log('[ChatHelpers] Audio system initialized - Volume:', volume, 'Enabled:', enabled);
 };
 
+// URL detection and linking utilities
+export const detectAndLinkUrls = (text: string): (string | React.ReactElement)[] => {
+  // Enhanced URL regex that matches http/https URLs
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+  const parts: (string | React.ReactElement)[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+
+    const url = match[0];
+    const cleanUrl = url.replace(/[.,;!?]+$/, ''); // Remove trailing punctuation
+    
+    // Create clickable link
+    parts.push(
+      React.createElement('a', {
+        key: `url-${match.index}`,
+        href: cleanUrl,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        className: 'text-blue-600 hover:text-blue-800 underline break-all',
+        style: { wordBreak: 'break-all' }, // Ensure long URLs don't overflow
+        title: cleanUrl
+      }, cleanUrl)
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after the last URL
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+};
+
+// Media detection utilities
+export const detectMediaUrls = (text: string): { images: string[], videos: string[], youtubeUrls: string[], spotifyUrls: string[], otherUrls: string[] } => {
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+  const imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?[^\s]*)?$/i;
+  const videoExtensions = /\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv|m4v)(\?[^\s]*)?$/i;
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/i;
+  const spotifyRegex = /https?:\/\/(?:open\.)?spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]{22})/i;
+  
+  const images: string[] = [];
+  const videos: string[] = [];
+  const youtubeUrls: string[] = [];
+  const spotifyUrls: string[] = [];
+  const otherUrls: string[] = [];
+  
+  let match;
+  while ((match = urlRegex.exec(text)) !== null) {
+    const url = match[0].replace(/[.,;!?]+$/, ''); // Remove trailing punctuation
+    
+    if (youtubeRegex.test(url)) {
+      youtubeUrls.push(url);
+    } else if (spotifyRegex.test(url)) {
+      spotifyUrls.push(url);
+    } else if (imageExtensions.test(url)) {
+      images.push(url);
+    } else if (videoExtensions.test(url)) {
+      videos.push(url);
+    } else {
+      otherUrls.push(url);
+    }
+  }
+  
+  return { images, videos, youtubeUrls, spotifyUrls, otherUrls };
+};
+
+// YouTube ID extraction utility
+export const extractYouTubeId = (url: string): string | null => {
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/i;
+  const match = url.match(youtubeRegex);
+  return match ? match[1] : null;
+};
+
+// Spotify ID extraction utility
+export const extractSpotifyId = (url: string): { type: string, id: string } | null => {
+  const spotifyRegex = /https?:\/\/(?:open\.)?spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]{22})/i;
+  const match = url.match(spotifyRegex);
+  return match ? { type: match[1], id: match[2] } : null;
+};
+
+// Media embedding function with size constraints
+export const createMediaEmbed = (url: string, type: 'image' | 'video', key: string): React.ReactElement => {
+  const maxSize = 400;
+  const commonProps = {
+    key: key,
+    style: {
+      maxWidth: `${maxSize}px`,
+      maxHeight: `${maxSize}px`,
+      width: 'auto',
+      height: 'auto',
+      cursor: 'pointer',
+      borderRadius: '8px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      margin: '8px 0'
+    },
+    onClick: () => window.open(url, '_blank', 'noopener,noreferrer'),
+    loading: 'lazy' as const,
+    title: 'Click to view full size'
+  };
+
+  if (type === 'image') {
+    return React.createElement('img', {
+      ...commonProps,
+      src: url,
+      alt: 'Embedded image',
+      onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
+        const img = e.currentTarget;
+        img.style.display = 'none';
+        console.warn('[ChatHelpers] Failed to load image:', url);
+      }
+    });
+  } else {
+    return React.createElement('video', {
+      ...commonProps,
+      src: url,
+      controls: true,
+      preload: 'metadata',
+      onError: (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget;
+        video.style.display = 'none';
+        console.warn('[ChatHelpers] Failed to load video:', url);
+      }
+    });
+  }
+};
+
+// YouTube embed function
+export const createYouTubeEmbed = (url: string, key: string): React.ReactElement => {
+  const videoId = extractYouTubeId(url);
+  if (!videoId) return React.createElement('span', { key }, 'Invalid YouTube URL');
+
+  const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+  
+  return React.createElement('div', {
+    key: key,
+    style: {
+      position: 'relative',
+      width: '400px',
+      height: '225px', // 16:9 aspect ratio for 400px width
+      maxWidth: '100%',
+      margin: '8px 0',
+      borderRadius: '8px',
+      overflow: 'hidden',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+    }
+  }, [
+    React.createElement('iframe', {
+      key: `iframe-${key}`,
+      src: embedUrl,
+      width: '400',
+      height: '225',
+      frameBorder: '0',
+      allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+      allowFullScreen: true,
+      loading: 'lazy',
+      title: 'YouTube video player',
+      style: {
+        width: '100%',
+        height: '100%',
+        border: 'none'
+      }
+    })
+  ]);
+};
+
+// Spotify embed function
+export const createSpotifyEmbed = (url: string, key: string): React.ReactElement => {
+  const spotifyData = extractSpotifyId(url);
+  if (!spotifyData) return React.createElement('span', { key }, 'Invalid Spotify URL');
+
+  const { type, id } = spotifyData;
+  const embedUrl = `https://open.spotify.com/embed/${type}/${id}?utm_source=generator&theme=0`;
+  
+  // Compact heights for different Spotify content types
+  const getHeightForType = (contentType: string): string => {
+    switch (contentType) {
+      case 'track':
+        return '90'; // Compact track embed with album art + info
+      case 'album':
+        return '90'; // Compact album preview
+      case 'playlist':
+        return '90'; // Compact playlist preview (one-row)
+      case 'episode':
+        return '152'; // Taller for podcast episodes
+      case 'artist':
+        return '90'; // Compact artist preview
+      default:
+        return '90'; // Default compact size
+    }
+  };
+  
+  const height = getHeightForType(type);
+  
+  return React.createElement('div', {
+    key: key,
+    style: {
+      width: '300px', // Capped at ~300px for message container width
+      height: `${height}px`,
+      maxWidth: '100%',
+      margin: '8px 0',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+    }
+  }, [
+    React.createElement('iframe', {
+      key: `iframe-${key}`,
+      src: embedUrl,
+      width: '300',
+      height: height,
+      frameBorder: '0',
+      allowtransparency: 'true',
+      allow: 'encrypted-media',
+      loading: 'lazy',
+      title: `Spotify ${type} player`,
+      style: {
+        width: '100%',
+        height: '100%',
+        border: 'none'
+      }
+    })
+  ]);
+};
+
+// Enhanced URL processing with media embedding
+export const detectAndLinkUrlsWithMedia = (text: string): (string | React.ReactElement)[] => {
+  const { images, videos, youtubeUrls, spotifyUrls, otherUrls } = detectMediaUrls(text);
+  const allUrls = [...images, ...videos, ...youtubeUrls, ...spotifyUrls, ...otherUrls];
+  
+  if (allUrls.length === 0) {
+    return [text];
+  }
+
+  // Build regex for all URLs to process them in order
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+  const parts: (string | React.ReactElement)[] = [];
+  let lastIndex = 0;
+  let match;
+  let mediaCounter = 0;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+
+    const url = match[0].replace(/[.,;!?]+$/, ''); // Remove trailing punctuation
+    
+    if (youtubeUrls.includes(url)) {
+      // Embed YouTube video
+      parts.push(createYouTubeEmbed(url, `youtube-${mediaCounter++}`));
+    } else if (spotifyUrls.includes(url)) {
+      // Show URL link on top for Spotify
+      parts.push(
+        React.createElement('div', {
+          key: `spotify-link-${mediaCounter}`,
+          style: { fontSize: '0.875rem', marginBottom: '4px', marginTop: '4px' }
+        }, [
+          React.createElement('a', {
+            href: url,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            className: 'text-blue-600 hover:text-blue-800 underline break-all'
+          }, url)
+        ])
+      );
+      // Then embed Spotify content
+      parts.push(createSpotifyEmbed(url, `spotify-${mediaCounter++}`));
+    } else if (images.includes(url)) {
+      // Embed image only (no URL link)
+      parts.push(createMediaEmbed(url, 'image', `image-${mediaCounter++}`));
+    } else if (videos.includes(url)) {
+      // Embed video only (no URL link)
+      parts.push(createMediaEmbed(url, 'video', `video-${mediaCounter++}`));
+    } else {
+      // Regular clickable link for other URLs
+      parts.push(
+        React.createElement('a', {
+          key: `url-${match.index}`,
+          href: url,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          className: 'text-blue-600 hover:text-blue-800 underline break-all',
+          style: { wordBreak: 'break-all' },
+          title: url
+        }, url)
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after the last URL
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts;
+};
+
+// Combined function to process emojis, URLs, and media
+export const renderMessageWithEmojisAndUrls = (
+  text: string,
+  emojiFilenames: string[],
+  baseUrl: string
+): (string | React.ReactElement)[] => {
+  // First process URLs and media
+  const urlAndMediaProcessed = detectAndLinkUrlsWithMedia(text);
+  
+  // Then process emojis on text parts only
+  const result: (string | React.ReactElement)[] = [];
+  
+  urlAndMediaProcessed.forEach((part) => {
+    if (typeof part === 'string') {
+      // Process emojis in text parts
+      const emojiProcessed = renderMessageWithEmojis(part, emojiFilenames, baseUrl);
+      result.push(...emojiProcessed);
+    } else {
+      // Keep React elements (URLs, media) as is
+      result.push(part);
+    }
+  });
+  
+  return result;
+};
+
 // Export the emote loading function for use in components
 export { loadEmoteList };

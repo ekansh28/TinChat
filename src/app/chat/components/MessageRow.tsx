@@ -4,7 +4,7 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useProfilePopup } from '@/components/ProfilePopup/ProfilePopupProvider';
-import { getDisplayNameClass, renderMessageWithEmojis, loadEmoteList } from '../utils/ChatHelpers';
+import { getDisplayNameClass, renderMessageWithEmojis, renderMessageWithEmojisAndUrls, detectAndLinkUrls, detectAndLinkUrlsWithMedia, loadEmoteList } from '../utils/ChatHelpers';
 import { UserProfile, Badge } from '@/components/ProfileCustomizer/types';
 import { fastProfileFetcher } from '@/lib/fastProfileFetcher';
 
@@ -228,12 +228,15 @@ const MessageRow: React.FC<MessageRowProps> = ({
     );
   }
 
-  // Message content processing
+  // Message content processing with URL linking, media embedding, and emoji support
   const messageContent = useMemo(() => {
     if (theme === 'theme-98' && !emotesLoading && emojiFilenames.length > 0) {
-      return renderMessageWithEmojis(message.content, emojiFilenames, EMOJI_CDN_BASE);
+      // Process emojis, URLs, and media for theme-98
+      return renderMessageWithEmojisAndUrls(message.content, emojiFilenames, EMOJI_CDN_BASE);
+    } else {
+      // For other themes, process URLs and media (no emojis)
+      return detectAndLinkUrlsWithMedia(message.content);
     }
-    return [message.content];
   }, [message.content, theme, emojiFilenames, emotesLoading]);
 
   // Username component - always clickable

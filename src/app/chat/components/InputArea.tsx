@@ -369,24 +369,25 @@ const InputArea: React.FC<InputAreaProps> = ({
             onClick={onFindOrDisconnect} 
             disabled={findOrDisconnectDisabled} 
             className={cn(
-              isWindows7Theme ? 'glass-button-styled glass-button' : '',
+              isWindows7Theme ? 'aqua-button secondary' : '',
               isMobile 
                 ? 'text-xs px-2 py-1 min-w-[50px] flex-shrink-0 touch-manipulation' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
             style={{
-              // Force transparency for Windows 7 glass theme
-              ...(isWindows7Theme && {
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.4)',
-                color: '#000'
+              // Remove old glass styling for Aqua buttons
+              ...(isWindows7Theme ? {} : {
+                // Keep old styling for non-Win7 themes
+                backgroundColor: undefined,
+                backdropFilter: undefined,
+                border: undefined,
+                color: undefined
               })
             }}
             aria-label={findOrDisconnectText}
             type="button"
           >
-            {findOrDisconnectText}
+            <span>{findOrDisconnectText}</span>
           </Button>
           
           {/* Message Input - Takes up remaining space */}
@@ -408,11 +409,12 @@ const InputArea: React.FC<InputAreaProps> = ({
                 // MOBILE: Prevent zoom on iOS - CRITICAL
                 fontSize: isMobile ? '16px' : undefined,
                 lineHeight: isMobile ? '1.2' : undefined,
-                // Force transparency for Windows 7 glass theme
+                // Force transparency for Windows 7 glass theme with rounded corners
                 ...(isWindows7Theme && {
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   backdropFilter: 'blur(5px)',
                   border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '12px',
                   color: '#000'
                 })
               }}
@@ -600,23 +602,24 @@ const InputArea: React.FC<InputAreaProps> = ({
             type="submit"
             disabled={disabled || !value.trim()} 
             className={cn(
-              isWindows7Theme ? 'glass-button-styled glass-button' : '',
+              isWindows7Theme ? 'aqua-button primary' : '',
               isMobile 
                 ? 'text-xs px-2 py-1 min-w-[45px] flex-shrink-0 touch-manipulation' 
                 : 'text-sm px-3 py-1 min-w-[60px] flex-shrink-0'
             )} 
             style={{
-              // Force transparency for Windows 7 glass theme
-              ...(isWindows7Theme && {
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.4)',
-                color: '#000'
+              // Remove old glass styling for Aqua buttons
+              ...(isWindows7Theme ? {} : {
+                // Keep old styling for non-Win7 themes
+                backgroundColor: undefined,
+                backdropFilter: undefined,
+                border: undefined,
+                color: undefined
               })
             }}
             aria-label="Send message"
           >
-            {isMobile ? '→' : 'Send'}
+            <span>{isMobile ? '→' : 'Send'}</span>
           </Button>
         </div>
       </form>
