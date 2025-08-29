@@ -50,7 +50,7 @@ export function useOnlineUsers() {
           console.error("useOnlineUsers: Socket connection error for user count. Full error:", err);
           
           // Check if it's a rate limit error
-          if (err.message?.includes('Too many connections') || err.description?.includes('Too many connections')) {
+          if (err.message?.includes('Too many connections') || (err as any).description?.includes('Too many connections')) {
             console.log("useOnlineUsers: Rate limited. Will retry with exponential backoff.");
             const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
             
