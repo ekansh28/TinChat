@@ -3,6 +3,51 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
 
+// ✅ HELPER: Connection pattern analysis for intelligent rate limiting
+const connectionAttempts = new Map<string, Array<{ timestamp: number; userAgent: string }>>();
+
+function analyzeConnectionPattern(ip: string, userAgent: string): {
+  isLegitimate: boolean;
+  reason: string;
+  attemptsInLastMinute: number;
+} {
+  const now = Date.now();
+  const attempts = connectionAttempts.get(ip) || [];
+  
+  // Clean old attempts (older than 5 minutes)
+  const recentAttempts = attempts.filter(attempt => now - attempt.timestamp < 300000);
+  connectionAttempts.set(ip, recentAttempts);
+  
+  // Add current attempt
+  recentAttempts.push({ timestamp: now, userAgent });
+  
+  const lastMinute = recentAttempts.filter(attempt => now - attempt.timestamp < 60000);
+  const sameUserAgent = lastMinute.filter(attempt => attempt.userAgent === userAgent);
+  
+  // Pattern analysis
+  if (lastMinute.length > 8) {
+    return { 
+      isLegitimate: false, 
+      reason: 'Too many rapid connections', 
+      attemptsInLastMinute: lastMinute.length 
+    };
+  }
+  
+  if (sameUserAgent.length > 5 && sameUserAgent.length === lastMinute.length) {
+    return { 
+      isLegitimate: true, 
+      reason: 'Same browser reconnecting (likely page refresh/network issues)', 
+      attemptsInLastMinute: lastMinute.length 
+    };
+  }
+  
+  return { 
+    isLegitimate: true, 
+    reason: 'Normal connection pattern', 
+    attemptsInLastMinute: lastMinute.length 
+  };
+}
+
 export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]): SocketIOServer {
   const io = new SocketIOServer(server, {
     // ✅ ENHANCED: Connection state recovery with better conflict resolution
@@ -43,20 +88,46 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
       optionsSuccessStatus: 200
     },
     
-    // ✅ CRITICAL: Enhanced connection validation with better rate limiting
+    // ✅ ENHANCED: Intelligent connection validation with pattern analysis
     allowRequest: (req, callback) => {
       const ip = req.socket.remoteAddress || 'unknown';
       const userAgent = req.headers['user-agent'] || 'unknown';
+      const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip?.startsWith('192.168.') || ip?.startsWith('10.');
       
-      // ✅ Allow reasonable number of tabs but prevent abuse
-      const maxConnectionsPerIP = 5; // Reduced from 10 to prevent conflicts
+      // ✅ ANALYZE: Connection pattern before applying limits
+      const pattern = analyzeConnectionPattern(ip, userAgent);
+      
+      // ✅ SMART: Dynamic limits based on environment, IP type, and connection pattern
+      let maxConnectionsPerIP: number;
+      
+      if (process.env.NODE_ENV === 'development') {
+        maxConnectionsPerIP = isLocalhost ? 20 : 10; // Higher limit for development
+      } else {
+        maxConnectionsPerIP = isLocalhost ? 12 : 8; // Production limits
+      }
+      
+      // ✅ ADJUST: Limits based on connection pattern
+      if (pattern.isLegitimate && pattern.reason.includes('Same browser reconnecting')) {
+        maxConnectionsPerIP += 3; // More lenient for reconnections
+      }
+      
       const connectionsFromIP = Array.from(io.sockets.sockets.values())
         .filter(socket => socket.handshake.address === ip).length;
       
-      if (connectionsFromIP >= maxConnectionsPerIP) {
-        logger.warn(`🚨 Too many connections from IP ${ip}: ${connectionsFromIP}`);
-        callback('Too many connections from this IP', false);
+      // ✅ BLOCK: Only if pattern indicates abuse
+      if (!pattern.isLegitimate) {
+        logger.warn(`🚨 Blocking connection from IP ${ip}: ${pattern.reason} (${pattern.attemptsInLastMinute} attempts/min)`);
+        callback(pattern.reason, false);
         return;
+      }
+      
+      // ✅ WARN: But allow legitimate high connection counts
+      if (connectionsFromIP >= maxConnectionsPerIP) {
+        if (connectionsFromIP >= maxConnectionsPerIP + 5) {
+          logger.warn(`🚨 Very high connection count from IP ${ip}: ${connectionsFromIP} connections - monitoring for abuse`);
+        } else {
+          logger.info(`⚠️ High connection count from IP ${ip}: ${connectionsFromIP}/${maxConnectionsPerIP} (${pattern.reason})`);
+        }
       }
       
       callback(null, true);
@@ -109,13 +180,17 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     const ip = socket.request.socket.remoteAddress || 'unknown';
     const userAgent = socket.request.headers?.['user-agent'] || 'unknown';
     const query = socket.handshake.query || {};
+    const connectedAt = new Date();
+    
+    // ✅ FIXED: Store connection time on socket for rate limiting
+    (socket as any).connectedAt = connectedAt.getTime();
     
     trackConnection(ip);
     
     connectionDetails.set(socket.id, {
       ip,
       userAgent,
-      connectedAt: new Date(),
+      connectedAt,
       tabId: query.tabId as string,
       chatType: query.chatType as string
     });
@@ -332,31 +407,65 @@ export function configureSocketIO(server: HTTPServer, allowedOrigins: string[]):
     });
   });
 
-  // ✅ ENHANCED: Periodic monitoring with conflict detection
+  // ✅ ENHANCED: Periodic monitoring with intelligent rate limiting analysis
   setInterval(() => {
     const stats = {
       totalConnections: io.engine.clientsCount,
       uniqueIPs: connectionsByIP.size,
       totalTabs: socketToTab.size,
       authenticatedUsers: activeTabsByUser.size,
-      duplicateWarnings: 0
+      duplicateWarnings: 0,
+      rateLimitWarnings: 0
     };
     
     // Check for potential duplicates
     for (const [authId, tabs] of activeTabsByUser.entries()) {
       if (tabs.size > 2) {
         stats.duplicateWarnings++;
-        logger.warn(`🚨 User ${authId.substring(0, 8)} has ${tabs.size} tabs open`);
+        if (tabs.size > 4) {
+          logger.warn(`🚨 User ${authId.substring(0, 8)} has ${tabs.size} tabs open (potential abuse)`);
+        } else {
+          logger.debug(`ℹ️ User ${authId.substring(0, 8)} has ${tabs.size} tabs open (likely legitimate)`);
+        }
       }
     }
     
     logger.debug('📊 Enhanced connection stats:', stats);
     
-    // Alert on high connection counts
+    // ✅ INTELLIGENT: Analyze connection patterns for rate limiting
     for (const [ip, count] of connectionsByIP.entries()) {
-      if (count > 3) {
-        logger.warn(`🚨 High connection count from IP ${ip}: ${count} connections`);
+      const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip?.startsWith('192.168.') || ip?.startsWith('10.');
+      const threshold = isLocalhost ? 8 : 4;
+      
+      if (count > threshold) {
+        stats.rateLimitWarnings++;
+        
+        // Analyze connection patterns from this IP
+        const socketsFromIP = Array.from(io.sockets.sockets.values())
+          .filter(socket => socket.handshake.address === ip);
+        
+        const userAgents = new Set(socketsFromIP.map(s => s.handshake.headers?.['user-agent']));
+        const tabIds = new Set(socketsFromIP.map(s => socketToTab.get(s.id)).filter(Boolean));
+        const connectionAges = socketsFromIP.map(s => Date.now() - ((s as any).connectedAt || 0));
+        const avgAge = connectionAges.reduce((a, b) => a + b, 0) / connectionAges.length;
+        
+        const pattern = {
+          uniqueUserAgents: userAgents.size,
+          uniqueTabs: tabIds.size,
+          avgConnectionAge: Math.round(avgAge / 1000),
+          rapid: connectionAges.filter(age => age < 30000).length // Connections < 30s old
+        };
+        
+        if (pattern.uniqueUserAgents === 1 && pattern.uniqueTabs >= 2 && pattern.rapid <= 2) {
+          logger.debug(`ℹ️ IP ${ip}: ${count} connections (likely legitimate multi-tab user)`, pattern);
+        } else {
+          logger.warn(`🚨 IP ${ip}: ${count} connections (potential abuse detected)`, pattern);
+        }
       }
+    }
+    
+    if (stats.rateLimitWarnings > 0 || stats.duplicateWarnings > 0) {
+      logger.info(`📊 Connection analysis: ${stats.rateLimitWarnings} rate limit warnings, ${stats.duplicateWarnings} duplicate warnings`);
     }
   }, 60000);
 

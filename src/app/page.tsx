@@ -59,7 +59,7 @@ export default function SelectionLobby() {
   const { toast } = useToast();
 
   // Custom hooks
-  const usersOnline = useOnlineUsers();
+  const { usersOnline } = useOnlineUsers();
   const onlineUsersData = useOnlineUsersData();
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
