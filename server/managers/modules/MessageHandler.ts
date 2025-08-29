@@ -53,10 +53,31 @@ export class MessageHandler {
       
       const { roomId, message, username, authId, messageId } = this.extractMessageData(socket, payload);
       
+      // ✅ CRITICAL DEBUG: Log messageId extraction
+      logger.info(`🔍 EXTRACTED DATA: messageId=${messageId}, authId=${authId}, message="${message.substring(0, 30)}..."`);
+      
+      // ✅ BULLETPROOF BACKUP: Create content-based hash for deduplication
+      let finalMessageId = messageId;
+      let contentHash: string | null = null;
+      
+      if (!messageId) {
+        // Generate content-based hash for deduplication across multiple connections
+        contentHash = `hash_${authId || 'anon'}_${message.trim()}_${Math.floor(Date.now() / 2000)}`;
+        finalMessageId = `server_${socket.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        logger.warn(`⚠️ NO MESSAGE ID FROM CLIENT! Using content hash: ${contentHash}, server ID: ${finalMessageId}`);
+      }
+      
       // ✅ BULLETPROOF: Check UUID-based deduplication FIRST
-      if (messageId && this.isProcessedMessage(messageId)) {
-        logger.warn(`🚫 DUPLICATE MESSAGE ID BLOCKED: ${messageId} from ${socket.id}`);
+      if (finalMessageId && this.isProcessedMessage(finalMessageId)) {
+        logger.warn(`🚫 DUPLICATE MESSAGE ID BLOCKED: ${finalMessageId} from ${socket.id}`);
         socket.emit('error', { message: 'Duplicate message detected.' });
+        return;
+      }
+      
+      // ✅ ADDITIONAL: Check content-based hash for messages without client IDs
+      if (contentHash && this.isProcessedMessage(contentHash)) {
+        logger.warn(`🚫 DUPLICATE CONTENT HASH BLOCKED: ${contentHash} from ${socket.id}`);
+        socket.emit('error', { message: 'Duplicate message content detected.' });
         return;
       }
       
@@ -110,9 +131,15 @@ export class MessageHandler {
       const messageData = await this.prepareMessageData(socket.id, message, authId, room.id);
       
       // ✅ BULLETPROOF: Mark message ID as processed
-      if (messageId) {
-        this.markMessageAsProcessed(messageId);
-        logger.info(`✅ MESSAGE ID PROCESSED: ${messageId}`);
+      if (finalMessageId) {
+        this.markMessageAsProcessed(finalMessageId);
+        logger.info(`✅ MESSAGE ID PROCESSED: ${finalMessageId}`);
+      }
+      
+      // ✅ ADDITIONAL: Mark content hash as processed too
+      if (contentHash) {
+        this.markMessageAsProcessed(contentHash);
+        logger.info(`✅ CONTENT HASH PROCESSED: ${contentHash}`);
       }
       
       // ✅ TRACK: Record this message in room to prevent duplicates
