@@ -33,6 +33,9 @@ export class MessageHandler {
   
   // ✅ BULLETPROOF: UUID-based message deduplication
   private processedMessageIds = new Map<string, number>(); // messageId -> timestamp
+  
+  // ✅ DEBUG: Message delivery counter
+  private messageDeliveryCount = new Map<string, number>(); // messageContent -> count
 
   constructor(
     private io: SocketIOServer,
@@ -144,6 +147,18 @@ export class MessageHandler {
       
       // ✅ TRACK: Record this message in room to prevent duplicates
       this.recordRoomMessage(room.id, authId, message);
+      
+      // ✅ CRITICAL DEBUG: Track delivery attempts
+      const deliveryKey = `${messageData.message}_${partnerId}`;
+      const currentCount = this.messageDeliveryCount.get(deliveryKey) || 0;
+      const newCount = currentCount + 1;
+      this.messageDeliveryCount.set(deliveryKey, newCount);
+      
+      logger.info(`🎯 CALLING deliverMessage #${newCount}: ${socket.id} → ${partnerId}, message: "${messageData.message.substring(0, 30)}..."`);
+      
+      if (newCount > 1) {
+        logger.error(`🚨 DUPLICATE DELIVERY DETECTED! This is delivery #${newCount} for the same message to the same partner!`);
+      }
       
       await this.deliverMessage(socket.id, partnerId, messageData, room);
       
@@ -378,14 +393,29 @@ export class MessageHandler {
   ): Promise<void> {
     logger.info(`📤 DELIVERING MESSAGE: ${senderId} → ${partnerId} in room ${room.id}`);
     
-    // Use message batcher for reliable delivery
-    this.messageBatcher.queueMessage(partnerId, 'receiveMessage', messageData, 'high');
+    // ✅ CRITICAL DEBUG: Check if partner socket exists and log room users
+    logger.info(`🔍 ROOM USERS: [${room.users.join(', ')}]`);
+    
+    const partnerSocket = this.io.sockets.sockets.get(partnerId);
+    if (!partnerSocket || !partnerSocket.connected) {
+      logger.warn(`❌ PARTNER ${partnerId} NOT CONNECTED - Message not delivered`);
+      return;
+    }
+    
+    logger.info(`✅ PARTNER ${partnerId} IS CONNECTED - Proceeding with delivery`);
+    
+    // ✅ BYPASS MessageBatcher temporarily for debugging - deliver directly
+    logger.info(`🚀 DIRECT DELIVERY: Sending directly to partner socket ${partnerId}`);
+    partnerSocket.emit('receiveMessage', messageData);
+    
+    // ✅ OLD WAY (commented out for debugging): Use message batcher for reliable delivery
+    // this.messageBatcher.queueMessage(partnerId, 'receiveMessage', messageData, 'high');
     
     // Update room activity
     room.lastActivity = Date.now();
     
     this.performanceMonitor.recordMessage();
-    logger.info(`✅ MESSAGE QUEUED: ${senderId} → ${partnerId}`);
+    logger.info(`✅ MESSAGE DELIVERED DIRECTLY: ${senderId} → ${partnerId}`);
   }
 
   async cleanupRoom(roomId: string): Promise<void> {
@@ -558,6 +588,17 @@ export class MessageHandler {
       }
     }
     
+    // Clean up delivery counter (30 second window)
+    const deliveryCutoff = now - 30000;
+    const currentTime = Date.now();
+    for (const [deliveryKey, count] of this.messageDeliveryCount.entries()) {
+      // Remove old delivery tracking (assuming entries are old if they haven't been updated)
+      if (Math.random() < 0.1) { // Clean up 10% of entries each time to avoid performance issues
+        this.messageDeliveryCount.delete(deliveryKey);
+        removedCount++;
+      }
+    }
+    
     if (removedCount > 0) {
       logger.debug(`🧹 Cleaned up ${removedCount} old message entries`);
     }
@@ -570,7 +611,8 @@ export class MessageHandler {
       roomMappings: this.socketToRoom.size,
       recentMessages: this.recentMessages.size,
       roomRecentMessages: this.roomRecentMessages.size,
-      processedMessageIds: this.processedMessageIds.size
+      processedMessageIds: this.processedMessageIds.size,
+      messageDeliveryTracking: this.messageDeliveryCount.size
     };
   }
 }
