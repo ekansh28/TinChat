@@ -278,7 +278,7 @@ export default function SelectionLobby() {
     {/* Sponsored Ad - Popup Window 1 */}
     {!isMobile && showAdPopup && (
       <div className="fixed top-20 right-4 z-10" id="ad-popup-window">
-        <div className="window" style={{ width: '300px' }}>
+        <div className="window" style={{ width: 'auto', maxWidth: '400px' }}>
           <div className="title-bar">
             <div className="title-bar-text">Sponsored Ad</div>
             <div className="title-bar-controls">
@@ -292,7 +292,7 @@ export default function SelectionLobby() {
           </div>
           <div className="window-body" style={{ padding: '0', overflow: 'hidden' }}>
             <div 
-              style={{ width: '300px', height: '250px' }}
+              style={{ width: 'auto', height: 'auto', minWidth: '300px', minHeight: '250px' }}
               dangerouslySetInnerHTML={{
                 __html: `
                   <script type="text/javascript">
@@ -315,8 +315,8 @@ export default function SelectionLobby() {
 
     {/* Sponsored Ad - Popup Window 2 */}
     {!isMobile && showAdPopup && (
-      <div className="fixed right-4 z-10" id="ad-popup-window-2" style={{ top: 'calc(20px + 250px + 40px + 5px)' }}>
-        <div className="window" style={{ width: '300px' }}>
+      <div className="fixed right-4 z-10" id="ad-popup-window-2" style={{ top: 'calc(80px + 290px + 20px)' }}>
+        <div className="window" style={{ width: 'auto', maxWidth: '400px' }}>
           <div className="title-bar">
             <div className="title-bar-text">Sponsored Ad</div>
             <div className="title-bar-controls">
@@ -330,7 +330,7 @@ export default function SelectionLobby() {
           </div>
           <div className="window-body" style={{ padding: '0', overflow: 'hidden' }}>
             <div 
-              style={{ width: '300px', height: '250px' }}
+              style={{ width: 'auto', height: 'auto', minWidth: '300px', minHeight: '250px' }}
               dangerouslySetInnerHTML={{
                 __html: `<script type='text/javascript' src='//pl27547376.revenuecpmgate.com/4c/a2/7d/4ca27d1d04ade519fca9bebebff1b4d9.js'></script>`
               }}
