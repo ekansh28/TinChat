@@ -297,7 +297,7 @@ export default function SelectionLobby() {
               style={{ width: 'auto', height: 'auto', minWidth: '300px', minHeight: '250px' }}
               dangerouslySetInnerHTML={{
                 __html: `
-                  <script type="text/javascript">
+                  <script data-cfasync="false" type="text/javascript">
                     atOptions = {
                         'key' : '44ea4cf222b70f16c583d6278a35381b',
                         'format' : 'iframe',
@@ -306,7 +306,7 @@ export default function SelectionLobby() {
                         'params' : {}
                     };
                   </script>
-                  <script type="text/javascript" src="//www.highperformanceformat.com/44ea4cf222b70f16c583d6278a35381b/invoke.js"></script>
+                  <script data-cfasync="false" type="text/javascript" src="//www.highperformanceformat.com/44ea4cf222b70f16c583d6278a35381b/invoke.js"></script>
                 `
               }}
             />
@@ -334,7 +334,7 @@ export default function SelectionLobby() {
             <div 
               style={{ width: 'auto', height: 'auto', minWidth: '300px', minHeight: '250px' }}
               dangerouslySetInnerHTML={{
-                __html: `<script type='text/javascript' src='//pl27547376.revenuecpmgate.com/4c/a2/7d/4ca27d1d04ade519fca9bebebff1b4d9.js'></script>`
+                __html: `<script data-cfasync="false" type='text/javascript' src='//pl27547376.revenuecpmgate.com/4c/a2/7d/4ca27d1d04ade519fca9bebebff1b4d9.js'></script>`
               }}
             />
           </div>
