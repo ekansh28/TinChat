@@ -52,6 +52,7 @@ export default function SelectionLobby() {
   const [isProfileCustomizerOpen, setIsProfileCustomizerOpen] = useState(false);
   const [shouldHideWebamp, setShouldHideWebamp] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
+  const [showAdPopup2, setShowAdPopup2] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -100,6 +101,7 @@ export default function SelectionLobby() {
     const timer = setTimeout(() => {
       if (!isMobile) {
         setShowAdPopup(true);
+        setShowAdPopup2(true);
         playDingSound();
       }
     }, 1000); // Show popup after 1 second
@@ -314,7 +316,7 @@ export default function SelectionLobby() {
     )}
 
     {/* Sponsored Ad - Popup Window 2 */}
-    {!isMobile && showAdPopup && (
+    {!isMobile && showAdPopup2 && (
       <div className="fixed right-4 z-10" id="ad-popup-window-2" style={{ top: 'calc(80px + 290px + 20px)' }}>
         <div className="window" style={{ width: 'auto', maxWidth: '400px' }}>
           <div className="title-bar">
@@ -323,7 +325,7 @@ export default function SelectionLobby() {
               <button
                 aria-label="Close"
                 onClick={() => {
-                  setShowAdPopup(false);
+                  setShowAdPopup2(false);
                 }}
               ></button>
             </div>
