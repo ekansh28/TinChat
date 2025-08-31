@@ -51,6 +51,7 @@ export default function SelectionLobby() {
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
   const [isProfileCustomizerOpen, setIsProfileCustomizerOpen] = useState(false);
   const [shouldHideWebamp, setShouldHideWebamp] = useState(false);
+  const [showAdPopup, setShowAdPopup] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -64,9 +65,55 @@ export default function SelectionLobby() {
   const isMobile = useMobileDetection();
   const { currentTheme } = useTheme();
 
+  // Sound functions
+  const playClickSound = () => {
+    try {
+      const audio = new Audio('/sounds/click.wav');
+      audio.volume = 0.3;
+      audio.play().catch(err => console.log('Click sound failed:', err));
+    } catch (err) {
+      console.log('Click sound error:', err);
+    }
+  };
+
+  const playDingSound = () => {
+    try {
+      const audio = new Audio('/sounds/ding.wav');
+      audio.volume = 0.5;
+      audio.play().catch(err => console.log('Ding sound failed:', err));
+    } catch (err) {
+      console.log('Ding sound error:', err);
+    }
+  };
+
+  // Global click handler for homepage sounds
+  const handleGlobalClick = (e: MouseEvent) => {
+    playClickSound();
+  };
+
   useEffect(() => {
     setIsNavigating(false);
   }, [pathname]);
+
+  // Effect to show popup and play ding sound on page load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isMobile) {
+        setShowAdPopup(true);
+        playDingSound();
+      }
+    }, 1000); // Show popup after 1 second
+
+    return () => clearTimeout(timer);
+  }, [isMobile]);
+
+  // Effect to add global click listener
+  useEffect(() => {
+    document.addEventListener('click', handleGlobalClick);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, []);
 
   // Effect to check window size and hide Webamp at 1240px width or less, or mobile
   useEffect(() => {
@@ -228,41 +275,43 @@ export default function SelectionLobby() {
               <SideLinks isMobile={isMobile} />
             </div>
           </div>
-    {/* Sponsored Ad - Right Side */}
-{/*
-{!isMobile && (
-  <div className="fixed top-20 right-4 z-10" id="google-ad-window">
-    <div className="window" style={{ width: 300 }}>
-      <div className="title-bar">
-        <div className="title-bar-text">Sponsored Ad</div>
-        <div className="title-bar-controls">
-          <button aria-label="Minimize"></button>
-          <button aria-label="Maximize"></button>
-          <button
-            aria-label="Close"
-            onClick={() => {
-              const adWindow = document.getElementById("google-ad-window");
-              if (adWindow) {
-                adWindow.style.display = "none";
-              }
-            }}
-          ></button>
+    {/* Sponsored Ad - Popup Window */}
+    {!isMobile && showAdPopup && (
+      <div className="fixed top-20 right-4 z-10" id="ad-popup-window">
+        <div className="window" style={{ width: '300px' }}>
+          <div className="title-bar">
+            <div className="title-bar-text">Sponsored Ad</div>
+            <div className="title-bar-controls">
+              <button
+                aria-label="Close"
+                onClick={() => {
+                  setShowAdPopup(false);
+                }}
+              ></button>
+            </div>
+          </div>
+          <div className="window-body" style={{ padding: '0', overflow: 'hidden' }}>
+            <div 
+              style={{ width: '300px', height: '250px' }}
+              dangerouslySetInnerHTML={{
+                __html: `
+                  <script type="text/javascript">
+                    atOptions = {
+                        'key' : '44ea4cf222b70f16c583d6278a35381b',
+                        'format' : 'iframe',
+                        'height' : 250,
+                        'width' : 300,
+                        'params' : {}
+                    };
+                  </script>
+                  <script type="text/javascript" src="//www.highperformanceformat.com/44ea4cf222b70f16c583d6278a35381b/invoke.js"></script>
+                `
+              }}
+            />
+          </div>
         </div>
       </div>
-      <div className="window-body">
-        <ins
-          className="adsbygoogle"
-          style={{ display: "block" }}
-          data-ad-client="ca-pub-5670235631357216"
-          data-ad-slot="9984806773"
-          data-ad-format="auto"
-          data-full-width-responsive="true"
-        ></ins>
-      </div>
-    </div>
-  </div>
-)}
-*/}
+    )}
  </div>
       </div>
 

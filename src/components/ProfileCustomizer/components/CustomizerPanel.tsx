@@ -666,12 +666,176 @@ export const CustomizerPanel: React.FC<CustomizerPanelProps> = ({
                   
                   <button
                     className="btn"
-                    onClick={() => handleCSSChange(`/* Glass effect */
+                    onClick={() => handleCSSChange(`/* Liquid Glass Effect for Profile Card - Pure CSS Only */
+
+/* Main profile card with liquid glass effect */
 .profile-card-custom {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  position: relative;
+  isolation: isolate;
+  border-radius: 16px;
+  
+  /* Outer shadow for depth */
+  box-shadow: 0px 8px 32px rgba(0, 0, 0, 0.3);
+  
+  /* FIXED: Subtle glass background for blur effect */
+  background: rgba(255, 255, 255, 0.000001) !important;
+  backdrop-filter: blur(1px)  ;
+  -webkit-backdrop-filter: blur(1px);
+  
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  overflow: hidden;
+}
+
+/* Glass effect layer - behind content */
+.profile-card-custom::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  border-radius: 16px;
+  
+
+  
+  /* Very subtle glass tint overlay */
+  background: rgba(255, 255, 255, 0.08);
+  
+
+}
+
+/* Backdrop blur and glass effect layer */
+.profile-card-custom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -2;
+  border-radius: 16px;
+  
+  /* Subtle backdrop blur for frosted glass effect */
+  backdrop-filter: blur(3px) saturate(110%) brightness(101%) contrast(101%);
+  -webkit-backdrop-filter: blur(3px) saturate(110%) brightness(101%) contrast(101%);
+  
+  /* Very subtle glass reflection effect */
+  background: 
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, transparent 60%),
+    linear-gradient(225deg, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
+  
+  /* Minimal glass surface distortion filter */
+  filter: blur(0.2px) brightness(1.02) contrast(1.02) hue-rotate(1deg);
+}
+
+/* ADDED: Glass distortion animation keyframes */
+@keyframes glass-distortion {
+  0%, 100% {
+    backdrop-filter: blur(20px) saturate(180%) brightness(110%) contrast(115%);
+    box-shadow: 
+      inset 0 0 20px -5px rgba(255, 255, 255, 0.7),
+      inset 0 0 40px -10px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    backdrop-filter: blur(25px) saturate(200%) brightness(115%) contrast(120%);
+    box-shadow: 
+      inset 0 0 25px -3px rgba(255, 255, 255, 0.8),
+      inset 0 0 50px -8px rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Enhanced text contrast on glass background */
+.profile-card-custom .profile-display-name,
+.profile-card-custom .profile-username,
+.profile-card-custom .profile-pronouns,
+.profile-card-custom .profile-footer-label,
+.profile-card-custom .profile-footer-date,
+.profile-card-custom .profile-badges-title {
+  text-shadow: 
+    1px 1px 2px rgba(0, 0, 0, 0.8),
+    0 0 10px rgba(255, 255, 255, 0.3);
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+/* Bio section with enhanced glass effect */
+.profile-card-custom .profile-bio {
+  background: rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-left: 4px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Footer with glass effect */
+.profile-card-custom .profile-footer {
+
+  border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+ 
+}
+
+/* Divider with glass styling */
+.profile-card-custom .profile-divider {
+  background: linear-gradient(
+    to right, 
+    transparent, 
+    rgba(255, 255, 255, 0.6), 
+    transparent
+  ) !important;
+  height: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Badge styling for glass effect */
+.profile-card-custom .profile-badge-item {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 8px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.profile-card-custom .profile-badge-item:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Avatar with enhanced glass border */
+.profile-card-custom .profile-avatar {
+  border: 3px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    0 0 20px rgba(255, 255, 255, 0.4),
+    inset 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+
+
+/* Banner with glass overlay */
+.profile-card-custom .profile-popup-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 70%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+  pointer-events: none;
 }`)}
                     disabled={saving || loading}
                     style={{ fontSize: '11px', padding: '4px' }}
