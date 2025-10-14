@@ -282,7 +282,7 @@ export default function SelectionLobby() {
       <div className="fixed top-20 right-4 z-10" id="ad-popup-window">
         <div className="window" style={{ width: 'auto', maxWidth: '400px' }}>
           <div className="title-bar">
-            <div className="title-bar-text">Sponsored Ad</div>
+            <div className="title-bar-text">gibberish</div>
             <div className="title-bar-controls">
               <button
                 aria-label="Close"
