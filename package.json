@@ -60,7 +60,7 @@
     "genkit": "^1.6.2",
     "image-size": "^2.0.2",
     "lucide-react": "^0.475.0",
-    "next": "15.2.3",
+    "next": "^15.2.3",
     "node-fetch": "^3.3.2",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
