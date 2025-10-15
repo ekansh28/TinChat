@@ -1,35 +1,158 @@
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+// src/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js'
+import { createClientComponentClient, createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-let supabaseInstance: SupabaseClient;
+// Client-side Supabase client
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  const errorMessage = 
-    'CRITICAL ERROR: Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_ANON_KEY) are not set or are empty. ' +
-    'Please ensure they are correctly defined in your .env file and accessible to your Next.js application. ' +
-    'The application cannot initialize Supabase and will not function correctly without them. ' +
-    'Supabase URL found: ' + supabaseUrl + ', Supabase Anon Key length: ' + (supabaseAnonKey ? supabaseAnonKey.length : 0);
-  
-  console.error('****************************************************************************************************');
-  console.error(errorMessage);
-  console.error('****************************************************************************************************');
-  // Throw an error to stop the application from trying to run with a misconfigured Supabase.
-  // This makes the problem very explicit during development.
-  throw new Error("Supabase client initialization failed: Missing or invalid environment variables.");
+// Client component client (for use in client components)
+export const createSupabaseClient = () => {
+  return createClientComponentClient()
 }
 
-try {
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-} catch (e: any) {
-  console.error('****************************************************************************************************');
-  console.error('ERROR: Failed to create Supabase client with the provided URL and Anon Key.');
-  console.error('Supabase URL used:', supabaseUrl);
-  console.error('Error details:', e.message);
-  console.error('****************************************************************************************************');
-  throw new Error(`Supabase client initialization failed during createClient call: ${e.message}`);
+// Server component client (for use in server components)
+export const createSupabaseServerClient = () => {
+  return createServerComponentClient({ cookies })
 }
 
-export const supabase = supabaseInstance;
+// Database types
+export interface Database {
+  public: {
+    Tables: {
+      user_profiles: {
+        Row: {
+          id: string
+          auth_id: string
+          username: string | null
+          display_name: string | null
+          avatar_url: string | null
+          profile_complete: boolean
+          created_at: string
+          updated_at: string
+          is_online: boolean
+          last_seen: string | null
+          blocked_users: string[]
+          bio: string | null
+          profile_card_css: string | null
+          banner_url: string | null
+          pronouns: string | null
+          status: string
+          display_name_color: string
+          display_name_animation: string
+          rainbow_speed: number
+          easy_customization_data: any
+          badges: any
+        }
+        Insert: {
+          id?: string
+          auth_id: string
+          username?: string | null
+          display_name?: string | null
+          avatar_url?: string | null
+          profile_complete?: boolean
+          created_at?: string
+          updated_at?: string
+          is_online?: boolean
+          last_seen?: string | null
+          blocked_users?: string[]
+          bio?: string | null
+          profile_card_css?: string | null
+          banner_url?: string | null
+          pronouns?: string | null
+          status?: string
+          display_name_color?: string
+          display_name_animation?: string
+          rainbow_speed?: number
+          easy_customization_data?: any
+          badges?: any
+        }
+        Update: {
+          id?: string
+          auth_id?: string
+          username?: string | null
+          display_name?: string | null
+          avatar_url?: string | null
+          profile_complete?: boolean
+          created_at?: string
+          updated_at?: string
+          is_online?: boolean
+          last_seen?: string | null
+          blocked_users?: string[]
+          bio?: string | null
+          profile_card_css?: string | null
+          banner_url?: string | null
+          pronouns?: string | null
+          status?: string
+          display_name_color?: string
+          display_name_animation?: string
+          rainbow_speed?: number
+          easy_customization_data?: any
+          badges?: any
+        }
+      }
+      friendships: {
+        Row: {
+          id: string
+          user_id: string
+          friend_id: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          friend_id: string
+          status: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          friend_id?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      friend_requests: {
+        Row: {
+          id: string
+          sender_id: string
+          receiver_id: string
+          message: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          expires_at: string
+        }
+        Insert: {
+          id?: string
+          sender_id: string
+          receiver_id: string
+          message?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          expires_at?: string
+        }
+        Update: {
+          id?: string
+          sender_id?: string
+          receiver_id?: string
+          message?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          expires_at?: string
+        }
+      }
+    }
+  }
+}

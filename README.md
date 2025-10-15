@@ -1,15 +1,14 @@
 # TinChat
 
-A modern real-time chat application designed for connecting people through text and video chat. Built with Next.js, Socket.IO, and integrated with Clerk authentication and Supabase database.
+A modern real-time chat application designed for connecting people through text and video chat. Built with Next.js, Socket.IO, and integrated with Supabase authentication and database.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18.0.0 or higher
 - npm or yarn package manager
-- Clerk account for authentication
-- Supabase account for database
-- Xata account for additional database features
+- Supabase account for authentication and database
+- Xata account for additional database features (optional)
 
 ### Installation
 
@@ -32,9 +31,19 @@ cd ..
 
 3. Environment Setup:
 - Copy `.env.example` to `.env.local` and configure your environment variables
-- Set up Clerk authentication keys
-- Configure Supabase database connection
-- Set up Xata database connection
+- Set up Supabase authentication and database
+- Configure Xata database connection (if using)
+
+Required environment variables:
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Database Setup:
+- Run the migration script in `supabase_migration.sql` in your Supabase SQL editor
+- Enable authentication providers in Supabase Dashboard → Authentication
+- Set redirect URLs to include `your_domain/auth/callback`
 
 ### Development
 
@@ -101,9 +110,9 @@ TinChat/
 - **TypeScript** - Type safety
 
 ### Authentication & Database
-- **Clerk** - Authentication and user management
+- **Supabase Auth** - Authentication and user management
 - **Supabase** - Primary database and real-time features
-- **Xata** - Additional database features
+- **Xata** - Additional database features (optional)
 - **Redis (ioredis)** - Caching and session management
 
 ### Additional Features
@@ -174,7 +183,9 @@ npm run genkit:watch # Start Genkit with file watching
 - `zod` - Schema validation
 
 ### Authentication & Database
-- `@clerk/nextjs` - Authentication
+- `@supabase/auth-helpers-nextjs` - Supabase authentication for Next.js
+- `@supabase/auth-helpers-react` - React hooks for Supabase auth
+- `@supabase/auth-ui-react` - Pre-built auth UI components
 - `@supabase/supabase-js` - Supabase client
 - `@xata.io/client` - Xata database client
 
@@ -183,8 +194,16 @@ npm run genkit:watch # Start Genkit with file watching
 The application is configured for deployment on Vercel with the following setup:
 - Next.js application on Vercel
 - Socket.IO server can be deployed separately
+- Supabase handles authentication and database hosting
 - Environment variables configured for production
 - CSP headers configured for security
+
+### Supabase Setup for Production:
+1. Create a Supabase project
+2. Run the migration script from `supabase_migration.sql`
+3. Configure authentication providers
+4. Set production redirect URLs
+5. Add environment variables to your deployment platform
 
 ## 🤝 Contributing
 
@@ -198,6 +217,28 @@ The application is configured for deployment on Vercel with the following setup:
 
 This project is licensed under the MIT License.
 
+## 🔄 Migration from Clerk to Supabase Auth
+
+This project has been migrated from Clerk to Supabase authentication. Key benefits:
+
+### **Why Supabase Auth?**
+- **Cost-effective**: No per-user pricing limits
+- **Integrated**: Authentication and database in one platform
+- **Open source**: Full control and transparency
+- **Feature-rich**: Built-in OAuth, email verification, and more
+
+### **Migration Status**
+- ✅ Database schema updated with Supabase auth integration
+- ✅ Authentication components converted to Supabase
+- ✅ Middleware updated for session management
+- ✅ Row Level Security (RLS) policies implemented
+- ✅ Automatic user profile creation on signup
+
+### **For Developers**
+- Check `MIGRATION_TO_SUPABASE_AUTH.md` for detailed migration notes
+- Run `supabase_migration.sql` to set up the database schema
+- Update any remaining Clerk references in custom components
+
 ---
 
-For more detailed documentation on specific features, check the `/docs` directory or refer to the inline code comments.
+For more detailed documentation on specific features, check the migration guide `MIGRATION_TO_SUPABASE_AUTH.md` or refer to the inline code comments.

@@ -2,11 +2,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
-import ClientLayout from "@/components/ClientLayout"; // ✅ New client wrapper
+import ClientLayout from "@/components/ClientLayout";
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SupabaseProvider } from "@/providers/SupabaseProvider";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
@@ -21,27 +21,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-          <meta name="google-adsense-account" content="ca-pub-5670235631357216" />
-          <link rel="stylesheet" href="https://unpkg.com/98.css" crossOrigin="anonymous" />
-        </head>
-        <body className={inter.className} suppressHydrationWarning={true}>
+    <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="google-adsense-account" content="ca-pub-5670235631357216" />
+        <link rel="stylesheet" href="https://unpkg.com/98.css" crossOrigin="anonymous" />
+      </head>
+      <body className={inter.className} suppressHydrationWarning={true}>
+        <SupabaseProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="theme-98"
             enableSystem={false}
             storageKey="tinchat-theme"
           >
-            <ClientLayout>{children}</ClientLayout> {/* ✅ Wrap here */}
+            <ClientLayout>{children}</ClientLayout>
           </ThemeProvider>
-          <div id="clerk-captcha" style={{ display: 'none' }}></div>
-          <SpeedInsights />
-          <Analytics />
-        </body>
-      </html>
-    </ClerkProvider>
+        </SupabaseProvider>
+        <SpeedInsights />
+        <Analytics />
+      </body>
+    </html>
   );
 }

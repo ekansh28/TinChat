@@ -8,7 +8,8 @@
       "Bash(done)",
       "Bash(echo $NEXT_PUBLIC_SOCKET_SERVER_URL)",
       "Bash(curl:*)",
-      "Bash(do echo \"Request $i:\")"
+      "Bash(do echo \"Request $i:\")",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

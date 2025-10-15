@@ -4,9 +4,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useUser, useClerk } from '@clerk/nextjs';
+import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Button } from '@/components/ui/button-themed';
 import AuthModal from './AuthModal';
+import type { Database } from '@/lib/supabase';
 // The ProfileCustomizer is no longer imported or rendered here.
 
 // Define the interface for the component's props.
@@ -17,8 +18,8 @@ interface AuthButtonsProps {
 
 // Update the component to accept and use the new props.
 const AuthButtons = ({ onOpenProfileCustomizer, isMobile }: AuthButtonsProps) => {
-  const { user, isSignedIn } = useUser();
-  const { signOut } = useClerk();
+  const user = useUser();
+  const supabase = useSupabaseClient<Database>();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [profileExists, setProfileExists] = useState<boolean | null>(null);
